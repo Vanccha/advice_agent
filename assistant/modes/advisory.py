@@ -1,17 +1,24 @@
 """ADVISORY mode (contracts §4.3/§4.4): ask at most
 ``policy.yaml: limits.max_questions_advisory`` (5) fixed Turkish questions, fill an
-``AdvisoryProfile``, then call the **deterministic** ``recommend_packages`` — the LLM (or,
-here, a fixed Turkish template — see the module docstring below) never invents, reorders
-or re-prices a package; only ``recommendation.engine`` decides that.
+``AdvisoryProfile``, then call the **deterministic** ``recommend_packages`` — the LLM never
+invents, reorders or re-prices a package; only ``recommendation.engine`` decides that.
 
 Parsing a free-text answer into a typed ``AdvisoryProfile`` field is done with small
 deterministic heuristics (keyword/number extraction), not a model call: this keeps the
 whole mode runnable offline (no LLM dependency) and perfectly reproducible — the same
 answer always fills the same field the same way, which is what the "same profile twice
-gives the same packages" test asserts transitively. The verbalisation step is likewise a
-fixed Turkish template built only from the fields of the ``PackageOffer`` objects
-``recommend_packages`` returns, which trivially satisfies "the reply only names
-engine-returned packages": there is no generative step that could invent one.
+gives the same packages" test asserts transitively.
+
+The verbalisation step asks the configured provider to narrate the engine's own
+``PackageOffer`` objects in Turkish (contracts §4.3: "the LLM only verbalizes the result").
+The model is handed nothing but those offers (name/code/speed/price/commitment/reasons) and
+its reply is validated before use (``_validate_model_reply``): it may only name packages the
+engine actually returned, in the engine's own order, and every price/speed figure it states
+must match the offer data exactly. A provider error or a reply that fails validation falls
+back to the fixed Turkish template (``_verbalize_offers``), which is built only from the
+`PackageOffer` fields and therefore trivially satisfies the same constraint. Either way, the
+*packages themselves* (`AdvisoryStepResult.offers`) always come straight from
+``recommend_packages`` — the LLM's wording can never change what was actually recommended.
 
 Import as: ``from modes.advisory import handle_turn, AdvisoryStepResult``.
 """
@@ -23,6 +30,7 @@ from typing import Any
 
 from core_common.tr import format_money_try
 from core_common.types import AdvisoryProfile, CommitmentPreference, Mode, PackageOffer, StepType, UsageType
+from llm.base import ChatMessage
 from modes.context import TurnContext
 from modes.tool_data import as_list
 from recommendation.engine import recommend_packages
@@ -134,6 +142,100 @@ def _verbalize_offers(offers: list[PackageOffer]) -> str:
     return f"{intro}\n\n{body}{outro}"
 
 
+_PRICE_MENTION_RE = re.compile(r"(\d[\d.,]*)\s*TL", re.IGNORECASE)
+_MBPS_MENTION_RE = re.compile(r"(\d+)\s*Mbps", re.IGNORECASE)
+
+
+def _parse_try_amount(text: str) -> float:
+    """``"1.234,50"`` / ``"269,00"`` / ``"269"`` -> float — undoes
+    ``core_common.tr.format_money_try``'s Turkish separators so a model-stated amount can be
+    compared numerically against an offer's own `monthly_price_try`, regardless of exactly
+    how it chose to format it."""
+    cleaned = text.replace(".", "").replace(",", ".")
+    try:
+        return float(cleaned)
+    except ValueError:
+        return float("nan")
+
+
+def _offer_payload_for_model(offers: list[PackageOffer]) -> str:
+    """Only the fields of the engine's own ``PackageOffer`` objects — the model is given
+    nothing else it could use as material to invent a package, price or speed from."""
+    lines = []
+    for offer in offers:
+        lines.append(
+            f"- package_code={offer.package_code}; name={offer.name}; "
+            f"down_mbps={offer.down_mbps}; up_mbps={offer.up_mbps}; "
+            f"monthly_price_try={offer.monthly_price_try}; "
+            f"commitment_months={offer.commitment_months}; is_best={offer.is_best}; "
+            f"reasons={offer.reasons}"
+        )
+    return "\n".join(lines)
+
+
+def _validate_model_reply(reply: str, offers: list[PackageOffer], catalog_names: set[str]) -> bool:
+    """contracts §4.3: "The LLM may not invent or reorder packages." Deliberately
+    conservative (reject on any doubt) — this is a safety net around a free-text reply, not
+    a replacement for the deterministic engine, so every check here only accepts a reply
+    that is directly verifiable against the `PackageOffer` data handed to the model."""
+    if not reply or not reply.strip():
+        return False
+
+    offer_names = [offer.name for offer in offers]
+    other_known_names = catalog_names - set(offer_names)
+    if any(name in reply for name in other_known_names):
+        return False  # named a real catalogue package the engine did not return
+
+    mentioned_positions = [reply.find(name) for name in offer_names if name in reply]
+    if not mentioned_positions:
+        return False  # did not actually verbalize any of the offered packages
+    if mentioned_positions != sorted(mentioned_positions):
+        return False  # reordered the engine's own ranking
+
+    valid_prices = {round(offer.monthly_price_try, 2) for offer in offers}
+    for raw in _PRICE_MENTION_RE.findall(reply):
+        if round(_parse_try_amount(raw), 2) not in valid_prices:
+            return False  # stated a price that matches none of the offers
+
+    valid_speeds = {offer.down_mbps for offer in offers} | {offer.up_mbps for offer in offers}
+    for raw in _MBPS_MENTION_RE.findall(reply):
+        if int(raw) not in valid_speeds:
+            return False  # stated a speed that matches none of the offers
+
+    return True
+
+
+def _verbalize_with_model(
+    ctx: TurnContext, offers: list[PackageOffer], all_packages: list[dict[str, Any]]
+) -> str | None:
+    """Ask the configured provider to narrate the engine's own offers in Turkish. Returns
+    `None` (never raises) when the provider errs or the reply fails `_validate_model_reply`
+    — the caller then falls back to the deterministic template."""
+    persona = ctx.tenant_config.persona
+    system = (
+        f"Sen {persona.name_tr} adlı bir müşteri destek asistanısın. Üslubun: {persona.tone_tr}. "
+        "Sana verilen paket önerilerini (ad, hız, fiyat, taahhüt, nedenler) olduğu gibi, "
+        "doğal ve kısa bir Türkçe ile müşteriye anlat. SADECE sana verilen paketlerden "
+        "bahset: yeni bir paket uydurma, verilen sırayı değiştirme, fiyat ya da hız "
+        "bilgisini değiştirme, ya da paketlerle ilgili verilmeyen bir söz verme."
+    )
+    user = (
+        "Müşteriye anlatılacak paket önerileri (motor tarafından sıralandı, ilk en iyisi):\n"
+        f"{_offer_payload_for_model(offers)}"
+    )
+    try:
+        reply = ctx.provider.complete(
+            system=system, messages=[ChatMessage(role="user", content=user)], temperature=0.3
+        )
+    except Exception:
+        return None
+
+    catalog_names = {p.get("name") for p in all_packages if p.get("name")}
+    if not _validate_model_reply(reply, offers, catalog_names):
+        return None
+    return reply
+
+
 def handle_turn(
     ctx: TurnContext,
     *,
@@ -188,7 +290,37 @@ def handle_turn(
         {"offer_codes": [o.package_code for o in offers], "scores": [o.score for o in offers]},
         tenant=ctx.tenant,
     )
-    reply_tr = _verbalize_offers(offers)
+
+    model_reply = _verbalize_with_model(ctx, offers, packages) if offers else None
+    if model_reply is not None:
+        reply_tr = model_reply
+        ctx.audit_log.append(
+            ctx.conversation_id,
+            StepType.MODE_DECISION,
+            "advisory: model verbalized the engine's offers",
+            "reply validated against PackageOffer names/order/price/speed before use",
+            {"offer_codes": [o.package_code for o in offers]},
+            tenant=ctx.tenant,
+        )
+    else:
+        reply_tr = _verbalize_offers(offers)
+        ctx.audit_log.append(
+            ctx.conversation_id,
+            StepType.MODE_DECISION,
+            "advisory: used deterministic verbalization template",
+            (
+                "no packages to recommend"
+                if not offers
+                else "model reply missing/invalid or provider error; fixed Turkish template used instead"
+            ),
+            {"offer_codes": [o.package_code for o in offers]},
+            tenant=ctx.tenant,
+        )
+
+    if offers and not complete and questions_asked >= max_questions:
+        reply_tr += (
+            "\n\n(Sorabileceğim soru sayısına ulaştığım için elimdeki bilgilerle önerdim.)"
+        )
 
     return AdvisoryStepResult(
         reply_tr=reply_tr,

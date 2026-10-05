@@ -32,15 +32,22 @@ def test_next_question_none_when_all_answered():
     assert next_question(profile) is None
 
 
-def test_profile_is_complete_requires_usage_and_device_or_household():
+def test_profile_is_complete_requires_usage_household_and_budget():
     assert profile_is_complete(AdvisoryProfile()) is False
     assert profile_is_complete(AdvisoryProfile(usage=[UsageType.STUDENT])) is False
-    assert profile_is_complete(AdvisoryProfile(usage=[UsageType.STUDENT], device_count=2)) is True
-    assert profile_is_complete(AdvisoryProfile(usage=[UsageType.STUDENT], household_size=2)) is True
+    # usage + a size, but no budget yet -> still incomplete.
+    assert profile_is_complete(AdvisoryProfile(usage=[UsageType.STUDENT], device_count=2)) is False
+    assert profile_is_complete(AdvisoryProfile(usage=[UsageType.STUDENT], household_size=2)) is False
+    # usage + a size + budget -> complete, either size field satisfies the "size" dimension.
+    assert profile_is_complete(
+        AdvisoryProfile(usage=[UsageType.STUDENT], device_count=2, budget_try=300)
+    ) is True
+    assert profile_is_complete(
+        AdvisoryProfile(usage=[UsageType.STUDENT], household_size=2, budget_try=300)
+    ) is True
 
 
-def test_profile_is_complete_ignores_optional_budget_and_commitment():
-    profile = AdvisoryProfile(usage=[UsageType.FAMILY], household_size=3)
+def test_profile_is_complete_ignores_optional_commitment():
+    profile = AdvisoryProfile(usage=[UsageType.FAMILY], household_size=3, budget_try=400)
     assert profile_is_complete(profile) is True
-    assert profile.budget_try is None
     assert profile.commitment_preference is None

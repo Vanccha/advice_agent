@@ -138,6 +138,7 @@ class Orchestrator:
             policy_engine=self.policy_engine,
             action_executor=self.action_executor,
             ticket_service=self.ticket_service,
+            provider=self.provider,
             customer_no=customer_no,
             masked_customer_ref=customer_no,
             history=history,
@@ -578,6 +579,7 @@ class Orchestrator:
             policy_engine=self.policy_engine,
             action_executor=self.action_executor,
             ticket_service=self.ticket_service,
+            provider=self.provider,
             customer_no=customer_no,
             masked_customer_ref=customer_no,
         )

@@ -70,8 +70,13 @@ def next_question(profile: AdvisoryProfile) -> Question | None:
 
 
 def profile_is_complete(profile: AdvisoryProfile) -> bool:
-    """Complete once usage + (device_count or household_size) are known; budget and
-    commitment preference stay optional (contracts §4.4 / brief)."""
+    """Complete once at least three dimensions are known: usage, a household/device count,
+    and budget (contracts §4.3: "at most 3-5 questions" covering usage, household/device
+    count, budget and commitment preference). Commitment preference stays optional. The
+    hard cap is enforced separately by the caller via
+    ``policy.yaml: limits.max_questions_advisory`` — reaching it with budget (or anything
+    else) still unknown just means recommending with what is known, not a bug here."""
     if not profile.usage:
         return False
-    return profile.device_count is not None or profile.household_size is not None
+    has_size = profile.device_count is not None or profile.household_size is not None
+    return has_size and profile.budget_try is not None

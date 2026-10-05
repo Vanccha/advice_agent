@@ -5,6 +5,12 @@
 - `ConfirmationRequired` -> persist a `pending_approvals` row, mode AWAITING_APPROVAL.
 - success -> inform the customer what was fixed, mode CLOSING.
 
+Issue type, urgency and (when policy does not already fix it) department are real
+`DecisionService` calls now (contracts §4.5) — `_ROOT_CAUSE_ACTION` below is the
+**fallback** table for when the service is unsure, wrong, or unavailable, not the primary
+source of truth it used to be. See `_decide_issue_type`/`_decide_priority`/
+`_decide_department`.
+
 Import as: ``from modes.action import handle_action, ActionStepResult``.
 """
 from __future__ import annotations
@@ -15,15 +21,21 @@ from typing import Any
 from core_common.models import PendingApproval
 from core_common.db import session_scope
 from core_common.types import Department, Diagnosis, IssueType, Mode, Priority, StepType
+from decision.base import DecisionContext
+from decision.fallback import PRIORITY_ORDER, apply_confidence_floor
 from modes import diagnostic
 from modes.context import TurnContext
 from modes.incident_policy import ensure_incident_ticket
 from modes.ticket_links import record_ticket_link
+from observability.tracing import record_decision
 from policy.executor import ConfirmationRequired, PolicyDenied
 from tickets.builder import build_structured_ticket
 
-# root_cause -> (policy action name, IssueType, Priority, Department hint for a denial
-# that somehow has no escalate_to in policy.yaml).
+# root_cause -> (policy action name, deterministic IssueType, deterministic Priority).
+# The action name is always deterministic (no `DecisionService` call decides *what to try*,
+# only how to classify/route/escalate it). The IssueType/Priority here are now only the
+# **fallback** values `_decide_issue_type`/`_decide_priority` use when the DecisionService
+# itself is unsure, wrong, or unavailable (contracts §4.5).
 _ROOT_CAUSE_ACTION: dict[str, tuple[str, IssueType, Priority]] = {
     diagnostic.ROOT_CAUSE_STUCK_PROVISIONING: (
         "retry_provisioning_job", IssueType.STUCK_PROVISIONING, Priority.NORMAL,
@@ -99,6 +111,152 @@ def _build_params(root_cause: str, diagnosis: Diagnosis, customer_no: str) -> di
         base["amount_try"] = 50.0
         base["reason"] = f"Bölgesel kesinti telafisi ({diagnosis.incident_no})"
     return base
+
+
+def _decision_context(ctx: TurnContext, diagnosis: Diagnosis) -> DecisionContext:
+    masked_facts = {k: v for k, v in diagnosis.evidence.items() if k != "queried_sources"}
+    return DecisionContext(
+        conversation_id=ctx.conversation_id,
+        tenant=ctx.tenant,
+        history=ctx.history,
+        masked_customer_facts=masked_facts,
+        diagnosis=diagnosis,
+        tenant_config_slice={
+            "known_issue_types": [t.value for t in IssueType],
+            "known_departments": [d.value for d in Department],
+            "known_priorities": [p.value for p in Priority],
+        },
+    )
+
+
+def _decide_issue_type(
+    ctx: TurnContext, diagnosis: Diagnosis, deterministic_issue_type: IssueType
+) -> IssueType:
+    """contracts §4.5: `classify_issue_type` is a real `DecisionService` call now.
+    `deterministic_issue_type` (the `_ROOT_CAUSE_ACTION` table below) is used instead
+    whenever the service's answer is below `policy.yaml: decision.min_confidence`, out of
+    enum, or the provider call itself failed — `LLMStructuredDecisionService` turns all
+    three of those into a confidence-0.0 `Decision`, so a single confidence check covers
+    every case and a provider failure can never break the turn."""
+    min_confidence = ctx.tenant_config.policy.decision.min_confidence
+    decision = ctx.decision_service.classify_issue_type(_decision_context(ctx, diagnosis))
+    record_decision(
+        "classify_issue_type",
+        value=decision.value.value,
+        confidence=decision.confidence,
+        rationale=decision.rationale,
+        model=decision.model,
+    )
+    fallback = apply_confidence_floor(decision, min_confidence, ctx.tenant_config.routing)
+    issue_type = deterministic_issue_type if fallback.escalated else fallback.decision.value
+
+    ctx.audit_log.append(
+        ctx.conversation_id,
+        StepType.DECISION_SERVICE,
+        f"classify_issue_type -> '{issue_type.value}'"
+        + (
+            " (low-confidence/invalid decision-service answer; deterministic root-cause "
+            "table used instead)"
+            if fallback.escalated
+            else ""
+        ),
+        fallback.decision.rationale,
+        {
+            "confidence": decision.confidence,
+            "escalated": fallback.escalated,
+            "model_value": decision.value.value,
+            "used_value": issue_type.value,
+        },
+        tenant=ctx.tenant,
+    )
+    return issue_type
+
+
+def _decide_priority(
+    ctx: TurnContext,
+    diagnosis: Diagnosis,
+    issue_type: IssueType,
+    deterministic_priority: Priority,
+) -> Priority:
+    """contracts §4.5: `assess_urgency` is a real `DecisionService` call now.
+    `deterministic_priority` (the `_ROOT_CAUSE_ACTION` table) is used whenever the service's
+    answer is below the confidence floor. Independently of confidence, the result may never
+    rank below `routing.yaml: urgency_floor[issue_type]` — the service may only ever raise
+    urgency for an issue type, never lower it (contracts §4.5/§4.6)."""
+    min_confidence = ctx.tenant_config.policy.decision.min_confidence
+    routing = ctx.tenant_config.routing
+    decision = ctx.decision_service.assess_urgency(_decision_context(ctx, diagnosis))
+    record_decision(
+        "assess_urgency",
+        value=decision.value.value,
+        confidence=decision.confidence,
+        rationale=decision.rationale,
+        model=decision.model,
+    )
+    fallback = apply_confidence_floor(decision, min_confidence, routing, issue_type=issue_type.value)
+    priority = deterministic_priority if decision.confidence < min_confidence else fallback.decision.value
+
+    floor_name = routing.urgency_floor.get(issue_type.value)
+    if floor_name is not None:
+        floor_priority = Priority(floor_name)
+        if PRIORITY_ORDER[floor_priority.value] > PRIORITY_ORDER[priority.value]:
+            priority = floor_priority
+
+    ctx.audit_log.append(
+        ctx.conversation_id,
+        StepType.DECISION_SERVICE,
+        f"assess_urgency -> '{priority.value}'"
+        + (
+            " (low-confidence decision-service answer; deterministic root-cause priority "
+            "used instead)"
+            if fallback.escalated
+            else ""
+        ),
+        fallback.decision.rationale,
+        {
+            "confidence": decision.confidence,
+            "escalated": fallback.escalated,
+            "model_value": decision.value.value,
+            "used_value": priority.value,
+        },
+        tenant=ctx.tenant,
+    )
+    return priority
+
+
+def _decide_department(ctx: TurnContext, diagnosis: Diagnosis, issue_type: IssueType) -> Department:
+    """contracts §4.5: `choose_department` is a real `DecisionService` call now. Its result
+    is used as the ticket's department whenever `policy.yaml` does not already fix one via
+    `escalate_to` for the denied action (see the call site in `handle_action`) — policy's own
+    `escalate_to` remains authoritative when present, since which department has *authority*
+    over an action is a policy decision, never the model's (contracts §4.6), while this call
+    only decides *routing* for the (rarer) case policy leaves open."""
+    min_confidence = ctx.tenant_config.policy.decision.min_confidence
+    decision = ctx.decision_service.choose_department(_decision_context(ctx, diagnosis))
+    record_decision(
+        "choose_department",
+        value=decision.value.value,
+        confidence=decision.confidence,
+        rationale=decision.rationale,
+        model=decision.model,
+    )
+    fallback = apply_confidence_floor(
+        decision, min_confidence, ctx.tenant_config.routing, issue_type=issue_type.value
+    )
+    ctx.audit_log.append(
+        ctx.conversation_id,
+        StepType.DECISION_SERVICE,
+        f"choose_department -> '{fallback.decision.value.value}'"
+        + (
+            " (low-confidence decision-service answer; routed via issue_routing table)"
+            if fallback.escalated
+            else ""
+        ),
+        fallback.decision.rationale,
+        {"confidence": fallback.decision.confidence, "escalated": fallback.escalated},
+        tenant=ctx.tenant,
+    )
+    return fallback.decision.value
 
 
 def _escalate_with_ticket(
@@ -248,14 +406,19 @@ def handle_action(
             next_mode=Mode.CLOSING,
         )
 
-    action_name, issue_type, priority = mapping
+    action_name, deterministic_issue_type, deterministic_priority = mapping
+    issue_type = _decide_issue_type(ctx, diagnosis, deterministic_issue_type)
+    priority = _decide_priority(ctx, diagnosis, issue_type, deterministic_priority)
     policy_context = _build_policy_context(ctx, diagnosis)
     params = _build_params(root_cause, diagnosis, customer_no)
 
     try:
         ctx.action_executor.execute(action_name, params, policy_context, confirmed=False)
     except PolicyDenied as exc:
-        department = exc.decision.escalate_to or Department.SUBSCRIPTION_OPS
+        # policy's own `escalate_to` is authoritative when set (contracts §4.6: the model
+        # never decides its own authority) — `choose_department` only fills the gap for an
+        # action policy.yaml leaves without one, with its own confidence floor/fallback.
+        department = exc.decision.escalate_to or _decide_department(ctx, diagnosis, issue_type)
         return _escalate_with_ticket(
             ctx,
             department=department,

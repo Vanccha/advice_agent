@@ -14,7 +14,12 @@ from pydantic import BaseModel, ConfigDict
 from core_common.config import RoutingFile
 from core_common.types import Decision, Department, Priority
 
-_PRIORITY_ORDER = {"LOW": 0, "NORMAL": 1, "HIGH": 2, "URGENT": 3}
+#: Public so callers that need to enforce `routing.yaml: urgency_floor` themselves (e.g.
+#: `modes.action`, which must never let urgency drop below the floor even for a *confident*
+#: decision — this function only raises-to-floor in the low-confidence branch below) can
+#: reuse the same ranking instead of redefining it.
+PRIORITY_ORDER = {"LOW": 0, "NORMAL": 1, "HIGH": 2, "URGENT": 3}
+_PRIORITY_ORDER = PRIORITY_ORDER
 
 
 class FallbackResult(BaseModel):
