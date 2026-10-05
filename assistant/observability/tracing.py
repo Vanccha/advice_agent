@@ -184,7 +184,10 @@ def trace_turn(
     """
     handle = get_tracing_handle()
     effective_tenant = tenant or handle.tenant
-    tags = [effective_tenant, mode, chaos_scenario or "none"]
+    # Four filterable tags, as the demo needs: tenant, masked customer reference, mode and
+    # chaos scenario. The masked reference is also set as Langfuse's own user_id, but a tag
+    # is what makes it filterable alongside the others in one query.
+    tags = [effective_tenant, masked_customer_ref or "anonymous", mode, chaos_scenario or "none"]
     safe_metadata = redact_metadata(metadata)
 
     fallback_record = {

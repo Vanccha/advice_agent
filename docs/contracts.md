@@ -520,7 +520,7 @@ Normalized alert payload forwarded to the assistant:
 | GET | `/` | demo page: fake login by `customer_no` + embedded chat widget |
 | POST | `/api/login` | body: `{customer_no}` → session cookie (demo only, no password) |
 | POST | `/api/chat` | body: `{conversation_id?, message, customer_no?}` → `{conversation_id, mode, reply_tr, actions[], ticket_key?, requires_approval?, approval_id?}` |
-| GET | `/api/chat/stream` | SSE token stream of the same turn |
+| GET | `/api/chat/stream?conversation_id=&message=` | SSE stream of the same turn. Event framing: `event: token` (plain-text chunk, appended by the client), `event: final` (JSON, identical body to `POST /api/chat`), `event: error` (any payload; the client falls back to `POST /api/chat`). |
 | POST | `/api/approvals/{approval_id}` | `{decision: "granted"\|"denied"}` |
 | GET | `/api/conversations/{conversation_id}/audit` | audit trail for the demo |
 | POST | `/webhooks/ticket` | ticketing `ticket.status_changed` (HMAC verified) → notifies user |
@@ -531,6 +531,15 @@ Normalized alert payload forwarded to the assistant:
 > settings, tenant-config loader, `assistant_state` models) lives in **`assistant/core_common/`**
 > and is imported as `core_common.*`. The name avoids the top-level `common` package, which the
 > boundary test forbids inside `assistant/` (that name belongs to the integration layer).
+
+The chat widget (`assistant/web/`) drives exactly these endpoints and depends on these DOM
+hooks, so the API and any UI test can rely on them: `chat-widget`, `chat-launcher`,
+`chat-panel`, `mode-badge` (`data-mode=ROUTER|ADVISORY|DIAGNOSTIC|STATUS_QUERY|ACTION|AWAITING_APPROVAL|ESCALATED|CLOSING`),
+`chat-messages`, `chat-form`/`chat-input`/`chat-send`, `typing-indicator`, `chat-error`,
+`audit-panel`/`audit-steps`, `login-form`/`customer_no`,
+`approval-card`/`approval-approve`/`approval-deny`, `ticket-chip`.
+The audit endpoint may return a bare array or `{steps:[…]}`; each step is read as
+`{step_type, summary, reason}`.
 
 ### 4.3 Modes (explicit state machine, `assistant/modes/machine.py`)
 States: `ROUTER → {ADVISORY, DIAGNOSTIC, STATUS_QUERY} → ACTION → CLOSING`,

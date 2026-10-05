@@ -82,7 +82,7 @@ def test_unreachable_host_warns_once_never_raises_and_falls_back_to_jsonl(
     assert len(lines) == 2  # one "turn" record + one "event" record
     turn_record = json.loads(lines[0])
     assert turn_record["session_id"] == "conv-42"
-    assert turn_record["tags"] == ["nethiz", "DIAGNOSTIC", "stuck_provisioning"]
+    assert turn_record["tags"] == ["nethiz", "NH-1****2", "DIAGNOSTIC", "stuck_provisioning"]
 
 
 class _FakeClientHealthy:
@@ -132,10 +132,9 @@ def test_four_filterable_dimensions_are_attached_to_propagate_attributes(monkeyp
 
     assert captured["user_id"] == "NH-1****2"
     assert captured["session_id"] == "conv-7"
-    # tenant, mode, chaos_scenario-or-"none": exactly the three contracts §4.9 tags, plus
-    # the masked customer ref carried separately as user_id (the fourth filterable
-    # dimension docs/observability.md describes).
-    assert captured["tags"] == ["nethiz", "ACTION", "none"]
+    # The four filterable tags a demo needs: tenant, masked customer ref, mode and chaos
+    # scenario. The masked ref is additionally set as Langfuse's own user_id.
+    assert captured["tags"] == ["nethiz", "NH-1****2", "ACTION", "none"]
 
 
 def test_payload_containing_raw_pii_is_redacted_before_it_reaches_the_emitter(monkeypatch):

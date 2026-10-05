@@ -112,7 +112,7 @@ def cmd_paid_not_active(
     cctx = ChaosContext(customer, region, dry_run, json_output)
     engine = core_engine(cctx.settings)
     try:
-        candidate = sc.pick_paid_not_active(engine, cctx.customer, cctx.region)
+        candidate = sc.pick_paid_not_active(engine, cctx.settings, cctx.customer, cctx.region)
     except ChaosError as exc:
         _fail(cctx, str(exc))
         return
