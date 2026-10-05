@@ -30,6 +30,14 @@ FORBIDDEN_TOKENS = re.compile(
 
 SKIP_DIR_PARTS = {"__pycache__", ".pytest_cache", "var", "node_modules", ".git"}
 
+# Narrow, documented allowances. A company may configure its Alertmanager to deliver alerts
+# to a third-party integration endpoint; that is a hostname in a deployment config file, not
+# the company's code knowing anything about the product. Nothing else may claim an allowance,
+# and no `.py` file ever gets one.
+TOKEN_ALLOWANCES: set[tuple[str, str]] = {
+    ("company/monitoring/alertmanager.yml", "mcp"),
+}
+
 
 def _python_files(root: Path) -> list[Path]:
     if not root.exists():
@@ -84,8 +92,11 @@ def test_company_code_never_mentions_the_assistant() -> None:
             for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 match = FORBIDDEN_TOKENS.search(line)
                 if match:
+                    rel = path.relative_to(REPO).as_posix()
+                    if (rel, match.group(0).lower()) in TOKEN_ALLOWANCES:
+                        continue
                     violations.append(
-                        f"{path.relative_to(REPO)}:{lineno} mentions '{match.group(0)}': {line.strip()[:100]}"
+                        f"{rel}:{lineno} mentions '{match.group(0)}': {line.strip()[:100]}"
                     )
     assert not violations, (
         "the company world must be unaware of the assistant:\n" + "\n".join(violations)

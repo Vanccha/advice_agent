@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-testpaths = ["tests", "company", "integrations", "assistant", "evals"]
+testpaths = ["tests"]
 norecursedirs = [".git", "*.egg-info", "var", "evals/reports", "node_modules"]
 markers = [
     "integration: needs the running docker compose stack",

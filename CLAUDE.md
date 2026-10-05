@@ -59,6 +59,9 @@ company/monitoring/   prometheus.yml, rules.yml, alertmanager.yml
 company/chaos/        failure injection CLI (make chaos SCENARIO=...)
 integrations/common/  http client, read-only db access, ToolResult envelope
 integrations/mcp_*/   one MCP server per company system
+assistant/core_common/     shared types, settings, tenant-config loader, assistant DB models
+                      (named core_common, not common: the boundary test forbids the
+                       top-level import name `common` inside assistant/)
 assistant/policy/     authority engine (policy.yaml interpreter)
 assistant/recommendation/  deterministic package scoring (no LLM)
 assistant/privacy/    KVKK masking

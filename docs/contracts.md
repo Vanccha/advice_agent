@@ -520,6 +520,11 @@ Normalized alert payload forwarded to the assistant:
 | POST | `/webhooks/alert` | normalized alert from `mcp-monitoring` → proactive diagnosis |
 | GET | `/health` `/metrics` | |
 
+> Shared assistant-side vocabulary (enums, `Decision[T]`, `AdvisoryProfile`, `PolicyDecision`,
+> settings, tenant-config loader, `assistant_state` models) lives in **`assistant/core_common/`**
+> and is imported as `core_common.*`. The name avoids the top-level `common` package, which the
+> boundary test forbids inside `assistant/` (that name belongs to the integration layer).
+
 ### 4.3 Modes (explicit state machine, `assistant/modes/machine.py`)
 States: `ROUTER → {ADVISORY, DIAGNOSTIC, STATUS_QUERY} → ACTION → CLOSING`,
 plus `AWAITING_APPROVAL` and `ESCALATED`. Transitions are table-driven; no free-form loop.

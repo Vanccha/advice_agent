@@ -52,16 +52,16 @@ smoke: ## Health + seed sanity checks against the running stack
 	@bash scripts/smoke.sh
 
 test: env ## Run the whole test suite inside the test-runner container
-	$(COMPOSE) run --rm test-runner pytest $(PYTEST_ARGS)
+	$(COMPOSE) run --rm test-runner bash scripts/run_tests.sh $(PYTEST_ARGS)
 
 test-unit: ## Unit tests only (no running stack required)
-	$(COMPOSE) run --rm test-runner pytest -m "not integration" $(PYTEST_ARGS)
+	$(COMPOSE) run --rm test-runner bash scripts/run_tests.sh -m "not integration" $(PYTEST_ARGS)
 
 test-integration: ## Integration tests (requires: make up)
-	$(COMPOSE) run --rm test-runner pytest -m integration $(PYTEST_ARGS)
+	$(COMPOSE) run --rm test-runner python -m pytest tests/integration -m integration $(PYTEST_ARGS)
 
 test-arch: ## Architecture boundary tests only
-	$(COMPOSE) run --rm test-runner pytest tests/architecture $(PYTEST_ARGS)
+	$(COMPOSE) run --rm test-runner python -m pytest tests/architecture $(PYTEST_ARGS)
 
 chaos: ## Inject a failure: make chaos SCENARIO=stuck_provisioning [CHAOS_ARGS="--customer NH-100042"]
 	$(COMPOSE) run --rm chaos python -m chaos.cli $(SCENARIO) $(CHAOS_ARGS)
