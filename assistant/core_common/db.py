@@ -116,4 +116,7 @@ def bootstrap_schema(engine: Engine) -> None:
         if is_postgres:
             # exec_driver_sql (not execute(text(...))) so the driver can run the
             # semicolon-separated DDL statements as a single batch.
-            conn.exec_driver_sql(AUDIT_APPEND_ONLY_TRIGGER_SQL)
+            # psycopg parses `%` in a driver-level statement as a parameter placeholder, and
+            # the trigger body legitimately contains one (`RAISE EXCEPTION '... % ...', TG_OP`).
+            # Double it so the DDL reaches PostgreSQL verbatim.
+            conn.exec_driver_sql(AUDIT_APPEND_ONLY_TRIGGER_SQL.replace("%", "%%"))

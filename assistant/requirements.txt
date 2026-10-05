@@ -17,3 +17,4 @@ langfuse>=3.0
 openinference-instrumentation-openai-agents>=0.1
 opentelemetry-sdk>=1.29
 opentelemetry-exporter-otlp-proto-http>=1.29
+python-multipart>=0.0.9

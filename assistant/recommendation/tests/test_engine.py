@@ -75,14 +75,11 @@ def routing_config(monkeypatch: pytest.MonkeyPatch):
     return cfg.routing
 
 
-def _template_stem(template: str) -> str:
-    text = re.sub(r"\{[^}]+\}", "", template)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _reason_stem(reason: str) -> str:
-    text = re.sub(r"[\d.,]+", "", reason)
-    return re.sub(r"\s+", " ", text).strip()
+def _template_regex(template: str) -> re.Pattern[str]:
+    """Turn a `{placeholder}`-style template into a regex matching any filled-in value."""
+    parts = re.split(r"(\{[^}]+\})", template)
+    pattern = "".join(r".+?" if part.startswith("{") else re.escape(part) for part in parts)
+    return re.compile(f"^{pattern}$")
 
 
 # -- 10 representative profiles -----------------------------------------------------------
@@ -205,10 +202,10 @@ def test_determinism_same_input_same_output(routing_config):
 
 def test_every_reason_comes_from_configured_templates(routing_config):
     templates = routing_config.recommendation.reason_codes_tr
-    stems = {_template_stem(t) for t in templates.values()}
+    patterns = [_template_regex(t) for t in templates.values()]
 
     for profile, _ in PROFILES.values():
         offers = recommend_packages(profile, PACKAGES, routing_config)
         for offer in offers:
             for reason in offer.reasons:
-                assert _reason_stem(reason) in stems, f"unexpected free-text reason: {reason!r}"
+                assert any(p.match(reason) for p in patterns), f"unexpected free-text reason: {reason!r}"

@@ -160,7 +160,13 @@ def create_ticket(
             note="Talep oluşturuldu.",
         )
     )
-    session.flush()
+    # Commit now (not just flush): the webhook delivery below runs as a background
+    # task against a brand-new session/connection (possibly after this request's own
+    # session has committed and closed, possibly concurrently -- FastAPI runs a
+    # yield-dependency's post-yield cleanup, i.e. our commit in `get_session`, only
+    # *after* background tasks finish). Without an explicit commit here, that second
+    # session would not yet see this ticket row and webhook_deliveries' FK would fail.
+    session.commit()
 
     record_ticket_event(ticket.department, ticket.status)
     refresh_open_ticket_gauges(session)
@@ -203,7 +209,9 @@ def change_status(
             )
         )
         ticket.updated_at = utcnow()
-        session.flush()
+        # Commit before scheduling the webhook background task -- see the comment in
+        # `create_ticket` for why this must happen before `_schedule_webhook`.
+        session.commit()
 
         record_ticket_event(ticket.department, new_status)
         refresh_open_ticket_gauges(session)
@@ -288,7 +296,9 @@ def add_comment(
     )
     session.add(comment)
     ticket.updated_at = utcnow()
-    session.flush()
+    # Commit before scheduling the webhook background task -- see the comment in
+    # `create_ticket` for why this must happen before `_schedule_webhook`.
+    session.commit()
     session.refresh(comment)
 
     webhook_payload = build_webhook_payload(
