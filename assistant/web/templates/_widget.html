@@ -1,0 +1,118 @@
+{# Embeddable chat widget partial — no <html>/<body>, so it can be dropped into any host
+   page (see site.html) or served on its own. Everything is scoped under the
+   "nh-assist-" / "nh-widget" prefixes so it cannot collide with a host page's CSS.
+
+   Jinja variables (all optional, used for local greeting only — never trusted as
+   authentication; the real session lives in the cookie set by POST /api/login):
+     customer_no: str|None  — shown in the header once logged in.
+#}
+<section id="chat-widget" class="nh-widget" data-testid="chat-widget" data-state="closed">
+
+  <button type="button"
+          id="chat-launcher"
+          class="nh-widget__launcher"
+          data-testid="chat-launcher"
+          aria-expanded="false"
+          aria-controls="chat-panel"
+          aria-label="Destek sohbetini aç">
+    <span class="nh-widget__launcher-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8A2.5 2.5 0 0 1 17.5 16H9.8l-4.1 3.6a.6.6 0 0 1-1-.45V16h-.2A2.5 2.5 0 0 1 2 13.5v-8A2.5 2.5 0 0 1 4.5 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
+    <span class="nh-widget__launcher-badge" id="chat-launcher-badge" data-testid="chat-launcher-badge" hidden>1</span>
+  </button>
+
+  <div id="chat-panel" class="nh-widget__panel" data-testid="chat-panel" role="dialog" aria-label="Destek asistanı" hidden>
+
+    <header class="nh-widget__header">
+      <div class="nh-widget__header-brand">
+        <span class="nh-widget__header-dot" aria-hidden="true"></span>
+        <div>
+          <div class="nh-widget__header-title">NetHız Destek Asistanı</div>
+          <div class="nh-widget__header-subtitle" id="connection-status" data-testid="connection-status">Bağlanıyor…</div>
+        </div>
+      </div>
+      <div class="nh-widget__header-actions">
+        <span id="mode-badge" class="nh-widget__mode-badge" data-testid="mode-badge" data-mode="ROUTER">Yönlendiriliyor</span>
+        <button type="button" id="chat-minimize" class="nh-widget__icon-btn" data-testid="chat-minimize" aria-label="Sohbeti küçült">&times;</button>
+      </div>
+    </header>
+
+    {% if customer_no %}
+    <div class="nh-widget__session-chip" data-testid="session-chip">
+      Müşteri: <strong>{{ customer_no }}</strong>
+    </div>
+    {% endif %}
+
+    <div class="nh-widget__body">
+      <ol id="chat-messages" class="nh-widget__messages" data-testid="chat-messages" aria-live="polite">
+        <li class="nh-msg nh-msg--assistant" data-role="assistant">
+          <div class="nh-msg__bubble">
+            Merhaba! Ben NetHız'ın dijital destek asistanıyım. Fatura, arıza, kurulum veya
+            paket değişikliği hakkında yazabilirsiniz.
+          </div>
+          <time class="nh-msg__time"></time>
+        </li>
+      </ol>
+
+      <div id="typing-indicator" class="nh-widget__typing" data-testid="typing-indicator" hidden>
+        <span></span><span></span><span></span>
+      </div>
+
+      <div id="chat-error" class="nh-widget__error" data-testid="chat-error" role="alert" hidden></div>
+    </div>
+
+    <details id="audit-panel" class="nh-widget__audit" data-testid="audit-panel">
+      <summary data-testid="audit-summary">Asistan ne yaptı?</summary>
+      <div class="nh-widget__audit-body">
+        <p class="nh-widget__audit-hint">
+          Bu görüşmede asistanın attığı her adımı, hangi veriye baktığını ve neden bu kararı
+          verdiğini burada görebilirsiniz.
+        </p>
+        <ol id="audit-steps" class="nh-widget__audit-steps" data-testid="audit-steps"></ol>
+      </div>
+    </details>
+
+    <form id="chat-form" class="nh-widget__composer" data-testid="chat-form" autocomplete="off">
+      <input type="text"
+             id="chat-input"
+             name="message"
+             data-testid="chat-input"
+             placeholder="Mesajınızı yazın…"
+             maxlength="2000"
+             autocomplete="off" />
+      <button type="submit" id="chat-send" class="nh-widget__send-btn" data-testid="chat-send" aria-label="Gönder">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 11.5 20.5 4 13 21.5l-2.3-7.2L3 11.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </form>
+
+    <footer class="nh-widget__footer">
+      <span>Bu sohbet penceresi üçüncü taraf bir destek asistanı tarafından sağlanmaktadır.</span>
+    </footer>
+  </div>
+</section>
+
+{# Hidden templates consumed by widget.js via <template> cloning — never rendered directly. #}
+<template id="tpl-approval-card">
+  <li class="nh-msg nh-msg--system" data-role="system">
+    <div class="nh-approval-card" data-testid="approval-card">
+      <div class="nh-approval-card__title">Onayınız gerekiyor</div>
+      <p class="nh-approval-card__text" data-field="prompt"></p>
+      <div class="nh-approval-card__actions">
+        <button type="button" class="nh-btn nh-btn--ghost" data-decision="denied" data-testid="approval-deny">Reddet</button>
+        <button type="button" class="nh-btn nh-btn--primary" data-decision="granted" data-testid="approval-approve">Onayla</button>
+      </div>
+    </div>
+  </li>
+</template>
+
+<template id="tpl-ticket-chip">
+  <div class="nh-ticket-chip" data-testid="ticket-chip">
+    <span class="nh-ticket-chip__icon" aria-hidden="true">🎫</span>
+    <span data-field="ticket_key"></span>
+    <span class="nh-ticket-chip__dept" data-field="department"></span>
+  </div>
+</template>

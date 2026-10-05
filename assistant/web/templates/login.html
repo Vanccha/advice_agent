@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Müşteri Girişi — NetHız Destek Asistanı</title>
+  <link rel="stylesheet" href="/static/site.css" />
+  <link rel="stylesheet" href="/static/widget.css" />
+</head>
+<body class="nh-login-body">
+  <main class="nh-login">
+    <div class="nh-login__card">
+      <a href="/" class="nh-site__logo nh-login__logo" aria-label="NetHız Telekom anasayfa">
+        <span class="nh-site__logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="26" height="26" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 20c6-10 18-10 24 0" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+            <path d="M9 24c4-6 10-6 14 0" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" opacity="0.65"/>
+            <circle cx="16" cy="28" r="1.8" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="nh-site__logo-word">Net<strong>Hız</strong></span>
+      </a>
+
+      <h1>Destek asistanına giriş</h1>
+      <p class="nh-login__demo-note" data-testid="demo-login-note">
+        Bu bir demo girişidir: şifre yoktur, yalnızca müşteri numaranızı yazmanız ya da
+        aşağıdaki örneklerden birini seçmeniz yeterlidir.
+      </p>
+
+      <form id="login-form" class="nh-login__form" data-testid="login-form" autocomplete="off">
+        <label for="customer_no">Müşteri numarası</label>
+        <input type="text"
+               id="customer_no"
+               name="customer_no"
+               data-testid="customer-no-input"
+               placeholder="NH-100042"
+               pattern="NH-[0-9]{6}"
+               autocomplete="off"
+               required />
+        <div id="login-error" class="nh-login__error" data-testid="login-error" role="alert" hidden></div>
+        <button type="submit" class="nh-btn-cta nh-login__submit" data-testid="login-submit">
+          Devam Et
+        </button>
+      </form>
+
+      <div class="nh-login__examples">
+        <span class="nh-login__examples-label">Demo için örnek müşteriler:</span>
+        <ul class="nh-login__example-list" data-testid="example-customers">
+          <li><button type="button" class="nh-login__example-btn" data-customer-no="NH-100042" data-testid="example-customer">NH-100042 <small>aktif abonelik</small></button></li>
+          <li><button type="button" class="nh-login__example-btn" data-customer-no="NH-100017" data-testid="example-customer">NH-100017 <small>kurulum bekliyor</small></button></li>
+          <li><button type="button" class="nh-login__example-btn" data-customer-no="NH-100083" data-testid="example-customer">NH-100083 <small>ödeme beklemede</small></button></li>
+          <li><button type="button" class="nh-login__example-btn" data-customer-no="NH-100005" data-testid="example-customer">NH-100005 <small>askıya alınmış</small></button></li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/widget.js" data-login-page="true" defer></script>
+</body>
+</html>

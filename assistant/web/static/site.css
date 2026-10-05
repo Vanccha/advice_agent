@@ -1,0 +1,503 @@
+/* ==========================================================================
+   NetHız Telekom — marketing site shell (fake, demo-only host page)
+   Teal/navy brand, intentionally distinct from the widget's indigo system
+   (widget.css) and from the internal ticketing tool's flat blue (company/).
+   ========================================================================== */
+
+:root {
+  --nh-bg: #f7faf9;
+  --nh-navy: #0b2b3c;
+  --nh-navy-deep: #061b27;
+  --nh-teal: #0fb48a;
+  --nh-teal-dark: #0a8c69;
+  --nh-text: #16222a;
+  --nh-muted: #5c6d75;
+  --nh-border: #e1ebe8;
+  --nh-card-bg: #ffffff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  background: var(--nh-bg);
+  color: var(--nh-text);
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* --------------------------------- Header --------------------------------- */
+
+.nh-site__header {
+  background: var(--nh-navy);
+  color: #eaf3f1;
+}
+
+.nh-site__header-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nh-site__logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #eaf3f1;
+}
+
+.nh-site__logo-mark {
+  color: var(--nh-teal);
+  display: inline-flex;
+}
+
+.nh-site__logo-word {
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.nh-site__logo-word strong {
+  font-weight: 800;
+  color: var(--nh-teal);
+}
+
+.nh-site__logo-sub {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9fb8b2;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.nh-site__logo-word--footer {
+  font-size: 20px;
+  color: #eaf3f1;
+}
+
+.nh-site__nav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  font-size: 14px;
+}
+
+.nh-site__nav a {
+  color: #cfe2de;
+}
+
+.nh-site__nav a:hover { color: #fff; }
+
+.nh-site__nav-cta {
+  background: var(--nh-teal);
+  color: #06281f !important;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.nh-site__nav-cta:hover { background: #17c79a; }
+
+/* ---------------------------------- Hero ---------------------------------- */
+
+.nh-hero {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 64px 24px 56px;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 40px;
+  align-items: center;
+}
+
+.nh-hero__eyebrow {
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--nh-teal-dark);
+  background: #e3f7f0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  margin-bottom: 18px;
+}
+
+.nh-hero h1 {
+  font-size: 40px;
+  line-height: 1.15;
+  margin: 0 0 16px;
+  color: var(--nh-navy-deep);
+}
+
+.nh-hero p {
+  font-size: 16px;
+  color: var(--nh-muted);
+  max-width: 48ch;
+  margin: 0 0 28px;
+}
+
+.nh-hero__actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.nh-btn-cta {
+  display: inline-block;
+  background: var(--nh-teal);
+  color: #06281f;
+  font-weight: 700;
+  padding: 12px 22px;
+  border-radius: 10px;
+  font-size: 14.5px;
+}
+
+.nh-btn-cta:hover { background: var(--nh-teal-dark); color: #fff; }
+
+.nh-btn-cta--ghost {
+  background: transparent;
+  color: var(--nh-navy);
+  border: 1.5px solid var(--nh-navy);
+}
+
+.nh-btn-cta--ghost:hover { background: var(--nh-navy); color: #fff; }
+
+.nh-hero__art {
+  position: relative;
+  min-height: 220px;
+}
+
+.nh-hero__card {
+  position: absolute;
+  background: var(--nh-card-bg);
+  border: 1px solid var(--nh-border);
+  border-radius: 16px;
+  padding: 18px 22px;
+  box-shadow: 0 18px 40px rgba(11, 43, 60, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nh-hero__card-label {
+  font-size: 12px;
+  color: var(--nh-muted);
+  font-weight: 600;
+}
+
+.nh-hero__card-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--nh-navy-deep);
+}
+
+.nh-hero__card-value small {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nh-muted);
+}
+
+.nh-hero__card--speed { top: 10px; right: 40px; }
+.nh-hero__card--uptime { top: 140px; right: 0; }
+
+/* -------------------------------- Packages -------------------------------- */
+
+.nh-packages {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 10px 24px 60px;
+}
+
+.nh-packages h2 {
+  font-size: 24px;
+  color: var(--nh-navy-deep);
+  margin: 0 0 22px;
+}
+
+.nh-packages__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+.nh-package-card {
+  position: relative;
+  background: var(--nh-card-bg);
+  border: 1px solid var(--nh-border);
+  border-radius: 14px;
+  padding: 20px 18px;
+}
+
+.nh-package-card--highlight {
+  border-color: var(--nh-teal);
+  box-shadow: 0 10px 26px rgba(15, 180, 138, 0.18);
+}
+
+.nh-package-card__ribbon {
+  position: absolute;
+  top: -11px;
+  left: 16px;
+  background: var(--nh-teal);
+  color: #06281f;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.nh-package-card h3 {
+  margin: 4px 0 6px;
+  font-size: 16.5px;
+  color: var(--nh-navy-deep);
+}
+
+.nh-package-card__speed {
+  margin: 0 0 10px;
+  font-weight: 700;
+  color: var(--nh-teal-dark);
+}
+
+.nh-package-card__price {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--nh-navy-deep);
+}
+
+.nh-package-card__price span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--nh-muted);
+}
+
+.nh-package-card__note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--nh-muted);
+}
+
+/* ---------------------------------- Strip ---------------------------------- */
+
+.nh-strip {
+  background: var(--nh-navy);
+  color: #eaf3f1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 1120px;
+  margin: 0 auto;
+  border-radius: 18px;
+  padding: 26px 10px;
+}
+
+.nh-strip__item {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nh-strip__item strong {
+  font-size: 26px;
+  color: var(--nh-teal);
+}
+
+.nh-strip__item span {
+  font-size: 12.5px;
+  color: #b9cdc8;
+}
+
+/* ---------------------------------- Footer ---------------------------------- */
+
+.nh-site__footer {
+  margin-top: 50px;
+  background: var(--nh-navy-deep);
+  color: #9fb8b2;
+}
+
+.nh-site__footer-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 30px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.nh-site__footer-inner p {
+  font-size: 12.5px;
+  max-width: 44ch;
+  margin: 6px 0 0;
+}
+
+.nh-site__footer-links {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+}
+
+.nh-site__footer-links a:hover { color: #fff; }
+
+/* --------------------------------- Login page --------------------------------- */
+
+.nh-login-body {
+  background: linear-gradient(180deg, var(--nh-navy) 0%, var(--nh-bg) 320px);
+  min-height: 100vh;
+}
+
+.nh-login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 18px;
+}
+
+.nh-login__card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--nh-card-bg);
+  border-radius: 18px;
+  box-shadow: 0 30px 60px rgba(6, 27, 39, 0.28);
+  padding: 32px 28px 28px;
+}
+
+.nh-login__logo {
+  margin-bottom: 18px;
+  color: var(--nh-navy-deep);
+}
+
+.nh-login__logo .nh-site__logo-word { color: var(--nh-navy-deep); }
+
+.nh-login h1 {
+  font-size: 20px;
+  margin: 6px 0 8px;
+  color: var(--nh-navy-deep);
+}
+
+.nh-login__demo-note {
+  font-size: 12.5px;
+  color: var(--nh-muted);
+  background: #f1f6f5;
+  border: 1px dashed var(--nh-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 0 0 20px;
+}
+
+.nh-login__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nh-login__form label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--nh-navy-deep);
+}
+
+.nh-login__form input {
+  padding: 11px 13px;
+  border: 1.5px solid var(--nh-border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.nh-login__form input:focus {
+  outline: none;
+  border-color: var(--nh-teal);
+}
+
+.nh-login__error {
+  font-size: 12.5px;
+  color: #c0313b;
+  background: #fdecee;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.nh-login__submit {
+  margin-top: 6px;
+  width: 100%;
+  text-align: center;
+  border: none;
+  cursor: pointer;
+}
+
+.nh-login__examples {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--nh-border);
+}
+
+.nh-login__examples-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--nh-muted);
+  display: block;
+  margin-bottom: 10px;
+}
+
+.nh-login__example-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nh-login__example-btn {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f1f6f5;
+  border: 1px solid var(--nh-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--nh-navy-deep);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.nh-login__example-btn:hover {
+  border-color: var(--nh-teal);
+  background: #e9f7f3;
+}
+
+.nh-login__example-btn small {
+  font-weight: 500;
+  color: var(--nh-muted);
+}
+
+/* --------------------------------- Responsive --------------------------------- */
+
+@media (max-width: 860px) {
+  .nh-hero {
+    grid-template-columns: 1fr;
+    padding-top: 40px;
+  }
+  .nh-hero__art { min-height: 160px; }
+  .nh-packages__grid { grid-template-columns: repeat(2, 1fr); }
+  .nh-strip { grid-template-columns: 1fr; gap: 14px; border-radius: 0; }
+}
+
+@media (max-width: 480px) {
+  .nh-hero h1 { font-size: 30px; }
+  .nh-packages__grid { grid-template-columns: 1fr; }
+  .nh-site__nav { gap: 12px; font-size: 13px; }
+}

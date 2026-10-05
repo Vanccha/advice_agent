@@ -18,6 +18,11 @@
 
 x-langfuse-env: &langfuse-env
   TZ: UTC
+  # Next.js standalone server binds to $HOSTNAME; Docker defaults HOSTNAME to the
+  # container id, which resolves to the bridge IP only — breaking in-container
+  # "localhost" healthchecks (host-mapped access still works via docker-proxy).
+  # Force the documented Next.js standalone fix: bind all interfaces.
+  HOSTNAME: "0.0.0.0"
   # ── Postgres (Langfuse's own database; see langfuse-db below) ─────────────
   DATABASE_URL: postgresql://${LANGFUSE_POSTGRES_USER}:${LANGFUSE_POSTGRES_PASSWORD}@langfuse-db:5432/${LANGFUSE_POSTGRES_DB}
   SALT: ${LANGFUSE_SALT}
@@ -160,7 +165,9 @@ services:
     environment:
       <<: *langfuse-env
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3030/api/health || exit 1"]
+      # 127.0.0.1, not "localhost": /etc/hosts resolves localhost to ::1 first and
+      # the Node server only binds IPv4, so an IPv6 attempt gets "connection refused".
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3030/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -194,7 +201,8 @@ services:
       LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME}
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/public/health || exit 1"]
+      # 127.0.0.1, not "localhost" — see langfuse-worker healthcheck comment.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/public/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
