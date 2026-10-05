@@ -12,7 +12,7 @@ from app.models import Subscription, SubscriptionEvent
 # Allowed forward transitions, plus active <-> suspended and "any -> cancelled".
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "registered": {"awaiting_payment", "cancelled"},
-    "awaiting_payment": {"awaiting_payment", "payment_received", "cancelled"},
+    "awaiting_payment": {"payment_received", "cancelled"},
     "payment_received": {"provisioning", "cancelled"},
     "provisioning": {"provisioned", "cancelled"},
     "provisioned": {"installation_scheduled", "cancelled"},

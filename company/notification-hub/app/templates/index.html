@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Kanallar — NetHız Bildirim Merkezi{% endblock %}
+{% block content %}
+<h1>Kanallar</h1>
+<ul class="channel-list">
+  {% for row in rows %}
+  <li class="channel-row">
+    <a class="channel-link" href="/c/{{ row.channel.slug }}">
+      <span class="avatar">{{ row.channel.display_name | initials }}</span>
+      <span class="channel-meta">
+        <span class="channel-name">{{ row.channel.display_name }}</span>
+        <span class="channel-desc">{{ row.channel.description or "" }}</span>
+      </span>
+      <span class="channel-count">{{ row.count }} mesaj</span>
+    </a>
+    {% if row.latest %}
+    <a class="latest-preview severity-{{ row.latest.severity }}" href="/c/{{ row.channel.slug }}">
+      <strong>{{ row.latest.title }}</strong>
+      <span class="latest-time">{{ row.latest.created_at | fmt_dt }}</span>
+      <p>{{ row.latest.text }}</p>
+    </a>
+    {% else %}
+    <div class="latest-preview empty">Bu kanalda henüz mesaj yok.</div>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

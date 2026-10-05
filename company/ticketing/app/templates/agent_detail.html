@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.ticket_key }} — NetHız Destek Masası{% endblock %}
+{% block content %}
+<a class="back-link" href="/agent">« Talep listesine dön</a>
+
+<h1>{{ ticket.ticket_key }} <span class="badge badge-status-{{ ticket.status }}">{{ status_labels.get(ticket.status, ticket.status) }}</span>
+    <span class="badge badge-priority-{{ ticket.priority }}">{{ priority_labels.get(ticket.priority, ticket.priority) }}</span>
+</h1>
+
+{% if ticket.sla_due_at < now and ticket.status not in ['RESOLVED','CLOSED','REJECTED'] %}
+<p class="sla-overdue-banner">SLA SÜRESİ GEÇTİ — bitiş: {{ ticket.sla_due_at.strftime("%d.%m.%Y %H:%M") }}</p>
+{% endif %}
+
+<section class="panel">
+    <h2>Özet</h2>
+    <p><strong>Departman:</strong> {{ department_labels.get(ticket.department, ticket.department) }}</p>
+    <p><strong>Konu:</strong> {{ ticket.subject }}</p>
+    <p><strong>Açıklama:</strong> {{ ticket.body }}</p>
+    <p><strong>Sorun Türü:</strong> {{ ticket.issue_type }}</p>
+    <p><strong>Kaynak:</strong> {{ ticket.source }}</p>
+    <p><strong>Atanan:</strong> {{ ticket.assignee or "Atanmadı" }}</p>
+    <p><strong>SLA Bitişi:</strong> {{ ticket.sla_due_at.strftime("%d.%m.%Y %H:%M") }}</p>
+    <p><strong>Oluşturulma:</strong> {{ ticket.created_at.strftime("%d.%m.%Y %H:%M") }}</p>
+    {% if ticket.resolved_at %}<p><strong>Çözülme:</strong> {{ ticket.resolved_at.strftime("%d.%m.%Y %H:%M") }}</p>{% endif %}
+    {% if ticket.external_ref %}<p><strong>Dış Referans:</strong> {{ ticket.external_ref }}</p>{% endif %}
+    {% if ticket.incident_ref %}<p><strong>Arıza Kaydı:</strong> {{ ticket.incident_ref }}</p>{% endif %}
+</section>
+
+<section class="panel">
+    <h2>Talep Eden</h2>
+    <p><strong>Müşteri No:</strong> {{ ticket.requester_customer_no or "-" }}</p>
+    <p><strong>Ad:</strong> {{ ticket.requester_name or "-" }}</p>
+    <p><strong>İletişim:</strong> {{ ticket.requester_contact or "-" }}</p>
+    {% if ticket.affected_customers %}
+    <p><strong>Etkilenen Müşteriler:</strong> {{ ticket.affected_customers | join(", ") }}</p>
+    {% endif %}
+</section>
+
+{% if ticket.evidence %}
+<section class="panel">
+    <h2>Kanıtlar</h2>
+    {% if ticket.evidence.record_ids %}
+    <p><strong>Kayıt Kimlikleri:</strong></p>
+    <ul>
+        {% for key, value in ticket.evidence.record_ids.items() %}
+        <li>{{ key }}: {{ value }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% if ticket.evidence.error_codes %}
+    <p><strong>Hata Kodları:</strong> {{ ticket.evidence.error_codes | join(", ") }}</p>
+    {% endif %}
+    {% if ticket.evidence.observations %}
+    <p><strong>Gözlemler:</strong></p>
+    <ul>
+        {% for obs in ticket.evidence.observations %}
+        <li>{{ obs }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% if ticket.evidence.queried_sources %}
+    <p><strong>Sorgulanan Kaynaklar:</strong> {{ ticket.evidence.queried_sources | join(", ") }}</p>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if ticket.attempted_steps %}
+<section class="panel">
+    <h2>Denenen Adımlar</h2>
+    <table class="steps-table">
+        <thead><tr><th>Adım</th><th>Sonuç</th><th>Durum</th></tr></thead>
+        <tbody>
+            {% for step in ticket.attempted_steps %}
+            <tr>
+                <td>{{ step.step }}</td>
+                <td>{{ step.result }}</td>
+                <td>{{ step.outcome }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+{% if ticket.suggested_next_step or ticket.urgency_reason %}
+<section class="panel">
+    <h2>Değerlendirme</h2>
+    {% if ticket.suggested_next_step %}<p><strong>Önerilen Sonraki Adım:</strong> {{ ticket.suggested_next_step }}</p>{% endif %}
+    {% if ticket.urgency_reason %}<p><strong>Aciliyet Nedeni:</strong> {{ ticket.urgency_reason }}</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="panel">
+    <h2>Durum Değiştir</h2>
+    <form method="post" action="/agent/tickets/{{ ticket.ticket_key }}/status" class="inline-form">
+        <select name="status" {% if not allowed_next %}disabled{% endif %}>
+            {% for s in allowed_next %}
+            <option value="{{ s }}">{{ status_labels.get(s, s) }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="note" placeholder="Not (opsiyonel)" />
+        <input type="text" name="actor" placeholder="Agent adı" value="agent" />
+        <button type="submit" {% if not allowed_next %}disabled{% endif %}>Durumu Güncelle</button>
+    </form>
+    {% if not allowed_next %}<p class="muted">Bu talepten başka bir duruma geçiş yapılamaz.</p>{% endif %}
+</section>
+
+<section class="panel">
+    <h2>Durum Geçmişi</h2>
+    <table class="history-table">
+        <thead><tr><th>Tarih</th><th>Önceki</th><th>Yeni</th><th>İşlemi Yapan</th><th>Not</th></tr></thead>
+        <tbody>
+            {% for h in ticket.status_history %}
+            <tr>
+                <td>{{ h.created_at.strftime("%d.%m.%Y %H:%M") }}</td>
+                <td>{{ status_labels.get(h.from_status, h.from_status) if h.from_status else "-" }}</td>
+                <td>{{ status_labels.get(h.to_status, h.to_status) }}</td>
+                <td>{{ h.actor }}</td>
+                <td>{{ h.note or "-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="panel">
+    <h2>Yorumlar</h2>
+    {% for c in ticket.comments %}
+    <div class="comment {% if c.is_internal %}internal{% endif %}">
+        <div class="comment-meta">{{ c.author }} ({{ c.author_type }}) — {{ c.created_at.strftime("%d.%m.%Y %H:%M") }}
+            {% if c.is_internal %}<span class="badge badge-internal">Dahili</span>{% endif %}
+        </div>
+        <div class="comment-body">{{ c.body }}</div>
+    </div>
+    {% else %}
+    <p class="muted">Henüz yorum yok.</p>
+    {% endfor %}
+
+    <form method="post" action="/agent/tickets/{{ ticket.ticket_key }}/comments" class="comment-form">
+        <input type="text" name="author" placeholder="Adınız" value="agent" required />
+        <textarea name="body" placeholder="Yorum yazın..." required></textarea>
+        <label><input type="checkbox" name="is_internal" value="true" /> Dahili not</label>
+        <button type="submit">Yorum Ekle</button>
+    </form>
+</section>
+{% endblock %}

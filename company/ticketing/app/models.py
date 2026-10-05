@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -38,7 +39,7 @@ class Ticket(Base):
             "ix_tickets_external_ref_unique",
             "external_ref",
             unique=True,
-            postgresql_where="external_ref IS NOT NULL",
+            postgresql_where=text("external_ref IS NOT NULL"),
         ),
         {"schema": SCHEMA},
     )

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Numeric, String, UniqueConstraint
+from sqlalchemy import Numeric, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from shared.clock import utcnow
@@ -62,5 +63,5 @@ class ControlFlag(Base):
     __table_args__ = {"schema": SCHEMA}
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
-    value: Mapped[dict | float | bool | None] = mapped_column(JSON)
+    value: Mapped[dict | float | bool | None] = mapped_column(JSONB)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block refresh %}<meta http-equiv="refresh" content="5">{% endblock %}
+{% block title %}{{ channel.display_name }} — NetHız Bildirim Merkezi{% endblock %}
+{% block content %}
+<a class="back-link" href="/">&larr; Kanallara dön</a>
+<h1>
+  <span class="avatar avatar-lg">{{ channel.display_name | initials }}</span>
+  {{ channel.display_name }}
+</h1>
+<p class="channel-desc">{{ channel.description or "" }}</p>
+<div class="message-stream">
+  {% for message in messages %}
+  <div class="message severity-{{ message.severity }}">
+    <span class="avatar">{{ channel.display_name | initials }}</span>
+    <div class="message-body">
+      <div class="message-head">
+        <strong class="message-title">{{ message.title }}</strong>
+        <span class="badge badge-{{ message.severity }}">{{ message.severity }}</span>
+        <span class="message-time">{{ message.created_at | fmt_dt }}</span>
+      </div>
+      <p class="message-text">{{ message.text }}</p>
+      {% if message.fields %}
+      <pre class="message-fields">{{ message.fields | to_pretty_json }}</pre>
+      {% endif %}
+      <div class="message-source">kaynak: {{ message.source }}{% if message.external_ref %} · ref: {{ message.external_ref }}{% endif %}</div>
+    </div>
+  </div>
+  {% else %}
+  <p class="empty">Bu kanalda henüz mesaj yok.</p>
+  {% endfor %}
+</div>
+{% endblock %}

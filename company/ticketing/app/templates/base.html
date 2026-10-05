@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}NetHız Destek Masası{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="brand">NetHız Destek Masası</div>
+            <nav>
+                <a class="nav-link {% if not department %}active{% endif %}" href="/agent">Tüm Departmanlar</a>
+                <ul class="dept-list">
+                    {% for dept in sidebar %}
+                    <li>
+                        <a class="nav-link {% if department == dept.code %}active{% endif %}"
+                           href="/agent?department={{ dept.code }}">
+                            {{ dept.display_name }}
+                            <span class="count-badge">{{ dept.open_count }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </nav>
+        </aside>
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>

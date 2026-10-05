@@ -1,0 +1,77 @@
+groups:
+  - name: nethiz-alerts
+    rules:
+      - alert: PaymentGatewayDown
+        expr: up{job="payment-gateway"} == 0 or psp_outage == 1
+        for: 1m
+        labels:
+          severity: critical
+          department: TECHNICAL_INFRA
+        annotations:
+          summary: "Ödeme ağ geçidi erişilemez durumda"
+          description: >-
+            payment-gateway servisi bir dakikadır health check'e yanıt vermiyor ya da PSP
+            kasıtlı kesinti (outage) modunda. Yeni ödemeler başarısız olabilir, acil kontrol
+            gerekiyor.
+
+      - alert: CoreApiDown
+        expr: up{job="core-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          department: TECHNICAL_INFRA
+        annotations:
+          summary: "Core API erişilemez durumda"
+          description: >-
+            core-api servisi bir dakikadır health check'e yanıt vermiyor. Abonelik, müşteri ve
+            fatura işlemlerinin tamamı etkileniyor olabilir.
+
+      - alert: StuckProvisioningJobs
+        expr: nethiz_provisioning_jobs_stuck > 0
+        for: 2m
+        labels:
+          severity: warning
+          department: SUBSCRIPTION_OPS
+        annotations:
+          summary: "Takılı kalan kurulum (provisioning) işleri var"
+          description: >-
+            En az bir provisioning işi iki dakikadır 'stuck' durumda kalmış. Etkilenen
+            aboneliklerin kurulum durumu manuel olarak kontrol edilmeli.
+
+      - alert: HighPaymentFailureRate
+        expr: >-
+          rate(psp_charges_total{status="failed"}[5m]) /
+          clamp_min(rate(psp_charges_total[5m]),0.001) > 0.5
+        for: 3m
+        labels:
+          severity: critical
+          department: BILLING
+        annotations:
+          summary: "Ödeme başarısızlık oranı yüksek"
+          description: >-
+            Son beş dakikada denenen ödemelerin yarısından fazlası başarısız oldu. PSP veya
+            kart sağlayıcı tarafında bir sorun olabilir, faturalama ekibi bilgilendirilmeli.
+
+      - alert: RegionalOutageDetected
+        expr: nethiz_open_incidents{severity="critical"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          department: TECHNICAL_INFRA
+        annotations:
+          summary: "Bölgesel kesinti tespit edildi"
+          description: >-
+            Açık ve kritik seviyeli bir bölgesel arıza kaydı mevcut. Etkilenen bölgedeki
+            müşteriler bilgilendirilmeli ve saha ekibi yönlendirilmeli.
+
+      - alert: MissedInstallations
+        expr: nethiz_missed_appointments_24h > 0
+        for: 5m
+        labels:
+          severity: warning
+          department: FIELD_INSTALL
+        annotations:
+          summary: "Kaçırılan kurulum randevuları var"
+          description: >-
+            Son 24 saat içinde en az bir saha kurulum randevusu kaçırıldı. Müşteriyle yeniden
+            randevu planlanması gerekiyor.

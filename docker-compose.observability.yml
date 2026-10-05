@@ -1,0 +1,208 @@
+# Self-hosted Langfuse (LLM tracing) — overlay, not a standalone stack.
+# Usage: make up-observability
+#   == docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d --build
+#
+# Hard separation from the main stack (see CLAUDE.md / docs/observability.md):
+#   - Langfuse gets its OWN postgres (langfuse-db) + OWN volume. It never touches
+#     company-db or assistant-db.
+#   - This file does not define or modify the `assistant` service. The assistant
+#     already reads LANGFUSE_ENABLED / LANGFUSE_BASE_URL / LANGFUSE_PUBLIC_KEY /
+#     LANGFUSE_SECRET_KEY from docker-compose.yml and keeps working (fail-open,
+#     JSONL fallback) when this overlay is not running.
+#
+# Based on the upstream Langfuse self-hosting docker-compose.yml
+# (https://raw.githubusercontent.com/langfuse/langfuse/main/docker-compose.yml,
+# pinned image tag "4", read 2026-10-05). Same components upstream requires:
+# its own Postgres, ClickHouse, Redis, S3-compatible storage (MinIO), web + worker.
+# See docs/observability.md for the full version/port table.
+
+x-langfuse-env: &langfuse-env
+  TZ: UTC
+  # ── Postgres (Langfuse's own database; see langfuse-db below) ─────────────
+  DATABASE_URL: postgresql://${LANGFUSE_POSTGRES_USER}:${LANGFUSE_POSTGRES_PASSWORD}@langfuse-db:5432/${LANGFUSE_POSTGRES_DB}
+  SALT: ${LANGFUSE_SALT}
+  ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+  NEXTAUTH_URL: ${LANGFUSE_NEXTAUTH_URL}
+  TELEMETRY_ENABLED: "false"
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+  # ── ClickHouse (trace/observation storage) ─────────────────────────────────
+  CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+  CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  # ── Redis (queueing) ────────────────────────────────────────────────────────
+  REDIS_HOST: langfuse-redis
+  REDIS_PORT: 6379
+  REDIS_AUTH: ${LANGFUSE_REDIS_AUTH}
+  REDIS_TLS_ENABLED: "false"
+  # ── S3-compatible object storage (MinIO) — events ──────────────────────────
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_ROOT_USER}
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  # ── S3-compatible object storage (MinIO) — media ───────────────────────────
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_ROOT_USER}
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  # ── S3-compatible object storage (MinIO) — batch export ────────────────────
+  LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+  LANGFUSE_S3_BATCH_EXPORT_BUCKET: langfuse
+  LANGFUSE_S3_BATCH_EXPORT_PREFIX: exports/
+  LANGFUSE_S3_BATCH_EXPORT_REGION: auto
+  LANGFUSE_S3_BATCH_EXPORT_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_BATCH_EXPORT_ACCESS_KEY_ID: ${LANGFUSE_MINIO_ROOT_USER}
+  LANGFUSE_S3_BATCH_EXPORT_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+  LANGFUSE_S3_BATCH_EXPORT_FORCE_PATH_STYLE: "true"
+
+x-langfuse-depends-on: &langfuse-depends-on
+  langfuse-db:
+    condition: service_healthy
+  langfuse-clickhouse:
+    condition: service_healthy
+  langfuse-redis:
+    condition: service_healthy
+  langfuse-minio:
+    condition: service_healthy
+
+services:
+  # ───────────────────────── Langfuse: its own data stores ─────────────────
+  # Dedicated Postgres for Langfuse metadata (projects, users, API keys, prompts).
+  # NEVER shared with company-db or assistant-db.
+  langfuse-db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${LANGFUSE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${LANGFUSE_POSTGRES_DB}
+      TZ: UTC
+      PGTZ: UTC
+    ports: ["${LANGFUSE_DB_PORT_HOST:-55434}:5432"]
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LANGFUSE_POSTGRES_USER} -d ${LANGFUSE_POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Columnar store for traces/observations/scores.
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:25.12
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - langfuse-clickhouse-logs:/var/log/clickhouse-server
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  # Queue backend for the worker.
+  langfuse-redis:
+    image: redis:7
+    command: >
+      --requirepass ${LANGFUSE_REDIS_AUTH}
+      --maxmemory-policy noeviction
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - langfuse-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${LANGFUSE_REDIS_AUTH} --no-auth-warning ping | grep -q PONG"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+  # S3-compatible object storage for event payloads and media.
+  langfuse-minio:
+    image: cgr.dev/chainguard/minio
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: ${LANGFUSE_MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+    ports:
+      - "${LANGFUSE_MINIO_PORT_HOST:-9090}:9000"
+      # 9091 belongs to the company Prometheus — keep the MinIO console off it.
+      - "127.0.0.1:${LANGFUSE_MINIO_CONSOLE_PORT_HOST:-9099}:9001"
+    volumes:
+      - langfuse-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+
+  # ───────────────────────── Langfuse: application ──────────────────────────
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4
+    depends_on: *langfuse-depends-on
+    ports:
+      - "127.0.0.1:3030:3030"
+    environment:
+      <<: *langfuse-env
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3030/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4
+    depends_on:
+      <<: *langfuse-depends-on
+      langfuse-worker:
+        condition: service_started
+    ports:
+      - "${LANGFUSE_WEB_PORT_HOST:-3000}:3000"
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      # Browser-facing endpoint for media (must match the host-mapped MinIO port).
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:${LANGFUSE_MINIO_PORT_HOST:-9090}
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://langfuse-minio:9000
+      # First-run bootstrap: org + project + user + the project's own API keys,
+      # so the demo needs no manual sign-up. Reuses the SAME LANGFUSE_PUBLIC_KEY /
+      # LANGFUSE_SECRET_KEY the assistant already reads from .env.example, so
+      # traces work immediately once LANGFUSE_ENABLED=true.
+      LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID}
+      LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME}
+      LANGFUSE_INIT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID}
+      LANGFUSE_INIT_PROJECT_NAME: ${LANGFUSE_INIT_PROJECT_NAME}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/public/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  langfuse-db-data:
+  langfuse-clickhouse-data:
+  langfuse-clickhouse-logs:
+  langfuse-redis-data:
+  langfuse-minio-data:

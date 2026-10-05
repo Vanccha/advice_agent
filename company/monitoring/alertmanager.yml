@@ -1,0 +1,32 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: nethiz-channels
+  group_by: ["alertname", "department"]
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 1h
+  routes:
+    # Every alert fans out to both receivers: the internal department channels, and the
+    # company's configured third-party integration endpoint. continue: true on both means
+    # neither receiver short-circuits the other.
+    - receiver: nethiz-channels
+      continue: true
+    - receiver: integration-webhook
+      continue: true
+
+receivers:
+  - name: nethiz-channels
+    webhook_configs:
+      - url: http://notification-hub:8000/api/v1/alertmanager
+        send_resolved: true
+
+  - name: integration-webhook
+    webhook_configs:
+      # Deployment configuration, not code: NetHız points its Alertmanager at a third-party
+      # monitoring-integration endpoint it operates. Alertmanager does not expand environment
+      # variables in this file, so the compose-network hostname is hardcoded here; it mirrors
+      # the ALERT_INTEGRATION_WEBHOOK_URL env var's compose default value.
+      - url: http://mcp-monitoring:8000/webhooks/alertmanager
+        send_resolved: true
