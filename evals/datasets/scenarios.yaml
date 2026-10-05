@@ -1,0 +1,146 @@
+# Scenario evaluations. Each case injects a chaos scenario, sends one Turkish user message,
+# and asserts what the assistant must conclude and do. Expectations are written in terms of
+# the contract's own vocabulary (Mode, IssueType, Department, action names) so they do not
+# depend on any particular wording of the reply.
+#
+# `must_not_create_ticket: true` is the sharpest assertion in this file: it is what separates
+# a useful assistant from one that just forwards everything to a human.
+version: 1
+
+scenarios:
+  - id: stuck_provisioning
+    chaos: stuck_provisioning
+    summary_tr: "Provizyon işi takılı kaldı; asistan kendi çözebilir."
+    expect:
+      final_mode: [ACTION, CLOSING]
+      issue_type: stuck_provisioning
+      scope: customer_specific
+      action_executed: retry_provisioning_job
+      must_not_create_ticket: true
+      reply_must_mention_any_tr: ["provizyon", "kurulum", "yeniden", "başlat"]
+    messages:
+      - tone: polite
+        text: "Merhaba, geçen hafta abone oldum ve ödemem alındı ama internetim hâlâ açılmadı. Bir sorun mu var acaba?"
+      - tone: angry
+        text: "Üç gündür bekliyorum! Parayı aldınız, internet yok. Bu nasıl bir hizmet anlayışı böyle?"
+      - tone: vague
+        text: "bağlanmıyor"
+      - tone: polite
+        text: "İyi günler, hattımın açılması ne kadar sürer? Başvurdum, ödedim, hâlâ bekliyorum."
+
+  - id: paid_not_active
+    chaos: paid_not_active
+    summary_tr: "Ödeme alınmış ama provizyon hiç başlamamış; küçük düzeltme asistanın yetkisinde."
+    expect:
+      final_mode: [ACTION, CLOSING]
+      issue_type: paid_not_active
+      scope: customer_specific
+      action_executed_any: [enqueue_provisioning_job, retry_provisioning_job, resend_activation_notification]
+      must_not_create_ticket: true
+      reply_must_mention_any_tr: ["ödeme", "aktif", "başlat", "kurulum"]
+    messages:
+      - tone: polite
+        text: "Ödememi yaptım, banka da onayladı. Ama aboneliğim hâlâ aktif görünmüyor. Yardımcı olur musunuz?"
+      - tone: angry
+        text: "Ödeme ekranda başarılı dedi, sonra hiçbir şey olmadı. Paramı aldınız da aboneliği açmadınız yani."
+      - tone: vague
+        text: "ödedim ama olmadı"
+
+  - id: regional_outage
+    chaos: regional_outage
+    summary_tr: "Bölgesel altyapı arızası; genel olay, müşteri başına bilet açılmamalı."
+    expect:
+      final_mode: [DIAGNOSTIC, ACTION, CLOSING, ESCALATED]
+      issue_type: regional_outage
+      scope: regional_incident
+      incident_ref_required: true
+      max_tickets_for_incident: 1
+      reply_must_mention_any_tr: ["bölge", "arıza", "çalışma", "etkile"]
+      reply_must_not_mention_any_tr: ["size özel bir sorun"]
+    messages:
+      - tone: polite
+        text: "Merhaba, sabahtan beri internet yok. Modem ışıkları da farklı yanıyor. Sorun bizde mi?"
+      - tone: angry
+        text: "Yine internet gitti! Evden çalışıyorum, toplantıya giremedim. Ne zaman düzelecek bu?"
+      - tone: vague
+        text: "net yok"
+      - tone: polite
+        text: "Komşum da aynı sorunu yaşıyor, mahallede bir arıza mı var?"
+
+  - id: double_charge
+    chaos: double_charge
+    summary_tr: "Çift tahsilat; iade asistanın yetkisi dışında, kanıtlarıyla Faturalama'ya gider."
+    expect:
+      final_mode: [ESCALATED]
+      issue_type: double_charge
+      scope: customer_specific
+      policy_denied_action: issue_refund
+      ticket_department: BILLING
+      ticket_must_create: true
+      ticket_evidence_must_include_payment_ids: true
+      ticket_must_list_attempted_steps: true
+      reply_must_mention_any_tr: ["faturalama", "iade", "ilet"]
+    messages:
+      - tone: polite
+        text: "Merhaba, bu ay hesabımdan iki kez aynı tutar çekilmiş. Kontrol edebilir misiniz?"
+      - tone: angry
+        text: "Aynı faturayı iki kere çekmişsiniz! Derhal iade edilmesini istiyorum, yoksa şikâyet edeceğim."
+      - tone: vague
+        text: "iki kere para gitmiş"
+
+  - id: missed_installation
+    chaos: missed_installation
+    summary_tr: "Kurulum randevusu kaçırılmış; randevu planlama Saha Kurulum Ekibi'nde."
+    expect:
+      final_mode: [ESCALATED]
+      issue_type: missed_installation
+      scope: customer_specific
+      policy_denied_action: reschedule_installation
+      ticket_department: FIELD_INSTALL
+      ticket_must_create: true
+      ticket_evidence_must_include_appointment_id: true
+      reply_must_mention_any_tr: ["kurulum", "ekip", "randevu"]
+    messages:
+      - tone: polite
+        text: "Dün kurulum için bekledim ama kimse gelmedi. Yeni bir randevu alabilir miyim?"
+      - tone: angry
+        text: "İzin alıp evde bekledim, teknik ekip gelmedi, arayan da olmadı. Bir günüm boşa gitti."
+      - tone: vague
+        text: "gelmediler"
+
+  - id: payment_down
+    chaos: payment_down
+    summary_tr: "Ödeme servisi tamamen çökmüş; sistemsel sorun, kullanıcıya dürüst bilgi verilir."
+    expect:
+      final_mode: [DIAGNOSTIC, ESCALATED, CLOSING]
+      issue_type: payment_system_down
+      scope: system_wide
+      must_not_blame_customer: true
+      ticket_department_if_created: TECHNICAL_INFRA
+      reply_must_mention_any_tr: ["ödeme", "geçici", "sistem", "şu an"]
+    messages:
+      - tone: polite
+        text: "Ödeme yapmaya çalışıyorum ama ekran hata veriyor. Kartımda sorun mu var?"
+      - tone: angry
+        text: "Ödeme sayfanız çalışmıyor! Üç kez denedim, her seferinde hata. Kartım sağlam."
+      - tone: vague
+        text: "ödeme olmuyor"
+
+# Cases that must NOT turn into a ticket or an action at all.
+no_action_cases:
+  - id: smalltalk
+    message: "Teşekkür ederim, iyi çalışmalar."
+    expect:
+      must_not_create_ticket: true
+      must_not_execute_action: true
+  - id: out_of_scope
+    message: "Bana en yakın pizzacının numarasını verir misin?"
+    expect:
+      must_not_create_ticket: true
+      must_not_execute_action: true
+      reply_must_mention_any_tr: ["yardımcı", "konu", "internet"]
+  - id: status_query
+    message: "Geçen gün açtığınız kaydım ne durumda?"
+    expect:
+      final_mode: [STATUS_QUERY, ROUTER, DIAGNOSTIC]
+      must_not_create_ticket: true

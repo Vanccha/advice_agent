@@ -1,0 +1,193 @@
+# Advisory-mode evaluations: ten customer profiles, the Turkish conversation that produces
+# them, and the package the deterministic scoring engine must recommend.
+#
+# `expected_best` is the engine's own answer, verified by running it (see evals/README.md) —
+# these are regression anchors, so a change in the weights or the catalogue shows up here as
+# a failing case rather than as silently different advice. `acceptable_best` allows a second
+# code where two packages are genuinely close; `must_not_recommend` catches advice that would
+# be wrong for the customer regardless of score.
+version: 1
+
+profiles:
+  - id: student_tight_budget
+    summary_tr: "Öğrenci, tek kişi, bütçesi kısıtlı"
+    conversation_tr:
+      - "Merhaba, öğrenciyim, eve internet almak istiyorum."
+      - "Tek başıma yaşıyorum, telefon ve laptop kullanıyorum."
+      - "Aylık 300 lirayı geçmesin."
+      - "Taahhüt olabilir, sorun değil."
+    profile:
+      usage: [student]
+      household_size: 1
+      device_count: 2
+      budget_try: 300
+      commitment_preference: any
+    expect:
+      expected_best: FIBER_50_OGRENCI
+      must_not_recommend: [FIBER_1000_PREMIUM, FIBER_500_OYUNCU, FIBER_400_HOMEOFFICE]
+      max_monthly_price_try: 345
+
+  - id: family_of_four_streaming
+    summary_tr: "Dört kişilik aile, akşamları dizi/film izliyor"
+    conversation_tr:
+      - "Evde 4 kişiyiz, akşamları hep dizi izliyoruz."
+      - "Telefonlar, iki televizyon, bir de tablet var. Yaklaşık 8 cihaz."
+      - "Bütçem 500 lira civarı."
+      - "Taahhüt verebilirim."
+    profile:
+      usage: [family, streaming]
+      household_size: 4
+      device_count: 8
+      budget_try: 500
+      commitment_preference: "24"
+    expect:
+      expected_best: FIBER_200_AILE
+      must_not_recommend: [FIBER_50_OGRENCI]
+      min_down_mbps: 150
+
+  - id: home_office_static_ip
+    summary_tr: "Evden çalışan, sabit IP gerekiyor"
+    conversation_tr:
+      - "Evden çalışıyorum, şirket VPN'i için sabit IP istiyorlar."
+      - "Evde 2 kişiyiz ama 12 kadar cihaz bağlı."
+      - "Bütçe önemli değil, iş kesintiye gelmez."
+      - "24 ay taahhüt olabilir."
+    profile:
+      usage: [home_office]
+      household_size: 2
+      device_count: 12
+      budget_try: null
+      commitment_preference: "24"
+      needs_static_ip: true
+    expect:
+      expected_best: FIBER_400_HOMEOFFICE
+      must_have_static_ip: true
+
+  - id: gamer_low_latency
+    summary_tr: "Oyuncu, gecikme hassasiyeti yüksek"
+    conversation_tr:
+      - "Online oyun oynuyorum, ping çok önemli."
+      - "Evde 3 kişiyiz, 10 cihaz var."
+      - "Aylık 800 liraya kadar verebilirim."
+      - "Uzun taahhüt istemiyorum, 12 ay olur."
+    profile:
+      usage: [gaming]
+      household_size: 3
+      device_count: 10
+      budget_try: 800
+      commitment_preference: "12"
+    expect:
+      expected_best: FIBER_500_OYUNCU
+      must_not_recommend: [FIBER_50_OGRENCI, FIBER_100_TEMEL]
+
+  - id: no_commitment_seeker
+    summary_tr: "Taahhüt istemeyen, kısa süre kalacak kiracı"
+    conversation_tr:
+      - "Altı ay sonra taşınacağım, taahhüt istemiyorum."
+      - "Evde 2 kişiyiz, 5 cihaz."
+      - "Fiyat biraz yüksek olabilir, yeter ki bağlı kalmayayım."
+    profile:
+      usage: [basic]
+      household_size: 2
+      device_count: 5
+      budget_try: null
+      commitment_preference: none
+    expect:
+      expected_best: FIBER_200_ESNEK
+      must_have_no_commitment: true
+
+  - id: elderly_basic_use
+    summary_tr: "Yalnız yaşayan, çok basit kullanım"
+    conversation_tr:
+      - "Sadece haberleri okuyorum, bir de görüntülü konuşuyorum torunlarımla."
+      - "Tek başıma yaşıyorum, bir telefon bir de tablet."
+      - "Mümkün olan en ucuz olsun."
+    profile:
+      usage: [basic]
+      household_size: 1
+      device_count: 2
+      budget_try: 300
+      commitment_preference: any
+    expect:
+      expected_best: FIBER_50_OGRENCI
+      max_monthly_price_try: 350
+
+  - id: crowded_household
+    summary_tr: "Kalabalık ev, çok cihaz, karışık kullanım"
+    conversation_tr:
+      - "Evde 6 kişiyiz, herkesin telefonu var, iki de akıllı TV."
+      - "Yaklaşık 20 cihaz bağlanıyor."
+      - "Bütçe 1000 liraya kadar esnek."
+      - "Taahhüt fark etmez."
+    profile:
+      usage: [family, streaming]
+      household_size: 6
+      device_count: 20
+      budget_try: 1000
+      commitment_preference: any
+    expect:
+      expected_best: FIBER_1000_PREMIUM
+      min_down_mbps: 400
+
+  - id: tv_bundle_wanted
+    summary_tr: "TV paketi dahil olsun isteyen aile"
+    conversation_tr:
+      - "İnternetle birlikte TV paketi de olsun istiyoruz."
+      - "4 kişilik aileyiz, 9 cihaz var."
+      - "Aylık 600 lira civarı uygun."
+      - "Taahhüt verebiliriz."
+    profile:
+      usage: [family]
+      household_size: 4
+      device_count: 9
+      budget_try: 600
+      commitment_preference: "24"
+      needs_tv: true
+    expect:
+      expected_best: FIBER_200_AILE
+      must_have_tv: true
+
+  - id: small_business_from_home
+    summary_tr: "Evden küçük işletme yürüten, kesintiye tahammülü yok"
+    conversation_tr:
+      - "Evden küçük bir e-ticaret işi yürütüyorum."
+      - "Sürekli bağlantı lazım, 15 cihaz var, kamera sistemi de dahil."
+      - "Aylık 700 lira ayırabilirim."
+      - "24 ay taahhüt olur."
+    profile:
+      usage: [home_office]
+      household_size: 3
+      device_count: 15
+      budget_try: 700
+      commitment_preference: "24"
+    expect:
+      expected_best: FIBER_400_HOMEOFFICE
+      min_down_mbps: 300
+
+  - id: budget_conflict
+    summary_tr: "İhtiyacı bütçesinin üstünde — asistan dürüstçe en yakınını önermeli"
+    conversation_tr:
+      - "Evde 5 kişiyiz, hepsi aynı anda dizi izliyor, bir de oyun oynanıyor."
+      - "18 cihaz var."
+      - "Ama aylık en fazla 350 lira verebilirim."
+      - "Taahhüt olabilir."
+    profile:
+      usage: [family, gaming, streaming]
+      household_size: 5
+      device_count: 18
+      budget_try: 350
+      commitment_preference: any
+    expect:
+      expected_best: FIBER_100_TEMEL
+      # The budget filter must win over the speed need, and the reply must be honest
+      # about the trade-off rather than quietly recommending something unaffordable.
+      max_monthly_price_try: 403
+      reply_should_acknowledge_tradeoff: true
+
+# Properties that must hold for EVERY profile above.
+invariants:
+  max_offers_returned: 3       # top-3; fewer is correct when the budget filter excludes the rest
+  min_offers_returned: 1
+  deterministic: true          # same profile twice -> identical offers, in the same order
+  reasons_from_config_only: true
+  no_package_outside_catalogue: true
