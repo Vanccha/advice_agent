@@ -70,6 +70,8 @@ assistant/decision/   DecisionService interface (llm_structured | typesafe_jev s
 assistant/llm/        LLMProvider interface (openai_agents | anthropic | scripted)
 assistant/modes/      explicit state machine: router / advisory / diagnostic / action
 assistant/tickets/    structured ticket builder
+assistant/mcp_gateway/  MCP client gateway + action runner (named mcp_gateway, NOT mcp:
+                      a package called `mcp` would shadow the installed MCP client SDK)
 assistant/observability/  Langfuse + OTel wrapper (no-op when disabled)
 assistant/api/, assistant/web/   HTTP API + embedded chat widget
 config/tenants/       per-customer configuration (nethiz, _example)

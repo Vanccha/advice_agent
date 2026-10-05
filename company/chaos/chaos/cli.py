@@ -58,7 +58,7 @@ def _outcome_lines(outcome: sc.ScenarioOutcome) -> list[str]:
     for c in outcome.changes:
         lines.append(f"  - {c}")
     lines.append("")
-    lines.append("Expected assistant behaviour:")
+    lines.append("Expected support tooling behaviour:")
     lines.append(f"  {outcome.expected_behavior}")
     return lines
 
@@ -78,21 +78,38 @@ def cmd_stuck_provisioning(
     cctx = ChaosContext(customer, region, dry_run, json_output)
     engine = core_engine(cctx.settings)
     try:
-        candidate = sc.pick_stuck_provisioning(engine, cctx.settings, cctx.customer, cctx.region)
+        candidate = sc.find_stuck_provisioning_candidate(engine, cctx.customer, cctx.region)
+        needs_promotion = False
+        if candidate is None:
+            candidate = sc.find_promotable_subscription(engine, cctx.customer, cctx.region)
+            needs_promotion = True
     except ChaosError as exc:
         _fail(cctx, str(exc))
         return
+    if candidate is None:
+        scope = f" for {cctx.customer}" if cctx.customer else (f" in region {cctx.region}" if cctx.region else "")
+        _fail(cctx, f"No suitable subscription found for stuck_provisioning{scope}.")
+        return
+
     if cctx.dry_run:
-        outcome = sc.ScenarioOutcome(
-            scenario="stuck_provisioning", dry_run=True, picked=candidate,
-            changes=[
+        changes = (
+            [f"[DRY RUN] would create a succeeded payment for subscription "
+             f"{candidate['subscription_id']} via the real payments API, then freeze its "
+             "provisioning job"]
+            if needs_promotion
+            else [
                 f"[DRY RUN] would freeze the provisioning job for subscription "
                 f"{candidate['subscription_id']} with heartbeat_at=now-30m, "
                 "last_error_message='CHAOS_HOLD'"
-            ],
-            expected_behavior="(dry run -- nothing was changed)",
+            ]
+        )
+        outcome = sc.ScenarioOutcome(
+            scenario="stuck_provisioning", dry_run=True, picked=candidate,
+            changes=changes, expected_behavior="(dry run -- nothing was changed)",
         )
     else:
+        if needs_promotion:
+            candidate = sc.promote_to_payment_received(cctx.settings, candidate)
         outcome = sc.apply_stuck_provisioning(engine, candidate)
     _echo(cctx, asdict(outcome), _outcome_lines(outcome))
 
@@ -112,18 +129,35 @@ def cmd_paid_not_active(
     cctx = ChaosContext(customer, region, dry_run, json_output)
     engine = core_engine(cctx.settings)
     try:
-        candidate = sc.pick_paid_not_active(engine, cctx.settings, cctx.customer, cctx.region)
+        candidate = sc.find_paid_not_active_candidate(engine, cctx.customer, cctx.region)
+        needs_promotion = False
+        if candidate is None:
+            candidate = sc.find_promotable_subscription(engine, cctx.customer, cctx.region)
+            needs_promotion = True
     except ChaosError as exc:
         _fail(cctx, str(exc))
         return
+    if candidate is None:
+        scope = f" for {cctx.customer}" if cctx.customer else (f" in region {cctx.region}" if cctx.region else "")
+        _fail(cctx, f"No 'payment_received' subscription with a queued job found{scope}.")
+        return
+
     if cctx.dry_run:
+        changes = (
+            [f"[DRY RUN] would create a succeeded payment for subscription "
+             f"{candidate['subscription_id']} via the real payments API (which auto-queues a "
+             "provisioning job), then delete that job"]
+            if needs_promotion
+            else [f"[DRY RUN] would delete the queued/running provisioning job for subscription "
+                  f"{candidate['subscription_id']}"]
+        )
         outcome = sc.ScenarioOutcome(
             scenario="paid_not_active", dry_run=True, picked=candidate,
-            changes=[f"[DRY RUN] would delete the queued/running provisioning job for subscription "
-                     f"{candidate['subscription_id']}"],
-            expected_behavior="(dry run -- nothing was changed)",
+            changes=changes, expected_behavior="(dry run -- nothing was changed)",
         )
     else:
+        if needs_promotion:
+            candidate = sc.promote_to_payment_received(cctx.settings, candidate)
         outcome = sc.apply_paid_not_active(engine, candidate)
     _echo(cctx, asdict(outcome), _outcome_lines(outcome))
 

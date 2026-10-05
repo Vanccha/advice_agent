@@ -76,6 +76,12 @@ DIAG_VIEW_STATEMENTS = [
     WHERE status IN ('open', 'monitoring')
     """,
     """
+    CREATE OR REPLACE VIEW diag.incidents AS
+    SELECT incident_no, region_code, severity, status, title, description, started_at,
+           estimated_resolution_at, resolved_at, affected_subscription_count
+    FROM core.network_incidents
+    """,
+    """
     CREATE OR REPLACE VIEW diag.incident_affected AS
     SELECT ni.incident_no, c.customer_no, isub.subscription_id, ni.region_code
     FROM core.incident_subscriptions isub

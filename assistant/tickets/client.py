@@ -10,7 +10,7 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from mcp.types import ToolCallOutcome
+from mcp_gateway.types import ToolCallOutcome
 from tickets.builder import StructuredTicket
 
 

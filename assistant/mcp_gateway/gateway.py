@@ -9,7 +9,7 @@ A `ToolGateway` instance is scoped to one turn (its `max_calls_per_turn` budget 
 `reset_turn_budget()` — construct a fresh gateway per turn, or call that explicitly at the
 start of each new turn on a reused instance).
 
-Import as: ``from mcp.gateway import ToolGateway``.
+Import as: ``from mcp_gateway.gateway import ToolGateway``.
 """
 from __future__ import annotations
 
@@ -20,8 +20,19 @@ from typing import Any
 from audit.log import digest_tool_output
 from core_common.config import AdapterConfig, TenantConfig
 from core_common.types import StepType
-from mcp._sdk import MCP_SDK_AVAILABLE, ClientSession, streamable_http_client
-from mcp.types import ToolBudgetExceeded, ToolCallOutcome, ToolSpec
+# The third-party MCP client SDK. This package is deliberately NOT named `mcp` so that a
+# plain import resolves to the installed SDK instead of shadowing it.
+try:
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    MCP_SDK_AVAILABLE = True
+except Exception as _sdk_exc:  # pragma: no cover - only when the SDK is absent
+    ClientSession = None  # type: ignore[assignment]
+    streamable_http_client = None  # type: ignore[assignment]
+    MCP_SDK_AVAILABLE = False
+    MCP_SDK_IMPORT_ERROR = _sdk_exc
+from mcp_gateway.types import ToolBudgetExceeded, ToolCallOutcome, ToolSpec
 from privacy.masking import mask_payload
 
 # contracts §3: each adapter's ToolResult `source` tag.

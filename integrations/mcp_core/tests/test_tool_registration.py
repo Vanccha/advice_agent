@@ -23,6 +23,7 @@ EXPECTED_TOOL_NAMES = {
     "get_notification_history",
     "get_region_health",
     "retry_provisioning_job",
+    "enqueue_provisioning_job",
     "resend_activation_notification",
     "apply_outage_credit",
     "request_refund",

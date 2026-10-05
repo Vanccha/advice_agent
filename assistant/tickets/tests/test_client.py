@@ -1,7 +1,7 @@
 import pytest
 
 from core_common.types import Department, IssueType, Priority
-from mcp.fake import FakeGateway
+from mcp_gateway.fake import FakeGateway
 from tickets.builder import build_structured_ticket
 from tickets.client import TicketRef, TicketService, TicketServiceError
 

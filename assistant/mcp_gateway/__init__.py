@@ -8,17 +8,15 @@ Public surface:
         (`action_runner.py`).
 
 Note for maintainers: this package is importable as top-level `mcp`, which collides with
-the pip-installed `mcp` client SDK of the same name (see `_sdk.py`'s module docstring for
-why, and how that collision is worked around). Nothing in this package (or anywhere else
-in `assistant/`) should ever do a bare ``import mcp`` expecting the third-party SDK —
-always go through ``from mcp._sdk import ClientSession, streamable_http_client``.
+the pip-installed `mcp` client SDK: this package is named `mcp_gateway`, so `import mcp`
+inside it resolves to the real SDK.
 """
 from __future__ import annotations
 
-from mcp.action_runner import ACTION_TOOL_MAP, UnmappedActionError, make_action_runner
-from mcp.fake import FakeGateway
-from mcp.gateway import ToolGateway
-from mcp.types import ToolBudgetExceeded, ToolCallOutcome, ToolSpec
+from mcp_gateway.action_runner import ACTION_TOOL_MAP, UnmappedActionError, make_action_runner
+from mcp_gateway.fake import FakeGateway
+from mcp_gateway.gateway import ToolGateway
+from mcp_gateway.types import ToolBudgetExceeded, ToolCallOutcome, ToolSpec
 
 __all__ = [
     "ToolGateway",

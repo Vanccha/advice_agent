@@ -4,8 +4,8 @@ from sqlalchemy.orm import sessionmaker
 from audit.log import AuditLog
 from core_common.config import AdapterConfig
 from core_common.db import bootstrap_schema, create_sqlite_engine
-from mcp.gateway import ToolGateway
-from mcp.types import ToolBudgetExceeded
+from mcp_gateway.gateway import ToolGateway
+from mcp_gateway.types import ToolBudgetExceeded
 
 # Nothing listens here: connection is refused immediately, so these tests stay fast
 # without needing any live mcp-* container.

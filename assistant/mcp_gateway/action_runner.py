@@ -2,14 +2,14 @@
 `action_runner` callback to a tool gateway, so neither the modes layer nor the API layer
 needs to know which MCP tool backs which policy action name (contracts §4.6).
 
-Import as: ``from mcp.action_runner import make_action_runner, ACTION_TOOL_MAP,
+Import as: ``from mcp_gateway.action_runner import make_action_runner, ACTION_TOOL_MAP,
 UnmappedActionError``.
 """
 from __future__ import annotations
 
 from typing import Any, Protocol
 
-from mcp.types import ToolCallOutcome
+from mcp_gateway.types import ToolCallOutcome
 
 
 class _CallableGateway(Protocol):
@@ -24,15 +24,11 @@ class _CallableGateway(Protocol):
 # absent here.
 ACTION_TOOL_MAP: dict[str, str] = {
     "retry_provisioning_job": "retry_provisioning_job",
+    "enqueue_provisioning_job": "enqueue_provisioning_job",
     "resend_activation_notification": "resend_activation_notification",
     "apply_outage_credit": "apply_outage_credit",
     "send_department_message": "post_department_message",
     # NOTE — reported gap, not fixed here (outside this agent's owned directories):
-    # `config/tenants/nethiz/policy.yaml` also allows `enqueue_provisioning_job` (chaos
-    # scenario b, `paid_not_active`), but contracts §3's mcp-core tool list has no tool to
-    # create/enqueue a *new* provisioning job — only `retry_provisioning_job`, which
-    # retries an existing one. Calling this action raises `UnmappedActionError` until
-    # either a tool is added to mcp-core or this mapping is told to reuse an existing one.
 }
 
 

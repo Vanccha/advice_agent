@@ -166,29 +166,25 @@ def _pick_stuck_provisioning(conn: Connection, customer_no: str | None, region: 
     return dict(row) if row is not None else None
 
 
-def pick_stuck_provisioning(
-    engine: Engine, settings: ChaosSettings, customer_no: str | None, region: str | None
-) -> dict:
+def find_stuck_provisioning_candidate(
+    engine: Engine, customer_no: str | None, region: str | None
+) -> dict | None:
+    """Pure read: an existing subscription already suitable for stuck_provisioning, if any."""
     with engine.connect() as conn:
-        candidate = _pick_stuck_provisioning(conn, customer_no, region)
-    if candidate is not None:
-        return candidate
+        return _pick_stuck_provisioning(conn, customer_no, region)
 
-    # Nothing in 'provisioning'/'payment_received' right now (the live worker and
-    # prior runs drain that pool) -- create one via the real write API.
-    with engine.connect() as conn:
-        promo = _find_promotable_subscription(conn, customer_no, region)
-    if promo is None:
-        scope = f" for {customer_no}" if customer_no else (f" in region {region}" if region else "")
-        raise ChaosError(f"No suitable subscription found for stuck_provisioning{scope}.")
 
-    pay_subscription_until_succeeded(settings, promo["subscription_id"])
+def find_promotable_subscription(engine: Engine, customer_no: str | None, region: str | None) -> dict | None:
+    """Pure read: a 'registered'/'awaiting_payment' subscription that could be promoted."""
     with engine.connect() as conn:
-        status = conn.execute(
-            text("SELECT status FROM core.subscriptions WHERE id = :id"), {"id": promo["subscription_id"]}
-        ).scalar_one()
-    promo["status"] = status
-    return promo
+        return _find_promotable_subscription(conn, customer_no, region)
+
+
+def promote_to_payment_received(settings: ChaosSettings, candidate: dict) -> dict:
+    """Mutating: drive `candidate` to 'payment_received' via the real payments API."""
+    pay_subscription_until_succeeded(settings, candidate["subscription_id"])
+    candidate["status"] = "payment_received"
+    return candidate
 
 
 def apply_stuck_provisioning(engine: Engine, candidate: dict) -> ScenarioOutcome:
@@ -364,22 +360,10 @@ def _pick_paid_not_active(conn: Connection, customer_no: str | None, region: str
     return dict(row) if row is not None else None
 
 
-def pick_paid_not_active(
-    engine: Engine, settings: ChaosSettings, customer_no: str | None, region: str | None
-) -> dict:
+def find_paid_not_active_candidate(engine: Engine, customer_no: str | None, region: str | None) -> dict | None:
+    """Pure read: an existing subscription already suitable for paid_not_active, if any."""
     with engine.connect() as conn:
-        candidate = _pick_paid_not_active(conn, customer_no, region)
-    if candidate is not None:
-        return candidate
-
-    with engine.connect() as conn:
-        promo = _find_promotable_subscription(conn, customer_no, region)
-    if promo is None:
-        scope = f" for {customer_no}" if customer_no else (f" in region {region}" if region else "")
-        raise ChaosError(f"No 'payment_received' subscription with a queued job found{scope}.")
-
-    pay_subscription_until_succeeded(settings, promo["subscription_id"])
-    return promo
+        return _pick_paid_not_active(conn, customer_no, region)
 
 
 def apply_paid_not_active(engine: Engine, candidate: dict) -> ScenarioOutcome:

@@ -2,7 +2,7 @@
 canned tool responses instead of live adapters — no containers, no network, no `mcp` SDK
 involved. The modes layer and `evals/` run against this.
 
-Import as: ``from mcp.fake import FakeGateway``.
+Import as: ``from mcp_gateway.fake import FakeGateway``.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 
 from audit.log import digest_tool_output
 from core_common.types import StepType
-from mcp.types import ToolBudgetExceeded, ToolCallOutcome, ToolSpec
+from mcp_gateway.types import ToolBudgetExceeded, ToolCallOutcome, ToolSpec
 from privacy.masking import mask_payload
 
 CannedResponse = ToolCallOutcome | dict[str, Any]

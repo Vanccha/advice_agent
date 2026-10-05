@@ -327,6 +327,18 @@ class RetryProvisioningJobOutput(BaseModel):
     max_attempts: int
 
 
+class EnqueueProvisioningJobInput(BaseModel):
+    subscription_id: int
+
+
+class EnqueueProvisioningJobOutput(BaseModel):
+    job_id: int
+    subscription_id: int
+    status: str
+    attempt_count: int
+    max_attempts: int
+
+
 # --------------------------------------------------------------------------
 # resend_activation_notification (mutating, core REST, scope notifications:resend)
 # --------------------------------------------------------------------------

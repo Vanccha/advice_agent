@@ -3,8 +3,8 @@ from sqlalchemy.orm import sessionmaker
 
 from audit.log import AuditLog
 from core_common.db import bootstrap_schema, create_sqlite_engine
-from mcp.fake import FakeGateway
-from mcp.types import ToolBudgetExceeded
+from mcp_gateway.fake import FakeGateway
+from mcp_gateway.types import ToolBudgetExceeded
 
 
 @pytest.fixture()

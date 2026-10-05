@@ -11,6 +11,7 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI
 from fastapi.responses import Response
 from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 ToolsRegistrar = Callable[[MCPServer], None]
@@ -31,7 +32,16 @@ def build_server(name: str, version: str, tools_registrar: ToolsRegistrar) -> Fa
     # FastAPI root ("/") keeps the external path exactly `POST /mcp`, and
     # routes registered on `app` before the mount (health, metrics) are
     # matched first since Starlette tries routes in registration order.
-    mcp_asgi_app = mcp.streamable_http_app()
+    # The installed mcp SDK auto-enables DNS-rebinding "Host:" header
+    # protection (allowing only 127.0.0.1/localhost/[::1]) whenever it thinks
+    # it's bound to a loopback address. These servers are only ever reached
+    # over the compose network (by compose DNS name, e.g. "mcp-core:8000")
+    # or via a host port mapping for the demo — never by an untrusted
+    # browser, which is what that protection defends against — so it's
+    # disabled here rather than fighting it with an allow-list.
+    mcp_asgi_app = mcp.streamable_http_app(
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:

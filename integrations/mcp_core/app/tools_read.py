@@ -229,7 +229,7 @@ async def handle_get_active_incidents_for_region(inp: GetActiveIncidentsForRegio
 _INCIDENT_SQL = """
     SELECT incident_no, region_code, severity, status, title, description,
            started_at, estimated_resolution_at, affected_subscription_count
-    FROM diag.active_incidents
+    FROM diag.incidents
     WHERE incident_no = :incident_no
 """
 
@@ -248,9 +248,9 @@ async def handle_get_incident_detail(inp: GetIncidentDetailInput) -> ToolResult[
     except DiagQueryError as exc:
         return fail("DIAG_DB_ERROR", exc.message, SOURCE_DIAG)
     if not incident_rows:
-        # Note: `diag.active_incidents` (the only view available to this tool)
-        # may not carry resolved incidents — see the adapter's deviation notes.
-        return fail("NOT_FOUND", f"no incident {inp.incident_no!r} in diag.active_incidents", SOURCE_DIAG)
+        # `diag.incidents` carries every status, so a resolved incident is still
+        # answerable — which matters when a customer asks about an outage after the fact.
+        return fail("NOT_FOUND", f"no incident {inp.incident_no!r} in diag.incidents", SOURCE_DIAG)
     incident = incident_rows[0]
     affected = [AffectedSubscription(**row) for row in affected_rows]
     detail = IncidentDetail(**incident, affected_subscriptions=affected)

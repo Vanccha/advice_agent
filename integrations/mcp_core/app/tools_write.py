@@ -26,6 +26,7 @@ from .models import (
     RetryProvisioningJobInput,
     RetryProvisioningJobOutput,
 )
+from app.models import EnqueueProvisioningJobInput, EnqueueProvisioningJobOutput
 
 SOURCE_CORE = "core_api"
 
@@ -37,6 +38,25 @@ async def handle_retry_provisioning_job(inp: RetryProvisioningJobInput) -> ToolR
     body = result.data or {}
     return ok(
         RetryProvisioningJobOutput(
+            job_id=body["id"],
+            subscription_id=body["subscription_id"],
+            status=body["status"],
+            attempt_count=body["attempt_count"],
+            max_attempts=body["max_attempts"],
+        ),
+        SOURCE_CORE,
+    )
+
+
+async def handle_enqueue_provisioning_job(inp: EnqueueProvisioningJobInput) -> ToolResult[Any]:
+    result = await core_api_client().post(
+        f"/v1/subscriptions/{inp.subscription_id}/provisioning-jobs", SOURCE_CORE
+    )
+    if not result.ok:
+        return result
+    body = result.data or {}
+    return ok(
+        EnqueueProvisioningJobOutput(
             job_id=body["id"],
             subscription_id=body["subscription_id"],
             status=body["status"],
@@ -152,6 +172,17 @@ def register_write_tools(mcp: Any) -> None:
         input_model=RetryProvisioningJobInput,
         output_model=RetryProvisioningJobOutput,
         handler=handle_retry_provisioning_job,
+    )
+    register_tool(
+        mcp,
+        name="enqueue_provisioning_job",
+        description=(
+            "Queue provisioning for a subscription whose payment succeeded but whose "
+            "provisioning was never started."
+        ),
+        input_model=EnqueueProvisioningJobInput,
+        output_model=EnqueueProvisioningJobOutput,
+        handler=handle_enqueue_provisioning_job,
     )
     register_tool(
         mcp,

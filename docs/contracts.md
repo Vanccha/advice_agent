@@ -195,6 +195,9 @@ diag.modem_status(customer_no, subscription_id, serial_no, model, firmware, stat
                   provisioned_at)
 diag.active_incidents(incident_no, region_code, severity, status, title, description,
                       started_at, estimated_resolution_at, affected_subscription_count)
+                      -- open + monitoring only
+diag.incidents(...same columns plus resolved_at...)
+                      -- every status, so a resolved outage can still be explained afterwards
 diag.incident_affected(incident_no, customer_no, subscription_id, region_code)
 diag.notification_history(customer_no, subscription_id, channel, template_code, status, sent_at)
 diag.subscription_timeline(customer_no, subscription_id, event_type, from_status, to_status,
@@ -331,6 +334,7 @@ Missing key → 401 `MISSING_API_KEY`; unknown/inactive → 401 `INVALID_API_KEY
 | POST | `/v1/refunds` | `billing:refund` | body: payment_id, amount_try, reason → PSP refund |
 | POST | `/v1/credits` | `credits:write` | body: subscription_id, amount_try, reason, idempotency_key. **Server-side cap:** `CREDIT_MAX_PER_REQUEST_TRY` (default 250) → 400 `CREDIT_LIMIT_EXCEEDED` |
 | GET | `/v1/provisioning-jobs` `?subscription_id=&status=` | `provisioning:read` | |
+| POST | `/v1/subscriptions/{id}/provisioning-jobs` | `provisioning:retry` | Queues provisioning for a subscription stranded at `payment_received` with no job (chaos scenario b). 409 `PROVISIONING_JOB_ALREADY_ACTIVE` when one is queued/running/succeeded, 409 `ILLEGAL_TRANSITION` from any other subscription status. |
 | POST | `/v1/provisioning-jobs/{id}/retry` | `provisioning:retry` | queued again, attempt_count+1; 409 if status ∈ {queued,running,succeeded} |
 | GET | `/v1/installation-appointments` `?subscription_id=&status=&team_code=` | `appointments:read` | |
 | POST | `/v1/installation-appointments/{id}/reschedule` | `appointments:write` | body: scheduled_date, time_slot |
@@ -461,7 +465,7 @@ Rules:
 
 | Server (port) | Tools |
 |---|---|
-| `mcp-core` (9101) | `find_customer`, `get_subscription_status`, `get_subscription_timeline`, `get_provisioning_status`, `get_installation_status`, `get_modem_status`, `get_active_incidents_for_region`, `get_incident_detail`, `list_packages`, `get_notification_history`, `get_region_health`, `retry_provisioning_job`*, `resend_activation_notification`*, `apply_outage_credit`*, `request_refund`* (always returns the 403 from core-api — proves the hard boundary), `reschedule_installation`* |
+| `mcp-core` (9101) | `find_customer`, `get_subscription_status`, `get_subscription_timeline`, `get_provisioning_status`, `get_installation_status`, `get_modem_status`, `get_active_incidents_for_region`, `get_incident_detail`, `list_packages`, `get_notification_history`, `get_region_health`, `retry_provisioning_job`*, `enqueue_provisioning_job`*, `resend_activation_notification`*, `apply_outage_credit`*, `request_refund`* (always returns the 403 from core-api — proves the hard boundary), `reschedule_installation`* |
 | `mcp-payment` (9102) | `get_payment_status`, `list_customer_charges`, `detect_duplicate_charges`, `get_gateway_health` |
 | `mcp-ticketing` (9103) | `create_structured_ticket`, `get_ticket`, `list_customer_tickets`, `find_tickets_by_incident`, `add_ticket_comment` |
 | `mcp-monitoring` (9104) | `get_service_health`, `query_metric`, `list_active_alerts`, plus `POST /webhooks/alertmanager` → forwards normalized alert to `ASSISTANT_ALERT_WEBHOOK_URL` |

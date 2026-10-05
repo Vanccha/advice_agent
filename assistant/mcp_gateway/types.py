@@ -2,7 +2,7 @@
 `fake.FakeGateway` speak this exact vocabulary, so the modes/API layer can treat them
 interchangeably.
 
-Import as: ``from mcp.types import ToolSpec, ToolCallOutcome, ToolBudgetExceeded``.
+Import as: ``from mcp_gateway.types import ToolSpec, ToolCallOutcome, ToolBudgetExceeded``.
 """
 from __future__ import annotations
 

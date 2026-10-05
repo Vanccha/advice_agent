@@ -10,7 +10,7 @@ from shared.errors import Conflict, NotFound
 
 from app.auth_registry import get_registry
 from app.db import get_db
-from app.models import ProvisioningJob
+from app.models import ProvisioningJob, Subscription
 from app.pagination import paginate
 from app.serializers import job_out
 
@@ -59,5 +59,54 @@ def retry_provisioning_job(job_id: int, db: Session = Depends(get_db)) -> dict:
     job.finished_at = None
     job.heartbeat_at = None
     job.updated_at = utcnow()
+    db.flush()
+    return job_out(job)
+
+
+# A subscription whose payment succeeded but whose provisioning was never queued (a gap the
+# payment webhook can leave behind) needs a way back into the pipeline without a CSR opening
+# the database. This is the company's own repair endpoint; any API client with the scope may
+# call it.
+ENQUEUEABLE_SUBSCRIPTION_STATUSES = ("payment_received", "provisioning")
+ACTIVE_JOB_STATUSES = ("queued", "running", "succeeded")
+
+
+@router.post(
+    "/v1/subscriptions/{subscription_id}/provisioning-jobs",
+    dependencies=[Depends(require_scope("provisioning:retry", get_registry()))],
+    status_code=201,
+)
+def enqueue_provisioning_job(subscription_id: int, db: Session = Depends(get_db)) -> dict:
+    subscription = db.get(Subscription, subscription_id)
+    if subscription is None:
+        raise NotFound("SUBSCRIPTION_NOT_FOUND", f"Subscription {subscription_id} not found.")
+    if subscription.status not in ENQUEUEABLE_SUBSCRIPTION_STATUSES:
+        raise Conflict(
+            "ILLEGAL_TRANSITION",
+            "Provisioning can only be queued for a subscription whose payment has been "
+            f"received; subscription {subscription_id} is '{subscription.status}'.",
+        )
+    existing = db.scalars(
+        select(ProvisioningJob)
+        .where(ProvisioningJob.subscription_id == subscription_id)
+        .where(ProvisioningJob.status.in_(ACTIVE_JOB_STATUSES))
+    ).first()
+    if existing is not None:
+        raise Conflict(
+            "PROVISIONING_JOB_ALREADY_ACTIVE",
+            f"Subscription {subscription_id} already has a provisioning job "
+            f"({existing.id}) in status '{existing.status}'.",
+            job_id=existing.id,
+            job_status=existing.status,
+        )
+    job = ProvisioningJob(
+        subscription_id=subscription_id,
+        status="queued",
+        attempt_count=0,
+        queued_at=utcnow(),
+        created_at=utcnow(),
+        updated_at=utcnow(),
+    )
+    db.add(job)
     db.flush()
     return job_out(job)
