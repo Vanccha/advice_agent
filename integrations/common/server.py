@@ -8,7 +8,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Callable
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.responses import Response
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
@@ -17,11 +17,21 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 ToolsRegistrar = Callable[[MCPServer], None]
 
 
-def build_server(name: str, version: str, tools_registrar: ToolsRegistrar) -> FastAPI:
+def build_server(
+    name: str,
+    version: str,
+    tools_registrar: ToolsRegistrar,
+    extra_routes: APIRouter | None = None,
+) -> FastAPI:
     """Build the FastAPI app for one MCP server.
 
     `tools_registrar(mcp)` is called once, before the streamable-HTTP ASGI app
     is built, to register every tool via `common.tool_spec.register_tool`.
+
+    `extra_routes` carries any plain (non-MCP) HTTP endpoints the adapter needs —
+    `mcp-monitoring`'s Alertmanager receiver, for instance. It is included *before*
+    the MCP app is mounted at "/", because that mount is a catch-all: anything
+    registered after it is unreachable.
     """
     mcp = MCPServer(name=name, version=version)
     tools_registrar(mcp)
@@ -63,6 +73,9 @@ def build_server(name: str, version: str, tools_registrar: ToolsRegistrar) -> Fa
     @app.get("/metrics")
     def metrics() -> Response:
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+    if extra_routes is not None:
+        app.include_router(extra_routes)
 
     app.mount("/", mcp_asgi_app)
 

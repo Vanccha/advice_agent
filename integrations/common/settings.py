@@ -32,6 +32,10 @@ class AdapterSettings(BaseSettings):
     PROMETHEUS_BASE_URL: str = "http://prometheus:9090"
     ALERTMANAGER_BASE_URL: str = "http://alertmanager:9093"
 
+    # Where the monitoring adapter forwards a normalized alert. Only that adapter uses
+    # it, but it belongs with the other deployment wiring rather than in os.environ.
+    ASSISTANT_ALERT_WEBHOOK_URL: str = "http://assistant:8000/webhooks/alert"
+
     # readonly_diag DSN (SELECT-only on schema `diag`).
     DIAG_DATABASE_URL: str
 

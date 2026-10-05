@@ -1,0 +1,255 @@
+"""DIAGNOSTIC mode (contracts §4.3/§5): the fixed checklist from
+``routing.yaml: diagnostic_checklist`` — customer -> subscription -> payment ->
+provisioning -> installation -> regional incidents -> service health — stopping as soon
+as a root cause is established.
+
+Only non-PII fields (ids, statuses, codes, counts) are ever put in ``Diagnosis.evidence``:
+this dict is logged to the audit trail and returned to the API, both of which must never
+carry raw PII (contracts §4.7/§4.8).
+
+Import as: ``from modes.diagnostic import run_diagnosis``.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from core_common.types import Diagnosis, DiagnosisScope, StepType
+from modes.context import TurnContext
+
+# Issue-type strings used as `Diagnosis.root_cause` and, 1:1, as `core_common.types.IssueType`
+# values consumed by `modes.action`.
+ROOT_CAUSE_STUCK_PROVISIONING = "stuck_provisioning"
+ROOT_CAUSE_PAID_NOT_ACTIVE = "paid_not_active"
+ROOT_CAUSE_DOUBLE_CHARGE = "double_charge"
+ROOT_CAUSE_MISSED_INSTALLATION = "missed_installation"
+ROOT_CAUSE_REGIONAL_OUTAGE = "regional_outage"
+ROOT_CAUSE_PAYMENT_SYSTEM_DOWN = "payment_system_down"
+ROOT_CAUSE_NO_ISSUE_FOUND = "no_issue_found"
+ROOT_CAUSE_CUSTOMER_NOT_FOUND = "customer_not_found"
+
+
+def _ok_data(outcome: Any) -> dict[str, Any] | None:
+    if outcome is None or not getattr(outcome, "ok", False):
+        return None
+    data = outcome.data
+    if isinstance(data, dict):
+        return data
+    if isinstance(data, list) and data:
+        first = data[0]
+        return first if isinstance(first, dict) else None
+    return None
+
+
+def _as_list(outcome: Any) -> list[dict[str, Any]]:
+    if outcome is None or not getattr(outcome, "ok", False):
+        return []
+    data = outcome.data
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        return data["items"]
+    if isinstance(data, list):
+        return data
+    return []
+
+
+def _step(ctx: TurnContext, summary: str, reason: str, evidence: dict[str, Any]) -> None:
+    ctx.audit_log.append(
+        ctx.conversation_id,
+        StepType.MODE_DECISION,
+        summary,
+        reason,
+        evidence,
+        tenant=ctx.tenant,
+    )
+
+
+def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
+    evidence: dict[str, Any] = {"queried_sources": []}
+
+    # 1. customer -------------------------------------------------------------------
+    customer_outcome = ctx.call_tool("find_customer", {"customer_no": customer_no})
+    customer = _ok_data(customer_outcome)
+    evidence["queried_sources"].append("mcp-core:find_customer")
+    if customer is None:
+        _step(ctx, "diagnostic: customer not found", "find_customer returned no record", evidence)
+        return Diagnosis(
+            root_cause=ROOT_CAUSE_CUSTOMER_NOT_FOUND,
+            scope=DiagnosisScope.CUSTOMER_SPECIFIC,
+            confidence=0.9,
+            evidence=evidence,
+            affected_customers=[customer_no],
+        )
+    region_code = customer.get("region_code")
+
+    # 2. subscription -----------------------------------------------------------------
+    sub_outcome = ctx.call_tool("get_subscription_status", {"customer_no": customer_no})
+    subscription = _ok_data(sub_outcome)
+    evidence["queried_sources"].append("mcp-core:get_subscription_status")
+    subscription_id = subscription.get("subscription_id") if subscription else None
+    sub_status = subscription.get("status") if subscription else None
+    if subscription:
+        evidence["subscription_id"] = subscription_id
+        evidence["subscription_status"] = sub_status
+        region_code = subscription.get("region_code") or region_code
+
+    # 3. payment (+ duplicate-charge detection) ----------------------------------------
+    payment_outcome = ctx.call_tool(
+        "get_payment_status", {"customer_no": customer_no, "subscription_id": subscription_id}
+    )
+    payment = _ok_data(payment_outcome)
+    evidence["queried_sources"].append("mcp-payment:get_payment_status")
+
+    dup_outcome = ctx.call_tool("detect_duplicate_charges", {"customer_no": customer_no})
+    dup_data = dup_outcome.data if getattr(dup_outcome, "ok", False) else None
+    evidence["queried_sources"].append("mcp-payment:detect_duplicate_charges")
+    duplicate_pairs = _extract_duplicate_pairs(dup_data)
+    if duplicate_pairs:
+        payment_ids = sorted({pid for pair in duplicate_pairs for pid in pair})
+        evidence["payment_ids"] = payment_ids
+        evidence["error_codes"] = []
+        evidence["observations"] = [
+            "İki başarılı ödeme aynı abonelik için kısa süre arayla tespit edildi."
+        ]
+        _step(ctx, "diagnostic: duplicate charge detected", "detect_duplicate_charges matched", evidence)
+        return Diagnosis(
+            root_cause=ROOT_CAUSE_DOUBLE_CHARGE,
+            scope=DiagnosisScope.CUSTOMER_SPECIFIC,
+            confidence=0.95,
+            evidence=evidence,
+            affected_customers=[customer_no],
+        )
+
+    payment_status = payment.get("status") if payment else None
+    if payment:
+        evidence["payment_status"] = payment_status
+
+    # 4. provisioning -------------------------------------------------------------------
+    prov_outcome = ctx.call_tool(
+        "get_provisioning_status", {"customer_no": customer_no, "subscription_id": subscription_id}
+    )
+    provisioning = _ok_data(prov_outcome)
+    evidence["queried_sources"].append("mcp-core:get_provisioning_status")
+    if provisioning:
+        evidence["job_id"] = provisioning.get("job_id")
+        evidence["job_status"] = provisioning.get("status")
+        evidence["job_attempt_count"] = provisioning.get("attempt_count")
+        if provisioning.get("is_stuck") or provisioning.get("status") in ("stuck", "failed"):
+            _step(ctx, "diagnostic: provisioning job stuck/failed", "get_provisioning_status.is_stuck", evidence)
+            return Diagnosis(
+                root_cause=ROOT_CAUSE_STUCK_PROVISIONING,
+                scope=DiagnosisScope.CUSTOMER_SPECIFIC,
+                confidence=0.9,
+                evidence=evidence,
+                affected_customers=[customer_no],
+            )
+
+    # Stranded payment: paid, but never entered provisioning.
+    if sub_status == "payment_received" and payment_status == "succeeded" and not provisioning:
+        _step(ctx, "diagnostic: payment received but no provisioning job", "paid_not_active pattern", evidence)
+        return Diagnosis(
+            root_cause=ROOT_CAUSE_PAID_NOT_ACTIVE,
+            scope=DiagnosisScope.CUSTOMER_SPECIFIC,
+            confidence=0.85,
+            evidence=evidence,
+            affected_customers=[customer_no],
+        )
+
+    # 5. installation ----------------------------------------------------------------
+    install_outcome = ctx.call_tool(
+        "get_installation_status", {"customer_no": customer_no, "subscription_id": subscription_id}
+    )
+    installation = _ok_data(install_outcome)
+    evidence["queried_sources"].append("mcp-core:get_installation_status")
+    if installation:
+        evidence["appointment_id"] = installation.get("appointment_id")
+        evidence["appointment_status"] = installation.get("status")
+        evidence["team_code"] = installation.get("team_code")
+        if installation.get("status") == "missed":
+            _step(ctx, "diagnostic: installation appointment missed", "get_installation_status.status=missed", evidence)
+            return Diagnosis(
+                root_cause=ROOT_CAUSE_MISSED_INSTALLATION,
+                scope=DiagnosisScope.CUSTOMER_SPECIFIC,
+                confidence=0.9,
+                evidence=evidence,
+                affected_customers=[customer_no],
+            )
+
+    # 6. regional incidents -------------------------------------------------------------
+    if region_code:
+        incidents = _as_list(ctx.call_tool("get_active_incidents_for_region", {"region_code": region_code}))
+        evidence["queried_sources"].append("mcp-core:get_active_incidents_for_region")
+        if incidents:
+            incident = incidents[0]
+            evidence["incident_no"] = incident.get("incident_no")
+            evidence["region_code"] = region_code
+            _step(ctx, "diagnostic: active regional incident found", "get_active_incidents_for_region matched", evidence)
+            return Diagnosis(
+                root_cause=ROOT_CAUSE_REGIONAL_OUTAGE,
+                scope=DiagnosisScope.REGIONAL_INCIDENT,
+                confidence=0.95,
+                evidence=evidence,
+                affected_customers=[customer_no],
+                incident_no=incident.get("incident_no"),
+            )
+
+    # 7. service health -------------------------------------------------------------------
+    health_outcome = ctx.call_tool("get_service_health", {})
+    health = health_outcome.data if getattr(health_outcome, "ok", False) else None
+    evidence["queried_sources"].append("mcp-monitoring:get_service_health")
+    if isinstance(health, dict) and _payment_gateway_down(health):
+        evidence["service_health"] = health
+        _step(ctx, "diagnostic: payment gateway reported down", "get_service_health", evidence)
+        return Diagnosis(
+            root_cause=ROOT_CAUSE_PAYMENT_SYSTEM_DOWN,
+            scope=DiagnosisScope.SYSTEM_WIDE,
+            confidence=0.9,
+            evidence=evidence,
+            affected_customers=[customer_no],
+        )
+
+    _step(ctx, "diagnostic: no issue established", "checklist exhausted with no match", evidence)
+    return Diagnosis(
+        root_cause=ROOT_CAUSE_NO_ISSUE_FOUND,
+        scope=DiagnosisScope.CUSTOMER_SPECIFIC,
+        confidence=0.5,
+        evidence=evidence,
+        affected_customers=[customer_no],
+    )
+
+
+def _extract_duplicate_pairs(data: Any) -> list[list[int]]:
+    """``detect_duplicate_charges`` is expected to return something like
+    ``{"duplicates": [{"payment_ids": [88, 89]}, ...]}`` or a bare list of such groups.
+    Handled defensively since the live adapter's exact shape is owned by another agent."""
+    groups: Any = data
+    if isinstance(data, dict):
+        groups = data.get("duplicates") or data.get("items") or []
+    if not isinstance(groups, list):
+        return []
+    pairs: list[list[int]] = []
+    for group in groups:
+        if isinstance(group, dict):
+            ids = group.get("payment_ids") or group.get("ids")
+            if isinstance(ids, list) and len(ids) >= 2:
+                pairs.append(list(ids))
+        elif isinstance(group, list) and len(group) >= 2:
+            pairs.append(list(group))
+    return pairs
+
+
+def _payment_gateway_down(health: dict[str, Any]) -> bool:
+    # Accept a few plausible shapes: {"payment_gateway": {"ok": False}}, {"services": {...}},
+    # or a flat {"ok": False, "service": "payment-gateway"}.
+    candidates = [health]
+    if isinstance(health.get("services"), dict):
+        candidates.append(health["services"])
+    for node in candidates:
+        for key, value in node.items():
+            if "payment" not in str(key).lower():
+                continue
+            if isinstance(value, dict) and value.get("ok") is False:
+                return True
+            if isinstance(value, str) and value.lower() in ("down", "unavailable", "outage"):
+                return True
+    if health.get("ok") is False and "payment" in str(health.get("service", "")).lower():
+        return True
+    return False
