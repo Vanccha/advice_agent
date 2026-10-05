@@ -28,6 +28,7 @@ from modes.context import TurnContext
 from modes.machine import LimitExceeded, StateMachine
 from modes.router import route_intent
 from modes.ticket_links import record_ticket_link
+from modes.tool_data import first_record
 from observability.tracing import trace_turn
 from policy.engine import PolicyEngine
 from policy.executor import ActionExecutor, PolicyDenied
@@ -513,9 +514,9 @@ class Orchestrator:
     def _lookup_requester(self, ctx: TurnContext, customer_no: str | None) -> tuple[str, str]:
         if not customer_no:
             return "Müşteri", "bilinmiyor"
-        outcome = ctx.call_tool("find_customer", {"customer_no": customer_no})
-        if getattr(outcome, "ok", False) and isinstance(outcome.data, dict):
-            data = outcome.data
+        outcome = ctx.call_tool_cached("find_customer", {"customer_no": customer_no})
+        data = first_record(outcome)
+        if data is not None:
             name = data.get("full_name") or "Müşteri"
             contact = data.get("phone") or data.get("email") or "bilinmiyor"
             return str(name), str(contact)

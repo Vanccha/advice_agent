@@ -15,6 +15,7 @@ from typing import Any
 
 from core_common.types import Diagnosis, DiagnosisScope, StepType
 from modes.context import TurnContext
+from modes.tool_data import as_list, first_record, raw_payload
 
 # Issue-type strings used as `Diagnosis.root_cause` and, 1:1, as `core_common.types.IssueType`
 # values consumed by `modes.action`.
@@ -28,27 +29,8 @@ ROOT_CAUSE_NO_ISSUE_FOUND = "no_issue_found"
 ROOT_CAUSE_CUSTOMER_NOT_FOUND = "customer_not_found"
 
 
-def _ok_data(outcome: Any) -> dict[str, Any] | None:
-    if outcome is None or not getattr(outcome, "ok", False):
-        return None
-    data = outcome.data
-    if isinstance(data, dict):
-        return data
-    if isinstance(data, list) and data:
-        first = data[0]
-        return first if isinstance(first, dict) else None
-    return None
-
-
-def _as_list(outcome: Any) -> list[dict[str, Any]]:
-    if outcome is None or not getattr(outcome, "ok", False):
-        return []
-    data = outcome.data
-    if isinstance(data, dict) and isinstance(data.get("items"), list):
-        return data["items"]
-    if isinstance(data, list):
-        return data
-    return []
+_ok_data = first_record
+_as_list = as_list
 
 
 def _step(ctx: TurnContext, summary: str, reason: str, evidence: dict[str, Any]) -> None:
@@ -66,7 +48,7 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
     evidence: dict[str, Any] = {"queried_sources": []}
 
     # 1. customer -------------------------------------------------------------------
-    customer_outcome = ctx.call_tool("find_customer", {"customer_no": customer_no})
+    customer_outcome = ctx.call_tool_cached("find_customer", {"customer_no": customer_no})
     customer = _ok_data(customer_outcome)
     evidence["queried_sources"].append("mcp-core:find_customer")
     if customer is None:
@@ -95,13 +77,21 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
     payment_outcome = ctx.call_tool(
         "get_payment_status", {"customer_no": customer_no, "subscription_id": subscription_id}
     )
-    payment = _ok_data(payment_outcome)
+    payment_records = as_list(payment_outcome)
+    payment = payment_records[0] if payment_records else None
     evidence["queried_sources"].append("mcp-payment:get_payment_status")
 
     dup_outcome = ctx.call_tool("detect_duplicate_charges", {"customer_no": customer_no})
-    dup_data = dup_outcome.data if getattr(dup_outcome, "ok", False) else None
+    dup_data = raw_payload(dup_outcome)
     evidence["queried_sources"].append("mcp-payment:detect_duplicate_charges")
     duplicate_pairs = _extract_duplicate_pairs(dup_data)
+
+    # Secondary signal, straight from `get_payment_status`: two or more succeeded
+    # payments for the same subscription at the same amount. Covers data the PSP-side
+    # detector cannot see — e.g. a seeded "first" payment that was never mirrored into
+    # the payment gateway's own ledger, only into core's.
+    duplicate_pairs.extend(_duplicate_pairs_from_payment_records(payment_records))
+
     if duplicate_pairs:
         payment_ids = sorted({pid for pair in duplicate_pairs for pid in pair})
         evidence["payment_ids"] = payment_ids
@@ -130,7 +120,12 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
     evidence["queried_sources"].append("mcp-core:get_provisioning_status")
     if provisioning:
         evidence["job_id"] = provisioning.get("job_id")
-        evidence["job_status"] = provisioning.get("status")
+        # The diag view's `is_stuck` is computed live from `heartbeat_at` and can be true
+        # before a sweep has flipped the stored `status` column to "stuck" — normalize
+        # here so `job_status` (consumed by `policy.yaml: actions.retry_provisioning_job
+        # .conditions: [{field: job.status, in: [stuck, failed]}]` via `modes.action`)
+        # reflects the actual diagnosed condition either way.
+        evidence["job_status"] = "stuck" if provisioning.get("is_stuck") else provisioning.get("status")
         evidence["job_attempt_count"] = provisioning.get("attempt_count")
         if provisioning.get("is_stuck") or provisioning.get("status") in ("stuck", "failed"):
             _step(ctx, "diagnostic: provisioning job stuck/failed", "get_provisioning_status.is_stuck", evidence)
@@ -153,25 +148,29 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
             affected_customers=[customer_no],
         )
 
-    # 5. installation ----------------------------------------------------------------
-    install_outcome = ctx.call_tool(
-        "get_installation_status", {"customer_no": customer_no, "subscription_id": subscription_id}
-    )
-    installation = _ok_data(install_outcome)
-    evidence["queried_sources"].append("mcp-core:get_installation_status")
-    if installation:
-        evidence["appointment_id"] = installation.get("appointment_id")
-        evidence["appointment_status"] = installation.get("status")
-        evidence["team_code"] = installation.get("team_code")
-        if installation.get("status") == "missed":
-            _step(ctx, "diagnostic: installation appointment missed", "get_installation_status.status=missed", evidence)
-            return Diagnosis(
-                root_cause=ROOT_CAUSE_MISSED_INSTALLATION,
-                scope=DiagnosisScope.CUSTOMER_SPECIFIC,
-                confidence=0.9,
-                evidence=evidence,
-                affected_customers=[customer_no],
-            )
+    # 5. installation (only relevant once a subscription has reached that stage — this
+    # also keeps the checklist within `policy.yaml: limits.max_tool_calls_per_turn`,
+    # since a run that reaches the regional-incident/service-health steps still has an
+    # action to take afterwards in the very same turn) ---------------------------------
+    if sub_status in ("provisioned", "installation_scheduled"):
+        install_outcome = ctx.call_tool(
+            "get_installation_status", {"customer_no": customer_no, "subscription_id": subscription_id}
+        )
+        installation = _ok_data(install_outcome)
+        evidence["queried_sources"].append("mcp-core:get_installation_status")
+        if installation:
+            evidence["appointment_id"] = installation.get("appointment_id")
+            evidence["appointment_status"] = installation.get("status")
+            evidence["team_code"] = installation.get("team_code")
+            if installation.get("status") == "missed":
+                _step(ctx, "diagnostic: installation appointment missed", "get_installation_status.status=missed", evidence)
+                return Diagnosis(
+                    root_cause=ROOT_CAUSE_MISSED_INSTALLATION,
+                    scope=DiagnosisScope.CUSTOMER_SPECIFIC,
+                    confidence=0.9,
+                    evidence=evidence,
+                    affected_customers=[customer_no],
+                )
 
     # 6. regional incidents -------------------------------------------------------------
     if region_code:
@@ -193,7 +192,7 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
 
     # 7. service health -------------------------------------------------------------------
     health_outcome = ctx.call_tool("get_service_health", {})
-    health = health_outcome.data if getattr(health_outcome, "ok", False) else None
+    health = raw_payload(health_outcome)
     evidence["queried_sources"].append("mcp-monitoring:get_service_health")
     if isinstance(health, dict) and _payment_gateway_down(health):
         evidence["service_health"] = health
@@ -217,23 +216,43 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
 
 
 def _extract_duplicate_pairs(data: Any) -> list[list[int]]:
-    """``detect_duplicate_charges`` is expected to return something like
-    ``{"duplicates": [{"payment_ids": [88, 89]}, ...]}`` or a bare list of such groups.
-    Handled defensively since the live adapter's exact shape is owned by another agent."""
+    """``detect_duplicate_charges`` (live `mcp-payment`) returns
+    ``{"customer_no": ..., "window_minutes": 60, "duplicate_groups": [...]}``; fixture-based
+    tests commonly spell the same idea as ``{"duplicates": [...]}`` or ``{"items": [...]}``.
+    Each group is expected to carry its charge/payment ids under one of a few plausible
+    key names — handled defensively since this is data from another agent's adapter."""
     groups: Any = data
     if isinstance(data, dict):
-        groups = data.get("duplicates") or data.get("items") or []
+        groups = (
+            data.get("duplicate_groups")
+            or data.get("duplicates")
+            or data.get("items")
+            or []
+        )
     if not isinstance(groups, list):
         return []
     pairs: list[list[int]] = []
     for group in groups:
         if isinstance(group, dict):
-            ids = group.get("payment_ids") or group.get("ids")
+            ids = (
+                group.get("payment_ids")
+                or group.get("charge_ids")
+                or group.get("ids")
+                or group.get("payments")
+            )
             if isinstance(ids, list) and len(ids) >= 2:
                 pairs.append(list(ids))
         elif isinstance(group, list) and len(group) >= 2:
             pairs.append(list(group))
     return pairs
+
+
+def _duplicate_pairs_from_payment_records(records: list[dict[str, Any]]) -> list[list[int]]:
+    succeeded = [r for r in records if r.get("status") == "succeeded" and r.get("payment_id") is not None]
+    by_amount: dict[Any, list[int]] = {}
+    for record in succeeded:
+        by_amount.setdefault(record.get("amount_try"), []).append(record["payment_id"])
+    return [ids for ids in by_amount.values() if len(ids) >= 2]
 
 
 def _payment_gateway_down(health: dict[str, Any]) -> bool:

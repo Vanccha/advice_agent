@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from core_common.tr import format_money_try
 from core_common.types import Mode, StepType
 from modes.context import TurnContext
+from modes.tool_data import first_record
 
 _SUBSCRIPTION_STATUS_TR = {
     "registered": "kayıt oluşturuldu",
@@ -60,8 +61,8 @@ def handle_status_query(ctx: TurnContext, customer_no: str) -> StatusQueryResult
         parts.append("Açık bir talebiniz görünmüyor.")
 
     sub_outcome = ctx.call_tool("get_subscription_status", {"customer_no": customer_no})
-    if getattr(sub_outcome, "ok", False) and isinstance(sub_outcome.data, dict):
-        sub = sub_outcome.data
+    sub = first_record(sub_outcome)
+    if sub is not None:
         status_tr = _SUBSCRIPTION_STATUS_TR.get(sub.get("status"), sub.get("status", "bilinmiyor"))
         price = sub.get("monthly_price_try")
         price_part = f", aylık {format_money_try(price)}" if price is not None else ""

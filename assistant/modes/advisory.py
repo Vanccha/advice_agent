@@ -24,6 +24,7 @@ from typing import Any
 from core_common.tr import format_money_try
 from core_common.types import AdvisoryProfile, CommitmentPreference, Mode, PackageOffer, StepType, UsageType
 from modes.context import TurnContext
+from modes.tool_data import as_list
 from recommendation.engine import recommend_packages
 from recommendation.questions import QUESTIONS, next_question, profile_is_complete
 
@@ -176,8 +177,7 @@ def handle_turn(
 
     # All done (or question budget spent): fetch the live catalogue and recommend.
     catalog_outcome = ctx.call_tool("list_packages", {})
-    packages_raw = catalog_outcome.data if getattr(catalog_outcome, "ok", False) else None
-    packages = _extract_packages(packages_raw)
+    packages = as_list(catalog_outcome)
 
     offers = recommend_packages(profile, packages, ctx.tenant_config.routing)
     ctx.audit_log.append(
@@ -198,18 +198,3 @@ def handle_turn(
         questions_asked=questions_asked,
         offers=[o.model_dump(mode="json") for o in offers],
     )
-
-
-def _extract_packages(raw: Any) -> list[dict[str, Any]]:
-    if isinstance(raw, dict):
-        if "items" in raw and isinstance(raw["items"], list):
-            return raw["items"]
-        if "packages" in raw and isinstance(raw["packages"], list):
-            return raw["packages"]
-        # a single package dict, unlikely but handled defensively
-        if "code" in raw:
-            return [raw]
-        return []
-    if isinstance(raw, list):
-        return raw
-    return []

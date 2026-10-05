@@ -46,6 +46,7 @@ class TurnContext:
     history: list[dict[str, str]] = field(default_factory=list)
 
     tool_calls_used: int = 0
+    _tool_cache: dict[tuple[str, tuple[tuple[str, Any], ...]], Any] = field(default_factory=dict)
 
     @property
     def tenant(self) -> str:
@@ -55,3 +56,13 @@ class TurnContext:
         """Call a tool through the gateway and bump this turn's call counter."""
         self.tool_calls_used += 1
         return self.gateway.call_sync(tool_name, arguments)
+
+    def call_tool_cached(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        """Like `call_tool`, but memoised per (tool_name, arguments) for the lifetime of
+        this turn — read-only lookups (``find_customer`` and the like) are frequently
+        needed by more than one mode handler in the same turn, and re-fetching them would
+        needlessly spend the turn's ``max_tool_calls_per_turn`` budget."""
+        key = (tool_name, tuple(sorted(arguments.items())))
+        if key not in self._tool_cache:
+            self._tool_cache[key] = self.call_tool(tool_name, arguments)
+        return self._tool_cache[key]

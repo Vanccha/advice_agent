@@ -28,6 +28,7 @@ from fastapi.templating import Jinja2Templates
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
+from starlette.concurrency import run_in_threadpool
 
 from audit.log import AuditLog
 from core_common.config import ConfigError, load_tenant_config
@@ -38,6 +39,7 @@ from llm.base import ProviderConfigError
 from llm.factory import get_provider
 from mcp_gateway.gateway import ToolGateway
 from modes.orchestrator import Orchestrator
+from modes.tool_data import first_record
 from observability.tracing import init_tracing
 
 logger = logging.getLogger("assistant.api")
@@ -51,6 +53,15 @@ DEFAULT_CUSTOMER_PATTERN = r"^NH-\d{6}$"
 app = FastAPI(title="NetHız destek asistanı API")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
+
+
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Every `HTTPException` raised in this module already passes a fully-formed
+    ``{"error": {...}}`` body as `detail` — return it as the response body directly
+    rather than FastAPI's default ``{"detail": ...}`` wrapper."""
+    body = exc.detail if isinstance(exc.detail, dict) else {"error": {"code": "ERROR", "message": str(exc.detail)}}
+    return JSONResponse(status_code=exc.status_code, content=body)
 
 
 class AppState:
@@ -186,7 +197,7 @@ def api_login(body: LoginRequest):
 
     if state.gateway is not None:
         outcome = state.gateway.call_sync("find_customer", {"customer_no": customer_no})
-        if not getattr(outcome, "ok", False) or not outcome.data:
+        if first_record(outcome) is None:
             raise HTTPException(
                 status_code=404,
                 detail={"error": {"code": "CUSTOMER_NOT_FOUND", "message": "Bilinmeyen müşteri numarası"}},
@@ -222,8 +233,9 @@ async def api_chat_stream(request: Request, conversation_id: str | None = None, 
             yield {"event": "error", "data": state.init_error_tr or "unavailable"}
             return
         try:
-            result = state.orchestrator.handle_message(
-                conversation_id=conversation_id, customer_no=customer_no, message=message
+            result = await run_in_threadpool(
+                state.orchestrator.handle_message,
+                conversation_id=conversation_id, customer_no=customer_no, message=message,
             )
         except Exception as exc:  # pragma: no cover - defensive, client falls back to POST
             logger.exception("chat/stream turn failed")
@@ -308,7 +320,7 @@ async def webhook_ticket(request: Request):
         raise HTTPException(status_code=400, detail={"error": {"code": "INVALID_BODY", "message": str(exc)}}) from exc
 
     if state.orchestrator is not None:
-        state.orchestrator.handle_ticket_event(event)
+        await run_in_threadpool(state.orchestrator.handle_ticket_event, event)
     return {"status": "ok"}
 
 
@@ -316,7 +328,7 @@ async def webhook_ticket(request: Request):
 async def webhook_alert(request: Request):
     alert = await request.json()
     if state.orchestrator is not None:
-        state.orchestrator.handle_alert(alert)
+        await run_in_threadpool(state.orchestrator.handle_alert, alert)
     return {"status": "ok"}
 
 
