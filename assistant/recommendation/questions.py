@@ -54,12 +54,6 @@ QUESTIONS: list[Question] = [
     ),
 ]
 
-# Fields that must be known before a recommendation can be produced.
-_REQUIRED_FIELDS = ("usage", "device_or_household")
-
-_FIELDS_BY_NAME = {q.field: q for q in QUESTIONS}
-
-
 def _is_missing(profile: AdvisoryProfile, field: str) -> bool:
     value = getattr(profile, field)
     if field == "usage":

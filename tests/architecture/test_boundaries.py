@@ -104,10 +104,16 @@ def test_company_code_never_mentions_the_assistant() -> None:
 
 
 def test_assistant_never_hardcodes_company_endpoints() -> None:
-    """Company addresses must come from tenant config / env, not from assistant source."""
+    """Company addresses must come from tenant config / env, not from assistant source.
+
+    Test files are exempt: fixtures legitimately spell out a concrete tenant's endpoints to
+    prove the configuration layer resolves them.
+    """
     violations: list[str] = []
     hardcoded = re.compile(r"(?i)(core-api|payment-gateway|ticketing|notification-hub|nethiz)")
     for path in _python_files(ASSISTANT):
+        if "tests" in path.parts or path.name.startswith("test_"):
+            continue
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             stripped = line.strip()
             if stripped.startswith("#") or '"""' in stripped:

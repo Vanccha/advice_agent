@@ -169,6 +169,11 @@ service_accounts(id PK, name text uniq, api_key_hash text, scopes text[],
   `ACTIVATION_READY` notification. Deterministic: `random.Random(20261005)`.
 - 2 service accounts (see §2.1).
 
+> **Seeding split (implemented):** regions, the 7 packages and the 2 service accounts are
+> reference data the API cannot work without, so `bootstrap.py` always seeds them.
+> `SEED_ON_STARTUP` only gates the 200 demo customers and their subscriptions, which lets
+> tests exercise the catalogue without 200 extra rows.
+
 #### Diagnostic views — schema `diag` (the ONLY surface `readonly_diag` can read)
 National IDs, full addresses and card data are **not** exposed by any view.
 
@@ -319,7 +324,7 @@ Missing key → 401 `MISSING_API_KEY`; unknown/inactive → 401 `INVALID_API_KEY
 | POST | `/v1/subscriptions` | `subscriptions:write` | body: customer_no, package_code → status `registered` |
 | GET | `/v1/subscriptions/{id}` | `subscriptions:read` | full detail incl. latest payment/job/appointment |
 | GET | `/v1/subscriptions` `?customer_no=&status=&region_code=` | `subscriptions:read` | |
-| POST | `/v1/subscriptions/{id}/payments` | `payments:write` | body: amount_try?, method, card_token?, idempotency_key → calls PSP, creates `payments` row |
+| POST | `/v1/subscriptions/{id}/payments` | `payments:write` | body: amount_try?, method, card_token?, idempotency_key → calls PSP, creates `payments` row. If the PSP is unreachable the `pending` row is committed before the 503 propagates, so retrying the same key returns that row instead of charging twice. |
 | GET | `/v1/subscriptions/{id}/payments` | `payments:read` | |
 | POST | `/v1/subscriptions/{id}/transitions` | `subscriptions:write` | body: to_status, reason → 409 on illegal transition |
 | POST | `/v1/subscriptions/{id}/cancel` | `subscriptions:write` | |
@@ -349,8 +354,10 @@ Loop every `WORKER_INTERVAL_SECONDS` (default 5):
 3. success (default 90 %, `PROVISION_SUCCESS_RATE`) → job `succeeded`, assign/activate modem,
    subscription → `provisioned`, create `installation_appointments` row (+3..10 days),
    subscription → `installation_scheduled`;
-4. failure → `failed` + `last_error_code` ∈ {OLT_PORT_BUSY, VLAN_CONFLICT, CPE_TIMEOUT},
-   retry while `attempt_count < max_attempts`;
+4. failure → `failed` + `last_error_code` ∈ {OLT_PORT_BUSY, VLAN_CONFLICT, CPE_TIMEOUT}.
+   **The worker does not re-queue by itself**: a failed job waits for an explicit
+   `POST /v1/provisioning-jobs/{id}/retry`, which is what the `attempt_count < max_attempts`
+   limit guards. (This is deliberate — it is the company behaviour the product fixes.);
 5. sweep: `running` jobs with `heartbeat_at < now()-STUCK_AFTER_SECONDS` (300) → `stuck`;
 6. jobs with `chaos_hold=true` marker in `payload` are intentionally **not** touched
    (chaos scenario a). Marker lives in `provisioning_jobs.last_error_message = 'CHAOS_HOLD'`
