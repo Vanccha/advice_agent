@@ -1,0 +1,100 @@
+# Authority engine. The model NEVER decides what it is allowed to do: every action is
+# checked here first, and an unknown action name is denied by default.
+version: 1
+tenant: _example
+
+decision:
+  min_confidence: 0.6          # below this → hand over instead of guessing
+  escalate_on_low_confidence: true
+
+limits:
+  max_tool_calls_per_turn: 8
+  max_questions_advisory: 5
+  max_actions_per_conversation: 3
+
+actions:
+  retry_provisioning_job:
+    allowed: true
+    requires_confirmation: false
+    description_tr: "Takılı kalan provizyon işini yeniden başlatır."
+    conditions:
+      - {field: job.status, in: [stuck, failed]}
+      - {field: job.attempt_count, lt: 3}
+    on_condition_fail:
+      escalate_to: SUBSCRIPTION_OPS
+      reason_code: provisioning_retry_limit
+
+  resend_activation_notification:
+    allowed: true
+    requires_confirmation: false
+    description_tr: "Aktivasyon SMS/e-postasını yeniden gönderir."
+    rate_limit:
+      per_conversation: 2
+      per_customer_per_day: 5
+
+  enqueue_provisioning_job:
+    allowed: true
+    requires_confirmation: false
+    description_tr: "Ödemesi alınmış ama provizyonu başlamamış abonelik için işi kuyruğa alır."
+    conditions:
+      - {field: subscription.status, in: [payment_received]}
+      - {field: payment.status, in: [succeeded]}
+
+  apply_outage_credit:
+    allowed: true
+    requires_confirmation: true          # money leaves the company → explicit consent
+    description_tr: "Kesinti için tek seferlik telafi tanımlar."
+    max_amount_try: 50
+    conditions:
+      - {field: incident.exists, eq: true}
+      - {field: credit.existing_count_30d, lt: 1}
+    on_condition_fail:
+      escalate_to: BILLING
+      reason_code: credit_not_applicable
+
+  issue_refund:
+    allowed: false
+    escalate_to: BILLING
+    reason_code: refund_not_permitted
+    reason_tr: "İade işlemleri Faturalama ekibinin onayını gerektirir."
+
+  change_package:
+    allowed: false
+    escalate_to: SUBSCRIPTION_OPS
+    reason_code: plan_change_not_permitted
+    reason_tr: "Paket değişikliği cayma bedeli doğurabileceği için Abonelik İşlemleri tarafından yapılır."
+
+  reschedule_installation:
+    allowed: false
+    escalate_to: FIELD_INSTALL
+    reason_code: field_scheduling_not_permitted
+    reason_tr: "Kurulum randevuları Saha Kurulum Ekibi tarafından planlanır."
+
+  repair_infrastructure:
+    allowed: false
+    escalate_to: TECHNICAL_INFRA
+    reason_code: infrastructure_not_permitted
+    reason_tr: "Altyapı onarımı saha ve şebeke ekiplerinin işidir."
+
+  cancel_subscription:
+    allowed: false
+    escalate_to: SUBSCRIPTION_OPS
+    reason_code: cancellation_not_permitted
+    reason_tr: "Abonelik iptali ve cayma bedeli hesabı Abonelik İşlemleri tarafından yapılır."
+
+  send_department_message:
+    allowed: true
+    requires_confirmation: false
+    description_tr: "İlgili departman kanalına bilgilendirme mesajı bırakır."
+
+pii:
+  mask_before_model: [national_id, phone, email, address, iban, card_number, full_name]
+  allow_unmasked: [customer_no, subscription_id, ticket_key, region_code, package_code]
+  mask_in_traces: true
+  mask_in_tickets: true        # department sees masked contact + customer_no, enough to act
+
+incident_handling:
+  # During a regional outage: never open a ticket per customer.
+  attach_to_existing_incident: true
+  create_ticket_for_known_incident: false
+  max_tickets_per_incident: 1

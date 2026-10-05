@@ -1,0 +1,269 @@
+# NetHız Telekom (company) + AI support assistant (guest product)
+# Single command:  docker compose up      |  Observability: make up-observability
+name: ${COMPOSE_PROJECT_NAME:-nethiz}
+
+x-company-env: &company-env
+  TZ: ${TZ:-Europe/Istanbul}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  COMPANY_DB_USER: ${COMPANY_DB_USER}
+  COMPANY_DB_PASSWORD: ${COMPANY_DB_PASSWORD}
+  COMPANY_DB_HOST: company-db
+  COMPANY_DB_PORT: 5432
+
+x-integration-env: &integration-env
+  TZ: ${TZ:-Europe/Istanbul}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  COMPANY_API_KEY: ${COMPANY_API_KEY}
+  CORE_API_BASE_URL: http://core-api:8000
+  PAYMENT_API_BASE_URL: http://payment-gateway:8000
+  TICKETING_API_BASE_URL: http://ticketing:8000
+  NOTIFICATION_API_BASE_URL: http://notification-hub:8000
+  PROMETHEUS_BASE_URL: http://prometheus:9090
+  ALERTMANAGER_BASE_URL: http://alertmanager:9093
+  DIAG_DATABASE_URL: postgresql+psycopg://${READONLY_DIAG_USER}:${READONLY_DIAG_PASSWORD}@company-db:5432/nethiz_core
+
+services:
+  # ───────────────────────── company: data stores ─────────────────────────
+  company-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${COMPANY_DB_USER}
+      POSTGRES_PASSWORD: ${COMPANY_DB_PASSWORD}
+      POSTGRES_DB: nethiz_core
+      READONLY_DIAG_USER: ${READONLY_DIAG_USER}
+      READONLY_DIAG_PASSWORD: ${READONLY_DIAG_PASSWORD}
+    ports: ["${COMPANY_DB_PORT_HOST:-55432}:5432"]
+    volumes:
+      - company-db-data:/var/lib/postgresql/data
+      - ./company/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${COMPANY_DB_USER} -d nethiz_core"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  assistant-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${ASSISTANT_DB_USER}
+      POSTGRES_PASSWORD: ${ASSISTANT_DB_PASSWORD}
+      POSTGRES_DB: ${ASSISTANT_DB_NAME}
+    ports: ["${ASSISTANT_DB_PORT_HOST:-55433}:5432"]
+    volumes:
+      - assistant-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ASSISTANT_DB_USER} -d ${ASSISTANT_DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # ───────────────────────── company: services ────────────────────────────
+  core-api:
+    build: {context: ./company, dockerfile: core-api/Dockerfile}
+    environment:
+      <<: *company-env
+      COMPANY_DB_NAME: nethiz_core
+      CORE_API_KEY_CRM: ${CORE_API_KEY_CRM}
+      CORE_API_KEY_PARTNER: ${CORE_API_KEY_PARTNER}
+      READONLY_DIAG_USER: ${READONLY_DIAG_USER}
+      READONLY_DIAG_PASSWORD: ${READONLY_DIAG_PASSWORD}
+      PAYMENT_API_BASE_URL: http://payment-gateway:8000
+      PSP_API_KEY: ${PSP_API_KEY}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      CREDIT_MAX_PER_REQUEST_TRY: ${CREDIT_MAX_PER_REQUEST_TRY:-250}
+      RESEND_COOLDOWN_SECONDS: ${RESEND_COOLDOWN_SECONDS:-120}
+      SEED_ON_STARTUP: "true"
+    ports: ["8001:8000"]
+    depends_on:
+      company-db: {condition: service_healthy}
+
+  provisioning-worker:
+    build: {context: ./company, dockerfile: provisioning-worker/Dockerfile}
+    environment:
+      <<: *company-env
+      COMPANY_DB_NAME: nethiz_core
+      PROVISION_SUCCESS_RATE: ${PROVISION_SUCCESS_RATE:-0.9}
+      WORKER_INTERVAL_SECONDS: ${WORKER_INTERVAL_SECONDS:-5}
+      STUCK_AFTER_SECONDS: ${STUCK_AFTER_SECONDS:-300}
+    depends_on:
+      core-api: {condition: service_healthy}
+
+  payment-gateway:
+    build: {context: ./company, dockerfile: payment-gateway-mock/Dockerfile}
+    environment:
+      <<: *company-env
+      COMPANY_DB_NAME: nethiz_payment
+      PSP_API_KEY: ${PSP_API_KEY}
+      PSP_FAILURE_RATE: ${PSP_FAILURE_RATE:-0.08}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      CORE_WEBHOOK_URL: http://core-api:8000/v1/webhooks/payment
+    ports: ["8002:8000"]
+    depends_on:
+      company-db: {condition: service_healthy}
+
+  ticketing:
+    build: {context: ./company, dockerfile: ticketing/Dockerfile}
+    environment:
+      <<: *company-env
+      COMPANY_DB_NAME: nethiz_ticketing
+      TICKETING_API_KEY: ${TICKETING_API_KEY}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      NOTIFICATION_API_BASE_URL: http://notification-hub:8000
+      NOTIFY_API_KEY: ${NOTIFY_API_KEY}
+      DEFAULT_WEBHOOK_TARGETS: http://assistant:8000/webhooks/ticket
+    ports: ["8003:8000"]
+    depends_on:
+      company-db: {condition: service_healthy}
+
+  notification-hub:
+    build: {context: ./company, dockerfile: notification-hub/Dockerfile}
+    environment:
+      <<: *company-env
+      COMPANY_DB_NAME: nethiz_notify
+      NOTIFY_API_KEY: ${NOTIFY_API_KEY}
+    ports: ["8004:8000"]
+    depends_on:
+      company-db: {condition: service_healthy}
+
+  # ───────────────────────── company: monitoring ──────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2h
+      - --web.enable-lifecycle
+    volumes: ["./company/monitoring:/etc/prometheus:ro"]
+    ports: ["9091:9090"]
+    depends_on: [core-api, payment-gateway, ticketing, notification-hub]
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    volumes: ["./company/monitoring:/etc/alertmanager:ro"]
+    environment:
+      ALERT_INTEGRATION_WEBHOOK_URL: ${ALERT_INTEGRATION_WEBHOOK_URL}
+    ports: ["9093:9093"]
+
+  # ───────────────────── integration layer (adapters) ─────────────────────
+  mcp-core:
+    build: {context: ./integrations, dockerfile: mcp_core/Dockerfile}
+    environment: {<<: *integration-env, MCP_SERVER_NAME: nethiz-core}
+    ports: ["9101:8000"]
+    depends_on:
+      core-api: {condition: service_healthy}
+
+  mcp-payment:
+    build: {context: ./integrations, dockerfile: mcp_payment/Dockerfile}
+    environment: {<<: *integration-env, MCP_SERVER_NAME: nethiz-payment, PSP_API_KEY: "${PSP_API_KEY}"}
+    ports: ["9102:8000"]
+    depends_on: [payment-gateway]
+
+  mcp-ticketing:
+    build: {context: ./integrations, dockerfile: mcp_ticketing/Dockerfile}
+    environment: {<<: *integration-env, MCP_SERVER_NAME: nethiz-ticketing, TICKETING_API_KEY: "${TICKETING_API_KEY}"}
+    ports: ["9103:8000"]
+    depends_on:
+      ticketing: {condition: service_healthy}
+
+  mcp-monitoring:
+    build: {context: ./integrations, dockerfile: mcp_monitoring/Dockerfile}
+    environment:
+      <<: *integration-env
+      MCP_SERVER_NAME: nethiz-monitoring
+      ASSISTANT_ALERT_WEBHOOK_URL: ${ASSISTANT_ALERT_WEBHOOK_URL}
+    ports: ["9104:8000"]
+    depends_on: [prometheus]
+
+  mcp-notification:
+    build: {context: ./integrations, dockerfile: mcp_notification/Dockerfile}
+    environment: {<<: *integration-env, MCP_SERVER_NAME: nethiz-notification, NOTIFY_API_KEY: "${NOTIFY_API_KEY}"}
+    ports: ["9105:8000"]
+    depends_on:
+      notification-hub: {condition: service_healthy}
+
+  # ───────────────────────────── assistant ────────────────────────────────
+  assistant:
+    build: {context: ./assistant}
+    environment:
+      TZ: ${TZ:-Europe/Istanbul}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TENANT: ${TENANT:-nethiz}
+      TENANT_CONFIG_DIR: /app/config/tenants
+      ASSISTANT_DATABASE_URL: postgresql+psycopg://${ASSISTANT_DB_USER}:${ASSISTANT_DB_PASSWORD}@assistant-db:5432/${ASSISTANT_DB_NAME}
+      MCP_CORE_URL: http://mcp-core:8000/mcp
+      MCP_PAYMENT_URL: http://mcp-payment:8000/mcp
+      MCP_TICKETING_URL: http://mcp-ticketing:8000/mcp
+      MCP_MONITORING_URL: http://mcp-monitoring:8000/mcp
+      MCP_NOTIFICATION_URL: http://mcp-notification:8000/mcp
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai_agents}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-mini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      DECISION_SERVICE: ${DECISION_SERVICE:-llm_structured}
+      DECISION_MIN_CONFIDENCE: ${DECISION_MIN_CONFIDENCE:-0.6}
+      MAX_TOOL_CALLS_PER_TURN: ${MAX_TOOL_CALLS_PER_TURN:-8}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      LANGFUSE_ENABLED: ${LANGFUSE_ENABLED:-false}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-http://langfuse-web:3000}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+    volumes:
+      - ./config:/app/config:ro
+      - assistant-var:/app/var
+    ports: ["8080:8000"]
+    depends_on:
+      assistant-db: {condition: service_healthy}
+      mcp-core: {condition: service_healthy}
+      mcp-ticketing: {condition: service_healthy}
+
+  # ─────────────────────── tooling (opt-in profiles) ──────────────────────
+  chaos:
+    build: {context: ./company, dockerfile: chaos/Dockerfile}
+    profiles: ["tools"]
+    environment:
+      <<: *company-env
+      COMPANY_DB_NAME: nethiz_core
+      PAYMENT_DB_NAME: nethiz_payment
+      CORE_API_BASE_URL: http://core-api:8000
+      CORE_API_KEY_CRM: ${CORE_API_KEY_CRM}
+      PAYMENT_API_BASE_URL: http://payment-gateway:8000
+      PSP_API_KEY: ${PSP_API_KEY}
+    depends_on:
+      core-api: {condition: service_healthy}
+
+  test-runner:
+    build: {context: ., dockerfile: requirements/Dockerfile.test}
+    profiles: ["test"]
+    environment:
+      <<: *integration-env
+      TENANT: ${TENANT:-nethiz}
+      TENANT_CONFIG_DIR: /workspace/config/tenants
+      COMPANY_DB_USER: ${COMPANY_DB_USER}
+      COMPANY_DB_PASSWORD: ${COMPANY_DB_PASSWORD}
+      COMPANY_DB_HOST: company-db
+      COMPANY_DB_PORT: 5432
+      ASSISTANT_DATABASE_URL: postgresql+psycopg://${ASSISTANT_DB_USER}:${ASSISTANT_DB_PASSWORD}@assistant-db:5432/${ASSISTANT_DB_NAME}
+      CORE_API_KEY_CRM: ${CORE_API_KEY_CRM}
+      CORE_API_KEY_PARTNER: ${CORE_API_KEY_PARTNER}
+      PSP_API_KEY: ${PSP_API_KEY}
+      TICKETING_API_KEY: ${TICKETING_API_KEY}
+      NOTIFY_API_KEY: ${NOTIFY_API_KEY}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      ASSISTANT_BASE_URL: http://assistant:8000
+      MCP_CORE_URL: http://mcp-core:8000/mcp
+      MCP_PAYMENT_URL: http://mcp-payment:8000/mcp
+      MCP_TICKETING_URL: http://mcp-ticketing:8000/mcp
+      MCP_MONITORING_URL: http://mcp-monitoring:8000/mcp
+      MCP_NOTIFICATION_URL: http://mcp-notification:8000/mcp
+      LLM_PROVIDER: scripted
+      EVAL_MODE: ${EVAL_MODE:-scripted}
+      READONLY_DIAG_USER: ${READONLY_DIAG_USER}
+      READONLY_DIAG_PASSWORD: ${READONLY_DIAG_PASSWORD}
+    volumes: ["./:/workspace"]
+
+volumes:
+  company-db-data:
+  assistant-db-data:
+  assistant-var:

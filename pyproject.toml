@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+testpaths = ["tests", "company", "integrations", "assistant", "evals"]
+norecursedirs = [".git", "*.egg-info", "var", "evals/reports", "node_modules"]
+markers = [
+    "integration: needs the running docker compose stack",
+    "slow: takes more than a few seconds",
+]
+addopts = "-q --timeout=180"
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

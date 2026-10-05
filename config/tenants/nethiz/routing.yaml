@@ -1,0 +1,66 @@
+# Deterministic routing + scoring tables. Changing these does not require code changes.
+version: 1
+tenant: nethiz
+
+# ── Package recommendation weights (assistant/recommendation/engine.py) ─────
+recommendation:
+  weights:
+    speed_adequacy: 0.35
+    budget_fit: 0.25
+    profile_match: 0.20
+    commitment_match: 0.10
+    extras_match: 0.10
+  mbps_per_device: 25
+  budget_hard_filter_tolerance: 0.15   # >15% over budget → excluded
+  min_mbps_floor: 50
+  usage_profile_map:
+    student: [student, basic]
+    family: [family, premium]
+    home_office: [home_office, small_business]
+    gaming: [gamer, premium]
+    streaming: [family, premium]
+    basic: [basic, student]
+  reason_codes_tr:
+    speed_ok: "Ev içindeki {device_count} cihaz için {down_mbps} Mbps rahat yeter."
+    speed_tight: "{down_mbps} Mbps, {device_count} cihaz için sınırda kalabilir."
+    budget_ok: "Aylık {monthly_price_try} TL bütçenizin içinde."
+    budget_over: "Aylık {monthly_price_try} TL bütçenizin bir miktar üzerinde."
+    profile_match: "{profile_tr} kullanım profiline göre tasarlanmış paket."
+    no_commitment: "Taahhüt yok, istediğiniz zaman çıkabilirsiniz."
+    commitment_discount: "{commitment_months} ay taahhütle aylık fiyat daha düşük."
+    static_ip: "Sabit IP dahil, uzaktan çalışma için uygun."
+    tv_included: "TV paketi dahil."
+    gaming_optimized: "Oyun trafiği için düşük gecikme optimizasyonu var."
+
+# ── Issue type → department (fallback when the decision service is unsure) ──
+issue_routing:
+  stuck_provisioning: SUBSCRIPTION_OPS
+  paid_not_active: SUBSCRIPTION_OPS
+  regional_outage: TECHNICAL_INFRA
+  double_charge: BILLING
+  refund_request: BILLING
+  missed_installation: FIELD_INSTALL
+  payment_system_down: TECHNICAL_INFRA
+  plan_change_request: SUBSCRIPTION_OPS
+  infrastructure_repair: TECHNICAL_INFRA
+  other: SUBSCRIPTION_OPS
+
+# ── Urgency defaults (the decision service may raise, never lower below these) ─
+urgency_floor:
+  regional_outage: HIGH
+  payment_system_down: URGENT
+  double_charge: HIGH
+  missed_installation: NORMAL
+  stuck_provisioning: NORMAL
+  paid_not_active: NORMAL
+  other: LOW
+
+# ── Diagnostic checklist order (diagnostic mode is a fixed sequence) ────────
+diagnostic_checklist:
+  - find_customer
+  - get_subscription_status
+  - get_payment_status
+  - get_provisioning_status
+  - get_installation_status
+  - get_active_incidents_for_region
+  - get_service_health

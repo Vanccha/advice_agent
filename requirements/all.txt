@@ -1,0 +1,10 @@
+-r ../company/requirements.txt
+-r ../integrations/requirements.txt
+-r ../assistant/requirements.txt
+pytest>=8.3
+pytest-asyncio>=0.24
+pytest-timeout>=2.3
+respx>=0.21
+freezegun>=1.5
+anyio>=4.6
+tabulate>=0.9

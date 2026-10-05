@@ -1,0 +1,59 @@
+# Tenant wiring. Moving to another customer means adding a sibling directory and
+# (if their systems differ) new adapters under integrations/ — nothing else.
+version: 1
+tenant: nethiz
+display_name: "NetHız Telekom"
+locale: tr-TR
+timezone: Europe/Istanbul
+currency: TRY
+
+business_domain: fiber_isp
+customer_identifier:
+  label_tr: "Müşteri numarası"
+  pattern: "^NH-\\d{6}$"
+  example: "NH-100042"
+
+# Adapter endpoints. Values resolve from the environment so the same config works in
+# compose, staging and production.
+adapters:
+  core:
+    transport: mcp_streamable_http
+    url: ${MCP_CORE_URL}
+    required: true
+  payment:
+    transport: mcp_streamable_http
+    url: ${MCP_PAYMENT_URL}
+    required: true
+  ticketing:
+    transport: mcp_streamable_http
+    url: ${MCP_TICKETING_URL}
+    required: true
+  monitoring:
+    transport: mcp_streamable_http
+    url: ${MCP_MONITORING_URL}
+    required: false
+  notification:
+    transport: mcp_streamable_http
+    url: ${MCP_NOTIFICATION_URL}
+    required: false
+
+departments:
+  TECHNICAL_INFRA:
+    display_name_tr: "Teknik Altyapı"
+    channel: teknik-altyapi
+  BILLING:
+    display_name_tr: "Faturalama"
+    channel: faturalama
+  SUBSCRIPTION_OPS:
+    display_name_tr: "Abonelik İşlemleri"
+    channel: abonelik-islemleri
+  FIELD_INSTALL:
+    display_name_tr: "Saha Kurulum Ekibi"
+    channel: saha-kurulum
+
+persona:
+  name_tr: "NetHız Dijital Asistan"
+  tone_tr: "kibar, net, kısa cümleler; müşteriye teknik jargon yüklemez"
+  language: tr
+  disclaimers_tr:
+    - "Yetkim dışındaki işlemleri ilgili ekibe aktarırım."
