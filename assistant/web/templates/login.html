@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Müşteri Girişi — NetHız Destek Asistanı</title>
-  <link rel="stylesheet" href="/static/site.css" />
-  <link rel="stylesheet" href="/static/widget.css" />
+  <link rel="stylesheet" href="/static/site.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/static/widget.css?v={{ asset_version }}" />
 </head>
 <body class="nh-login-body">
   <main class="nh-login">
@@ -54,6 +54,6 @@
     </div>
   </main>
 
-  <script src="/static/widget.js" data-login-page="true" defer></script>
+  <script src="/static/widget.js?v={{ asset_version }}" data-login-page="true" defer></script>
 </body>
 </html>

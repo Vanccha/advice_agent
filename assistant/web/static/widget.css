@@ -521,3 +521,15 @@
     right: -8px;
   }
 }
+
+/* ---------------------------- hidden wins, always ----------------------------
+   The widget shows and hides elements with the HTML `hidden` attribute. An author
+   rule such as `.nh-widget__panel { display: flex }` outranks the user agent's
+   `[hidden] { display: none }`, which silently turned every "hide" into a no-op:
+   the panel could not be closed and the typing dots never went away.
+   `!important` settles that in any compliant engine, and keeping this rule LAST in
+   the file means source order agrees too — so it still holds in engines that treat
+   `!important` loosely, and it cannot be undone by a rule added after it. */
+[hidden] {
+  display: none !important;
+}

@@ -231,3 +231,37 @@ def test_widget_js_only_calls_relative_endpoints():
         "/audit",
     ):
         assert endpoint in source, f"widget.js does not appear to call {endpoint}"
+
+
+# --------------------------------------------------------------------------------------
+# stylesheets
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("stylesheet", ["widget.css", "site.css"])
+def test_the_hidden_attribute_actually_hides(stylesheet) -> None:
+    """The widget hides things with the HTML `hidden` attribute, and an author rule such as
+    `.nh-widget__panel { display: flex }` outranks the user agent's `[hidden]` rule — which
+    silently turned every "hide" into a no-op: the chat panel would not close and the typing
+    dots stayed on screen from page load. Any stylesheet here must assert `hidden` wins.
+    """
+    raw = (STATIC_DIR / stylesheet).read_text(encoding="utf-8")
+    # Comments explain the rule and mention `[hidden]` themselves, so strip them first.
+    css = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+    assert "[hidden]" in css, f"{stylesheet} must make the hidden attribute authoritative"
+    block = css.split("[hidden]", 1)[1].split("}", 1)[0]
+    assert "display" in block and "none" in block and "!important" in block, (
+        f"{stylesheet}'s [hidden] rule must be `display: none !important`"
+    )
+
+
+def test_every_element_the_widget_hides_is_in_the_markup() -> None:
+    """`setTyping`/`closePanel`/`showError` toggle `hidden` on these ids; a renamed id would
+    make the toggle silently do nothing, exactly like the CSS bug above."""
+    markup = (TEMPLATES_DIR / "_widget.html").read_text(encoding="utf-8")
+    for element_id in ("chat-panel", "typing-indicator", "chat-error", "chat-launcher-badge"):
+        assert f'id="{element_id}"' in markup, f"{element_id} is missing from the widget markup"
+        # and it must start hidden, so nothing flashes before the first interaction
+        if element_id != "chat-panel":
+            segment = markup.split(f'id="{element_id}"', 1)[1].split(">", 1)[0]
+            assert "hidden" in segment, f"{element_id} should start hidden"

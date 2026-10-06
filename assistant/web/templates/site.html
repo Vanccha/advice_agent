@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NetHız Telekom — Eve ve İşyerine Fiber İnternet</title>
   <meta name="description" content="NetHız Telekom fiber internet paketleri. Bu sayfa sadece demo amaçlıdır." />
-  <link rel="stylesheet" href="/static/site.css" />
-  <link rel="stylesheet" href="/static/widget.css" />
+  <link rel="stylesheet" href="/static/site.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/static/widget.css?v={{ asset_version }}" />
 </head>
 <body>
 
@@ -127,6 +127,6 @@
        ================================================================================ -->
   {% include "_widget.html" %}
 
-  <script src="/static/widget.js" defer></script>
+  <script src="/static/widget.js?v={{ asset_version }}" defer></script>
 </body>
 </html>

@@ -168,7 +168,9 @@ class ApprovalRequest(BaseModel):
 @app.get("/")
 def index(request: Request):
     customer_no = request.cookies.get(COOKIE_NAME)
-    return templates.TemplateResponse(request, "site.html", {"customer_no": customer_no})
+    return templates.TemplateResponse(
+        request, "site.html", {"customer_no": customer_no, "asset_version": ASSET_VERSION}
+    )
 
 
 # Demo shortcuts, per tenant. A tenant with none falls back to the single documented
@@ -181,6 +183,25 @@ _DEMO_EXAMPLE_CUSTOMERS: dict[str, list[dict[str, str]]] = {
         {"customer_no": "NH-100005", "note_tr": "askıya alınmış"},
     ],
 }
+
+
+# A browser that caches `/static/widget.css` will keep a fixed bug on screen no matter what
+# the server ships — which is exactly what happened once during development. The version is
+# derived from the files' own contents, so every change produces a new URL and a stale copy
+# cannot be served.
+def _compute_asset_version() -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    static_dir = WEB_DIR / "static"
+    for path in sorted(static_dir.glob("*")):
+        if path.is_file():
+            digest.update(path.name.encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
+
+
+ASSET_VERSION = _compute_asset_version()
 
 
 @app.get("/login")
@@ -204,6 +225,7 @@ def login_page(request: Request):
                 identifier.pattern.lstrip("^").rstrip("$") if identifier else ""
             ),
             "example_customers": examples or [],
+            "asset_version": ASSET_VERSION,
         },
     )
 
