@@ -36,6 +36,14 @@ _HANDOVER_REPLY_TR = (
     "Ne ile ilgili yardım istediğinizden tam olarak emin olamadım, bu yüzden sizi bir "
     "temsilciye yönlendiriyorum."
 )
+# When the model itself is unreachable the honest answer is not "I did not understand you" —
+# the customer wrote perfectly clearly. `LLMStructuredDecisionService` reports a failed
+# provider call as a confidence-0 decision whose rationale starts with this marker.
+_PROVIDER_FAILURE_MARKER = "decision provider call failed"
+_PROVIDER_DOWN_REPLY_TR = (
+    "Şu anda yapay zekâ servisime ulaşamıyorum, bu yüzden talebinizi değerlendiremiyorum. "
+    "Sizi bir temsilciye yönlendiriyorum; kısa süre içinde tekrar denemeniz de mümkün."
+)
 
 
 @dataclass
@@ -86,7 +94,11 @@ def route_intent(ctx: TurnContext, masked_message: str) -> RouterResult:
             next_mode=Mode.CLOSING,
             confidence=fallback.decision.confidence,
             escalated=True,
-            reply_tr=_HANDOVER_REPLY_TR,
+            reply_tr=(
+                _PROVIDER_DOWN_REPLY_TR
+                if _PROVIDER_FAILURE_MARKER in (fallback.decision.rationale or "")
+                else _HANDOVER_REPLY_TR
+            ),
         )
 
     intent = fallback.decision.value

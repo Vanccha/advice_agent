@@ -41,6 +41,11 @@ if compgen -G "assistant/*/tests" > /dev/null; then
       python -m pytest assistant "${PYTEST_EXTRA[@]}"
 fi
 
+if [ -d evals/tests ]; then
+  run "evals" env PYTHONPATH="/workspace/assistant:/workspace" \
+      python -m pytest evals/tests "${PYTEST_EXTRA[@]}"
+fi
+
 if [ -d tests/integration ]; then
   run "integration" env PYTHONPATH="/workspace/assistant:/workspace/integrations" \
       python -m pytest tests/integration "${PYTEST_EXTRA[@]}"

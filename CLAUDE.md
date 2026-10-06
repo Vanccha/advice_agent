@@ -76,9 +76,23 @@ assistant/observability/  Langfuse + OTel wrapper (no-op when disabled)
 assistant/api/, assistant/web/   HTTP API + embedded chat widget
 config/tenants/       per-customer configuration (nethiz, _example)
 evals/                scenario + advisory evaluations (make eval)
+evals/datasets/       the Turkish user messages and customer profiles under test
 tests/architecture/   boundary enforcement
 tests/integration/    cross-service critical flows
 ```
+
+## How the code is laid out for imports and tests
+
+Each immediate subdirectory of `assistant/` is its own top-level package, because the
+container sets `PYTHONPATH=/app:/app/assistant` — so it is `from policy.engine import ...`,
+not `from assistant.policy.engine import ...`. Two consequences worth knowing:
+
+- the shared assistant vocabulary lives in `core_common/`, not `common/`, and the MCP client
+  wrapper in `mcp_gateway/`, not `mcp/` — those two names would collide with the integration
+  layer's package and with the installed MCP SDK;
+- every company service names its own package `app`, so the suites cannot be collected in one
+  pytest process. `scripts/run_tests.sh` runs each suite in its own process with the right
+  `PYTHONPATH`; that is what `make test` calls.
 
 ## Commands
 
