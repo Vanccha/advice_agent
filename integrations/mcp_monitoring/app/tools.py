@@ -26,6 +26,15 @@ from .models import (
 
 SOURCE_MONITORING = "monitoring_api"
 
+# Which service an alert speaks for, when the alert itself carries no `service` label.
+# Used to merge the company's alerting into `get_service_health`, because Prometheus `up`
+# only proves /metrics answered — not that the service is doing its job.
+ALERT_SERVICE_MAP = {
+    "PaymentGatewayDown": "payment-gateway",
+    "CoreApiDown": "core-api",
+    "StuckProvisioningJobs": "provisioning-worker",
+}
+
 
 async def handle_get_service_health(_inp: GetServiceHealthInput) -> ToolResult[Any]:
     """Query Prometheus's `up` metric and report a per-service up/down/unknown
@@ -67,10 +76,51 @@ async def handle_get_service_health(_inp: GetServiceHealthInput) -> ToolResult[A
         value = item.get("value", [None, None])[1]
         status_by_job[job] = "up" if value == "1" else "down"
 
-    services = [
-        ServiceHealth(service=svc, status=status_by_job.get(svc, "unknown")) for svc in MONITORED_SERVICES
-    ]
-    return ok(GetServiceHealthOutput(prometheus_reachable=True, services=services, detail=None), SOURCE_MONITORING)
+    # Prometheus `up` only says the /metrics endpoint answered. A service can keep serving
+    # metrics while refusing all business traffic — the payment gateway does exactly that
+    # during an outage — so the company's own firing alerts are merged in. Reporting such a
+    # service as "up" would be a lie by omission, and the alert is the signal the company's
+    # operators themselves act on.
+    alert_down: dict[str, str] = {}
+    firing: list[str] = []
+    alert_detail: str | None = None
+    try:
+        alerts_response = await alertmanager_client().get("/api/v2/alerts", params={"active": "true"})
+        if alerts_response.status_code == 200:
+            for alert in alerts_response.json() or []:
+                labels = alert.get("labels") or {}
+                name = labels.get("alertname")
+                state = ((alert.get("status") or {}).get("state")) or "active"
+                if not name or state not in ("active", "firing"):
+                    continue
+                firing.append(name)
+                service = labels.get("service") or ALERT_SERVICE_MAP.get(name)
+                if service:
+                    alert_down[service] = name
+        else:
+            alert_detail = f"alertmanager returned HTTP {alerts_response.status_code}"
+    except httpx.HTTPError as exc:
+        # Never fail the diagnosis because the alerting side is unreachable.
+        alert_detail = f"alertmanager unreachable: {exc!s}"
+
+    services = []
+    for svc in MONITORED_SERVICES:
+        status = status_by_job.get(svc, "unknown")
+        reason = None
+        if svc in alert_down:
+            status = "down"
+            reason = f"firing alert: {alert_down[svc]}"
+        services.append(ServiceHealth(service=svc, status=status, reason=reason))
+
+    return ok(
+        GetServiceHealthOutput(
+            prometheus_reachable=True,
+            services=services,
+            firing_alerts=sorted(set(firing)),
+            detail=alert_detail,
+        ),
+        SOURCE_MONITORING,
+    )
 
 
 async def handle_query_metric(inp: QueryMetricInput) -> ToolResult[Any]:

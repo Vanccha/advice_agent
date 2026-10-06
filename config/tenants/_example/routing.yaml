@@ -13,6 +13,9 @@ recommendation:
   mbps_per_device: 25
   budget_hard_filter_tolerance: 0.15   # >15% over budget → excluded
   min_mbps_floor: 50
+  # Packages below this fraction of the household's required speed are not offered,
+  # unless filtering would leave nothing to recommend.
+  speed_hard_filter_ratio: 0.5
   usage_profile_map:
     student: [student, basic]
     family: [family, premium]

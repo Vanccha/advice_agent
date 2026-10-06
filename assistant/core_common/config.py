@@ -196,6 +196,10 @@ class RecommendationConfig(BaseModel):
     mbps_per_device: float
     budget_hard_filter_tolerance: float
     min_mbps_floor: float
+    # A package offering less than this fraction of the household's required speed is not
+    # offered at all — unless nothing else survives the filters, in which case the customer
+    # still sees the closest option and the reply says it is tight.
+    speed_hard_filter_ratio: float = 0.5
     usage_profile_map: dict[str, list[str]]
     reason_codes_tr: dict[str, str]
 

@@ -13,7 +13,21 @@ from shared.clock import utcnow
 
 from chaos.errors import ChaosError
 from chaos.events import record_chaos_event
-from chaos.http import get_control_flags, pay_subscription_until_succeeded, set_control_flags
+from shared.errors import ApiError
+from shared.fake_identity import (
+    make_address,
+    make_email,
+    make_full_name,
+    make_invalid_national_id,
+    make_phone,
+)
+
+from chaos.http import (
+    core_api_client,
+    get_control_flags,
+    pay_subscription_until_succeeded,
+    set_control_flags,
+)
 from chaos.settings import ChaosSettings
 
 # ---------------------------------------------------------------------------
@@ -178,6 +192,71 @@ def find_promotable_subscription(engine: Engine, customer_no: str | None, region
     """Pure read: a 'registered'/'awaiting_payment' subscription that could be promoted."""
     with engine.connect() as conn:
         return _find_promotable_subscription(conn, customer_no, region)
+
+
+FRESH_SIGNUP_PACKAGE = "FIBER_100_TEMEL"
+
+
+def create_fresh_signup(settings: ChaosSettings, engine: Engine, region: str | None = None) -> dict:
+    """Register a brand-new customer and subscription through the company's own API.
+
+    The seeded pool of early-stage subscriptions is finite: the provisioning worker drains
+    it and every injection consumes one, so after a while the early-lifecycle scenarios
+    would have no victim left and simply fail — including during a live demo. Rather than
+    give up, this does exactly what a real signup does (`POST /v1/customers` then
+    `POST /v1/subscriptions`), which keeps those scenarios reproducible indefinitely.
+    """
+    rng = random.Random()
+    with engine.connect() as conn:
+        if region:
+            row = conn.execute(
+                text("SELECT code FROM core.regions WHERE code = :code"), {"code": region}
+            ).mappings().first()
+            if row is None:
+                raise ChaosError(f"unknown region {region!r}")
+            region_code = row["code"]
+        else:
+            row = conn.execute(
+                text("SELECT code FROM core.regions ORDER BY random() LIMIT 1")
+            ).mappings().first()
+            if row is None:
+                raise ChaosError("the company has no regions configured")
+            region_code = row["code"]
+        district_row = conn.execute(
+            text("SELECT name, city FROM core.regions WHERE code = :code"), {"code": region_code}
+        ).mappings().first()
+
+    full_name = make_full_name(rng)
+    client = core_api_client(settings)
+    try:
+        customer = client.post(
+            "/v1/customers",
+            json_body={
+                "full_name": full_name,
+                "national_id": make_invalid_national_id(rng),
+                "phone": make_phone(rng),
+                "email": make_email(full_name, rng),
+                "address_line": make_address(rng),
+                "district": district_row["name"] if district_row else "Merkez",
+                "city": district_row["city"] if district_row else "İstanbul",
+                "region_code": region_code,
+                "kvkk_consent": True,
+            },
+        ).json()
+        subscription = client.post(
+            "/v1/subscriptions",
+            json_body={"customer_no": customer["customer_no"], "package_code": FRESH_SIGNUP_PACKAGE},
+        ).json()
+    except ApiError as exc:
+        raise ChaosError(f"could not register a new subscriber through core-api: {exc}") from exc
+
+    return {
+        "subscription_id": subscription["id"],
+        "customer_no": customer["customer_no"],
+        "region_code": region_code,
+        "status": subscription["status"],
+        "fresh_signup": True,
+    }
 
 
 def promote_to_payment_received(settings: ChaosSettings, candidate: dict) -> dict:

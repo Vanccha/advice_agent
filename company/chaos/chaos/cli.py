@@ -50,6 +50,23 @@ def _fail(ctx: ChaosContext, message: str) -> None:
     raise typer.Exit(code=1)
 
 
+def _fresh_candidate(ctx: ChaosContext, engine: Any) -> dict[str, Any]:
+    """A brand-new subscriber, used when no early-lifecycle subscription is left.
+
+    Under --dry-run nothing is registered; a placeholder is returned so the printed plan
+    still reads correctly.
+    """
+    if ctx.dry_run:
+        return {
+            "subscription_id": "<new>",
+            "customer_no": "<new>",
+            "region_code": ctx.region,
+            "status": "registered",
+            "fresh_signup": True,
+        }
+    return sc.create_fresh_signup(ctx.settings, engine, ctx.region)
+
+
 def _outcome_lines(outcome: sc.ScenarioOutcome) -> list[str]:
     lines = [f"Scenario: {outcome.scenario}" + (" [DRY RUN]" if outcome.dry_run else "")]
     if outcome.picked:
@@ -82,6 +99,11 @@ def cmd_stuck_provisioning(
         needs_promotion = False
         if candidate is None:
             candidate = sc.find_promotable_subscription(engine, cctx.customer, cctx.region)
+            needs_promotion = True
+        if candidate is None and cctx.customer is None:
+            # The early-lifecycle pool is finite and the worker drains it; register a new
+            # subscriber the way a real signup would rather than failing the scenario.
+            candidate = _fresh_candidate(cctx, engine)
             needs_promotion = True
     except ChaosError as exc:
         _fail(cctx, str(exc))
@@ -133,6 +155,9 @@ def cmd_paid_not_active(
         needs_promotion = False
         if candidate is None:
             candidate = sc.find_promotable_subscription(engine, cctx.customer, cctx.region)
+            needs_promotion = True
+        if candidate is None and cctx.customer is None:
+            candidate = _fresh_candidate(cctx, engine)
             needs_promotion = True
     except ChaosError as exc:
         _fail(cctx, str(exc))

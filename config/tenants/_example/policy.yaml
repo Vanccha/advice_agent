@@ -8,7 +8,7 @@ decision:
   escalate_on_low_confidence: true
 
 limits:
-  max_tool_calls_per_turn: 8
+  max_tool_calls_per_turn: 12
   max_questions_advisory: 5
   max_actions_per_conversation: 3
 

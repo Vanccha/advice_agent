@@ -130,6 +130,10 @@ def recommend_packages(
     weights = rec_cfg.weights
     templates = rec_cfg.reason_codes_tr
 
+    device_count = profile.device_count or 1
+    required_mbps = max(rec_cfg.min_mbps_floor, device_count * rec_cfg.mbps_per_device)
+    speed_cutoff = required_mbps * rec_cfg.speed_hard_filter_ratio
+
     scored: list[tuple[float, dict[str, Any], list[str]]] = []
 
     for package in packages:
@@ -163,6 +167,14 @@ def recommend_packages(
         reasons.extend(extras_reasons)
 
         scored.append((round(total, 6), package, reasons))
+
+    # Never offer a package that cannot plausibly serve the household: recommending a
+    # 50 Mbps line to eight streaming devices is bad advice even as a cheap third option.
+    # The filter steps aside when it would leave nothing to recommend (a tight budget, say),
+    # so the customer still gets the closest package with an honest "tight" reason attached.
+    adequate = [item for item in scored if item[1]["down_mbps"] >= speed_cutoff]
+    if adequate:
+        scored = adequate
 
     # Highest score first; ties -> lower price, then shorter commitment.
     scored.sort(key=lambda item: (-item[0], item[1]["monthly_price_try"], item[1]["commitment_months"]))

@@ -25,6 +25,7 @@ from llm.base import LLMProvider
 from mcp_gateway.action_runner import make_action_runner
 from modes import action, advisory, diagnostic, status_query
 from modes.context import TurnContext
+from mcp_gateway.types import ToolBudgetExceeded
 from modes.machine import LimitExceeded, StateMachine
 from modes.router import route_intent
 from modes.ticket_links import record_ticket_link
@@ -162,6 +163,25 @@ class Orchestrator:
                 )
                 self.audit_log.append(
                     conv_id, StepType.ESCALATION, f"limit exceeded: {exc}", str(exc), {}, tenant=self.tenant
+                )
+            except ToolBudgetExceeded as exc:
+                # The per-turn tool budget is the assistant's own guard rail, not a company
+                # failure: hitting it must end the turn politely and hand over, never break
+                # the conversation.
+                new_mode = Mode.ESCALATED if self.machine.can_transition(mode, Mode.ESCALATED) else Mode.CLOSING
+                step = _StepOutcome(
+                    reply_tr=(
+                        "Kontrollerimi tamamlayamadan sorgu sınırıma ulaştım. Durumu bir "
+                        "temsilciye aktarıyorum, en kısa sürede size dönecekler."
+                    )
+                )
+                self.audit_log.append(
+                    conv_id,
+                    StepType.ESCALATION,
+                    "tool call budget exhausted mid-turn",
+                    str(exc),
+                    {"queried_sources": ["assistant:tool_budget"]},
+                    tenant=self.tenant,
                 )
 
         history.append({"role": "user", "content": masked_message})

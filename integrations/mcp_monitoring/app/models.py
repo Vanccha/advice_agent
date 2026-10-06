@@ -31,11 +31,19 @@ class GetServiceHealthInput(BaseModel):
 class ServiceHealth(BaseModel):
     service: str
     status: ServiceStatus
+    reason: Optional[str] = Field(
+        default=None,
+        description="why the service is not up, when the signal came from an alert rather than `up`",
+    )
 
 
 class GetServiceHealthOutput(BaseModel):
     prometheus_reachable: bool
     services: list[ServiceHealth]
+    firing_alerts: list[str] = Field(
+        default_factory=list,
+        description="names of the company's currently firing alerts, for context",
+    )
     detail: Optional[str] = Field(
         default=None, description="set when Prometheus itself could not be queried"
     )

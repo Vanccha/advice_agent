@@ -142,5 +142,10 @@ no_action_cases:
   - id: status_query
     message: "Geçen gün açtığınız kaydım ne durumda?"
     expect:
-      final_mode: [STATUS_QUERY, ROUTER, DIAGNOSTIC]
+      # CLOSING is the correct resting mode once a status question has been answered —
+      # the same way the other scenarios end. The assertion that carries weight here is
+      # that asking about an existing record opens nothing new.
+      final_mode: [STATUS_QUERY, ROUTER, DIAGNOSTIC, CLOSING]
       must_not_create_ticket: true
+      must_not_execute_action: true
+      reply_must_mention_any_tr: ["talep", "kayıt", "durum", "bilet", "abonelik"]

@@ -194,9 +194,29 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
     health_outcome = ctx.call_tool("get_service_health", {})
     health = raw_payload(health_outcome)
     evidence["queried_sources"].append("mcp-monitoring:get_service_health")
-    if isinstance(health, dict) and _payment_gateway_down(health):
+
+    # The monitoring view only turns red once the company's alert has fired (one minute of
+    # `for:`). A customer complaining right now cannot wait for that, so the gateway's own
+    # reported state is consulted as well — it is immediate and equally truthful.
+    gateway_down = isinstance(health, dict) and _payment_gateway_down(health)
+    if not gateway_down:
+        gateway_outcome = ctx.call_tool("get_gateway_health", {})
+        gateway = raw_payload(gateway_outcome)
+        evidence["queried_sources"].append("mcp-payment:get_gateway_health")
+        if isinstance(gateway, dict) and (
+            gateway.get("outage") is True or gateway.get("reachable") is False
+        ):
+            evidence["gateway_health"] = gateway
+            gateway_down = True
+
+    if gateway_down:
         evidence["service_health"] = health
-        _step(ctx, "diagnostic: payment gateway reported down", "get_service_health", evidence)
+        _step(
+            ctx,
+            "diagnostic: payment gateway reported down",
+            "monitoring and/or the gateway itself report the payment service as not serving",
+            evidence,
+        )
         return Diagnosis(
             root_cause=ROOT_CAUSE_PAYMENT_SYSTEM_DOWN,
             scope=DiagnosisScope.SYSTEM_WIDE,
@@ -255,19 +275,36 @@ def _duplicate_pairs_from_payment_records(records: list[dict[str, Any]]) -> list
     return [ids for ids in by_amount.values() if len(ids) >= 2]
 
 
+_DOWN_WORDS = ("down", "unavailable", "outage", "unhealthy")
+
+
 def _payment_gateway_down(health: dict[str, Any]) -> bool:
-    # Accept a few plausible shapes: {"payment_gateway": {"ok": False}}, {"services": {...}},
-    # or a flat {"ok": False, "service": "payment-gateway"}.
+    """True when the monitoring view says the payment gateway is not serving.
+
+    The live adapter answers `{"services": [{"service": "payment-gateway", "status": "down",
+    "reason": ...}], ...}`; fixtures and earlier shapes used a mapping or a flat record, so
+    all of them are accepted.
+    """
+    services = health.get("services")
+    if isinstance(services, list):
+        for entry in services:
+            if not isinstance(entry, dict):
+                continue
+            if "payment" not in str(entry.get("service", "")).lower():
+                continue
+            if str(entry.get("status", "")).lower() in _DOWN_WORDS:
+                return True
+
     candidates = [health]
-    if isinstance(health.get("services"), dict):
-        candidates.append(health["services"])
+    if isinstance(services, dict):
+        candidates.append(services)
     for node in candidates:
         for key, value in node.items():
             if "payment" not in str(key).lower():
                 continue
             if isinstance(value, dict) and value.get("ok") is False:
                 return True
-            if isinstance(value, str) and value.lower() in ("down", "unavailable", "outage"):
+            if isinstance(value, str) and value.lower() in _DOWN_WORDS:
                 return True
     if health.get("ok") is False and "payment" in str(health.get("service", "")).lower():
         return True
