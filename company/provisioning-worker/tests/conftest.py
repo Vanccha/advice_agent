@@ -83,6 +83,28 @@ def db_engine(require_db):
     yield get_engine()
 
 
+# The helpers commit, so rows outlive a test and even a whole run. Sweep-style assertions
+# count rows across the whole table, which made them depend on test order and on whatever
+# previous runs had left behind (observed: a sweep expected to touch 1 job touched 5).
+# Every test therefore starts from an empty core schema.
+_TABLES_TO_CLEAR = (
+    "core.provisioning_jobs",
+    "core.modems",
+    "core.installation_appointments",
+    "core.subscription_events",
+    "core.subscriptions",
+    "core.customers",
+)
+
+
+@pytest.fixture(autouse=True)
+def _clean_core_tables(db_engine):
+    with db_engine.begin() as conn:
+        for table in _TABLES_TO_CLEAR:
+            conn.execute(text(f"DELETE FROM {table}"))
+    yield
+
+
 @pytest.fixture()
 def session(db_engine):
     from app.db import get_session_factory

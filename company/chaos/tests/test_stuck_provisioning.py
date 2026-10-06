@@ -13,10 +13,19 @@ from chaos.cli import app
 runner = CliRunner()
 
 
+def _resolve(engine, settings, kind: str) -> dict:
+    """A victim for `kind`, promoted if necessary — the same resolution the CLI performs,
+    so these tests keep working once the seeded early-lifecycle pool is drained."""
+    candidate, needs_promotion = sc.ensure_candidate(settings, engine, kind=kind)
+    if needs_promotion:
+        candidate = sc.promote_to_payment_received(settings, candidate)
+    return candidate
+
+
 def test_inject_freezes_job_with_chaos_hold_marker(core_eng, settings):
     candidate = sc.find_stuck_provisioning_candidate(core_eng, None, None)
     if candidate is None:
-        candidate = sc.find_promotable_subscription(core_eng, None, None)
+        candidate = _resolve(core_eng, settings, "stuck_provisioning")
         assert candidate is not None, "fixture data must contain a promotable subscription"
         candidate = sc.promote_to_payment_received(settings, candidate)
 
@@ -37,11 +46,7 @@ def test_inject_freezes_job_with_chaos_hold_marker(core_eng, settings):
 
 def test_stuck_job_survives_a_worker_sweep_window(core_eng, settings):
     """The provisioning worker's sweep must never touch a CHAOS_HOLD job."""
-    candidate = sc.find_stuck_provisioning_candidate(core_eng, None, None)
-    if candidate is None:
-        candidate = sc.promote_to_payment_received(
-            settings, sc.find_promotable_subscription(core_eng, None, None)
-        )
+    candidate = _resolve(core_eng, settings, "stuck_provisioning")
     outcome = sc.apply_stuck_provisioning(core_eng, candidate)
     job_id = outcome.records["job_id"]
 
@@ -72,11 +77,7 @@ def test_status_detects_stuck_provisioning(core_eng, settings):
     with core_eng.connect() as conn:
         assert sc.detect_stuck_provisioning(conn) == []
 
-    candidate = sc.find_stuck_provisioning_candidate(core_eng, None, None)
-    if candidate is None:
-        candidate = sc.promote_to_payment_received(
-            settings, sc.find_promotable_subscription(core_eng, None, None)
-        )
+    candidate = _resolve(core_eng, settings, "stuck_provisioning")
     sc.apply_stuck_provisioning(core_eng, candidate)
 
     with core_eng.connect() as conn:
@@ -86,11 +87,7 @@ def test_status_detects_stuck_provisioning(core_eng, settings):
 
 
 def test_reset_releases_the_hold_and_is_idempotent(core_eng, settings):
-    candidate = sc.find_stuck_provisioning_candidate(core_eng, None, None)
-    if candidate is None:
-        candidate = sc.promote_to_payment_received(
-            settings, sc.find_promotable_subscription(core_eng, None, None)
-        )
+    candidate = _resolve(core_eng, settings, "stuck_provisioning")
     outcome = sc.apply_stuck_provisioning(core_eng, candidate)
     job_id = outcome.records["job_id"]
 

@@ -10,12 +10,15 @@ runner = CliRunner()
 
 
 def _get_candidate(core_eng, settings):
-    candidate = sc.find_paid_not_active_candidate(core_eng, None, None)
-    if candidate is None:
-        promo = sc.find_promotable_subscription(core_eng, None, None)
-        assert promo is not None, "fixture data must contain a promotable subscription"
-        candidate = sc.promote_to_payment_received(settings, promo)
+    """Same resolution the CLI uses: an existing victim, one the payments API can promote,
+    or a fresh signup when the seeded pool has been drained."""
+    candidate, needs_promotion = sc.ensure_candidate(
+        settings, core_eng, kind="paid_not_active"
+    )
+    if needs_promotion:
+        candidate = sc.promote_to_payment_received(settings, candidate)
     return candidate
+
 
 
 def test_inject_leaves_payment_received_with_no_job(core_eng, settings):

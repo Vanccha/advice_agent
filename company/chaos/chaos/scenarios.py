@@ -266,6 +266,42 @@ def promote_to_payment_received(settings: ChaosSettings, candidate: dict) -> dic
     return candidate
 
 
+def ensure_candidate(
+    settings: ChaosSettings,
+    engine: Engine,
+    *,
+    kind: str,
+    customer_no: str | None = None,
+    region: str | None = None,
+) -> tuple[dict, bool]:
+    """Resolve a victim for an early-lifecycle scenario, creating one if need be.
+
+    Returns `(candidate, needs_promotion)`. `kind` is "stuck_provisioning" or
+    "paid_not_active". The three-step resolution — an already-suitable subscription, then
+    one the real payments API can drive to `payment_received`, then a fresh signup — lives
+    here so the CLI and the tests cannot disagree about it. When `customer_no` is given the
+    caller asked for a specific subscriber, so no substitute is invented.
+    """
+    finder = (
+        find_stuck_provisioning_candidate if kind == "stuck_provisioning"
+        else find_paid_not_active_candidate
+    )
+    candidate = finder(engine, customer_no, region)
+    if candidate is not None:
+        return candidate, False
+
+    candidate = find_promotable_subscription(engine, customer_no, region)
+    if candidate is not None:
+        return candidate, True
+
+    if customer_no is not None:
+        raise ChaosError(
+            f"{customer_no} is not in a state this scenario can use, and a specific "
+            "subscriber was requested, so no substitute was created."
+        )
+    return create_fresh_signup(settings, engine, region), True
+
+
 def apply_stuck_provisioning(engine: Engine, candidate: dict) -> ScenarioOutcome:
     sub_id = candidate["subscription_id"]
     now = utcnow()

@@ -95,16 +95,18 @@ def cmd_stuck_provisioning(
     cctx = ChaosContext(customer, region, dry_run, json_output)
     engine = core_engine(cctx.settings)
     try:
-        candidate = sc.find_stuck_provisioning_candidate(engine, cctx.customer, cctx.region)
-        needs_promotion = False
-        if candidate is None:
-            candidate = sc.find_promotable_subscription(engine, cctx.customer, cctx.region)
-            needs_promotion = True
-        if candidate is None and cctx.customer is None:
-            # The early-lifecycle pool is finite and the worker drains it; register a new
-            # subscriber the way a real signup would rather than failing the scenario.
-            candidate = _fresh_candidate(cctx, engine)
-            needs_promotion = True
+        if cctx.dry_run:
+            candidate = sc.find_stuck_provisioning_candidate(engine, cctx.customer, cctx.region)
+            needs_promotion = candidate is None
+            if candidate is None:
+                candidate = (
+                    sc.find_promotable_subscription(engine, cctx.customer, cctx.region)
+                    or _fresh_candidate(cctx, engine)
+                )
+        else:
+            candidate, needs_promotion = sc.ensure_candidate(
+                cctx.settings, engine, kind="stuck_provisioning", customer_no=cctx.customer, region=cctx.region
+            )
     except ChaosError as exc:
         _fail(cctx, str(exc))
         return
@@ -151,14 +153,18 @@ def cmd_paid_not_active(
     cctx = ChaosContext(customer, region, dry_run, json_output)
     engine = core_engine(cctx.settings)
     try:
-        candidate = sc.find_paid_not_active_candidate(engine, cctx.customer, cctx.region)
-        needs_promotion = False
-        if candidate is None:
-            candidate = sc.find_promotable_subscription(engine, cctx.customer, cctx.region)
-            needs_promotion = True
-        if candidate is None and cctx.customer is None:
-            candidate = _fresh_candidate(cctx, engine)
-            needs_promotion = True
+        if cctx.dry_run:
+            candidate = sc.find_paid_not_active_candidate(engine, cctx.customer, cctx.region)
+            needs_promotion = candidate is None
+            if candidate is None:
+                candidate = (
+                    sc.find_promotable_subscription(engine, cctx.customer, cctx.region)
+                    or _fresh_candidate(cctx, engine)
+                )
+        else:
+            candidate, needs_promotion = sc.ensure_candidate(
+                cctx.settings, engine, kind="paid_not_active", customer_no=cctx.customer, region=cctx.region
+            )
     except ChaosError as exc:
         _fail(cctx, str(exc))
         return

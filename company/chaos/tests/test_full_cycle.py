@@ -23,6 +23,15 @@ CORE_TABLES = [
 PAYMENT_TABLES = ["psp.charges"]
 
 
+def _resolve(engine, settings, kind: str) -> dict:
+    """A victim for `kind`, promoted if necessary — the same resolution the CLI performs,
+    so these tests keep working once the seeded early-lifecycle pool is drained."""
+    candidate, needs_promotion = sc.ensure_candidate(settings, engine, kind=kind)
+    if needs_promotion:
+        candidate = sc.promote_to_payment_received(settings, candidate)
+    return candidate
+
+
 def table_counts(conn, tables: list[str]) -> dict[str, int]:
     return {t: conn.execute(text(f"SELECT count(*) FROM {t}")).scalar_one() for t in tables}
 
@@ -46,14 +55,10 @@ def test_inject_all_then_reset_all_leaves_unrelated_records_untouched(core_eng, 
         before_payment = table_counts(conn, PAYMENT_TABLES)
 
     # Inject every scenario.
-    sp = sc.find_stuck_provisioning_candidate(core_eng, None, None) or sc.promote_to_payment_received(
-        settings, sc.find_promotable_subscription(core_eng, None, None)
-    )
+    sp = _resolve(core_eng, settings, "stuck_provisioning")
     sc.apply_stuck_provisioning(core_eng, sp)
 
-    pna = sc.find_paid_not_active_candidate(core_eng, None, None) or sc.promote_to_payment_received(
-        settings, sc.find_promotable_subscription(core_eng, None, None)
-    )
+    pna = _resolve(core_eng, settings, "paid_not_active")
     sc.apply_paid_not_active(core_eng, pna)
 
     region_row = sc.pick_regional_outage(core_eng, None)
@@ -89,10 +94,18 @@ def test_inject_all_then_reset_all_leaves_unrelated_records_untouched(core_eng, 
     ):
         assert payload[scenario]["active"] is False, f"{scenario} should be clean after reset"
 
-    # Customer count must never change; chaos never creates/deletes customers.
+    # Chaos never deletes or rewrites a customer. It may *add* one: when the seeded
+    # early-lifecycle pool is drained, `ensure_candidate` registers a new subscriber through
+    # the company's own signup API so the scenario stays reproducible. `reset` deliberately
+    # keeps those — deleting a real subscriber would be the destructive act, not the fix.
+    # This run injects at most two such scenarios (stuck_provisioning, paid_not_active).
     with core_eng.connect() as conn:
         after_customers = conn.execute(text("SELECT count(*) FROM core.customers")).scalar_one()
-    assert after_customers == before_customers
+    assert after_customers >= before_customers, "chaos must never delete a customer"
+    assert after_customers - before_customers <= 2, (
+        "chaos should only ever add a subscriber when it had no victim left "
+        f"(before={before_customers}, after={after_customers})"
+    )
 
     # network_incidents/incident_subscriptions and charges/payments must return to baseline
     # counts (chaos is the only writer of incidents; payments/charges only grow by exactly
