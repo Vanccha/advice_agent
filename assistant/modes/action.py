@@ -129,6 +129,32 @@ def _decision_context(ctx: TurnContext, diagnosis: Diagnosis) -> DecisionContext
     )
 
 
+# What the customer is actually told we found, before being told it was handed over.
+# "I am not authorised, I forwarded it" on its own leaves the customer none the wiser —
+# worse, during a payment outage it lets them assume their card is at fault.
+_FINDING_TR: dict[str, str] = {
+    "stuck_provisioning": "Kurulum (provizyon) işleminizin takılı kaldığını tespit ettim.",
+    "paid_not_active": (
+        "Ödemenizin alındığını, ancak aboneliğinizin aktifleştirilmediğini tespit ettim."
+    ),
+    "double_charge": "Aynı tutarın hesabınızdan iki kez tahsil edildiğini tespit ettim.",
+    "missed_installation": "Kurulum randevunuzun gerçekleştirilmediğini tespit ettim.",
+    "regional_outage": (
+        "Bölgenizde devam eden bir altyapı arızası olduğunu tespit ettim; sorun size özel değil."
+    ),
+    "payment_system_down": (
+        "Ödeme sistemimiz şu anda geçici olarak hizmet veremiyor. Sorun kartınızda ya da "
+        "cihazınızda değil; sistem normale döndüğünde ödemenizi tekrar deneyebilirsiniz."
+    ),
+    "no_issue_found": "Kayıtlarınızda sorunun kaynağını kesin olarak tespit edemedim.",
+    "customer_not_found": "Kayıtlarınıza ulaşamadım.",
+}
+
+
+def _finding_tr(root_cause: str) -> str:
+    return _FINDING_TR.get(root_cause, "Durumunuzu inceledim.")
+
+
 def _decide_issue_type(
     ctx: TurnContext, diagnosis: Diagnosis, deterministic_issue_type: IssueType
 ) -> IssueType:
@@ -310,8 +336,9 @@ def _escalate_with_ticket(
     )
     dept_tr = _department_tr(ctx, department)
     reply_tr = (
-        f"Bu işlemi doğrudan tamamlama yetkim yok, bu nedenle talebinizi {dept_tr} "
-        f"ekibine ilettim. Takip numaranız: {ticket_ref.ticket_key}."
+        f"{_finding_tr(diagnosis.root_cause)} Bu işlemi doğrudan tamamlama yetkim yok, "
+        f"bu nedenle talebinizi {dept_tr} ekibine ilettim. "
+        f"Takip numaranız: {ticket_ref.ticket_key}."
     )
     return ActionStepResult(
         reply_tr=reply_tr,
