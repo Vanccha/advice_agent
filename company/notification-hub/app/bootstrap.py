@@ -11,13 +11,13 @@ from app.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
-# (slug, display_name, description) — Turkish display names per docs/contracts.md §1.3/§2.6.
+# (slug, display_name, description) — display names per docs/contracts.md §1.3/§2.6.
 CHANNEL_SEEDS: list[tuple[str, str, str]] = [
-    ("teknik-altyapi", "Teknik Altyapı", "Altyapı ve teknik servis uyarıları."),
-    ("faturalama", "Faturalama", "Ödeme ve faturalama bildirimleri."),
-    ("abonelik-islemleri", "Abonelik İşlemleri", "Abonelik durum değişiklikleri."),
-    ("saha-kurulum", "Saha Kurulum Ekibi", "Kurulum ve saha operasyonları."),
-    ("operasyon-genel", "Operasyon Genel", "Genel operasyon duyuruları ve varsayılan kanal."),
+    ("technical-infra", "Technical Infrastructure", "Infrastructure and technical service alerts."),
+    ("billing", "Billing", "Payment and billing notifications."),
+    ("subscription-ops", "Subscription Operations", "Subscription status changes."),
+    ("field-install", "Field Installation Team", "Installation and field operations."),
+    ("ops-general", "Operations General", "General operations announcements and the default channel."),
 ]
 
 

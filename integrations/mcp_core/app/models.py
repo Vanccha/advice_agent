@@ -19,8 +19,8 @@ from pydantic import BaseModel, Field
 
 
 class FindCustomerInput(BaseModel):
-    customer_no: Optional[str] = Field(default=None, description="e.g. NH-100042")
-    phone: Optional[str] = Field(default=None, description="e.g. +905321234567")
+    customer_no: Optional[str] = Field(default=None, description="e.g. NS-100042")
+    phone: Optional[str] = Field(default=None, description="e.g. +447700900167")
     email: Optional[str] = None
 
 
@@ -56,7 +56,7 @@ class SubscriptionStatus(BaseModel):
     package_code: str
     package_name: str
     status: str
-    monthly_price_try: float
+    monthly_price_gbp: float
     contract_start_date: Optional[str] = None
     contract_end_date: Optional[str] = None
     activated_at: Optional[str] = None
@@ -249,8 +249,8 @@ class PackageSummary(BaseModel):
     down_mbps: int
     up_mbps: int
     commitment_months: int
-    monthly_price_try: float
-    setup_fee_try: float
+    monthly_price_gbp: float
+    setup_fee_gbp: float
     target_profile: str
     max_devices: int
     static_ip: bool
@@ -366,7 +366,7 @@ class ResendActivationNotificationOutput(BaseModel):
 
 class ApplyOutageCreditInput(BaseModel):
     subscription_id: int
-    amount_try: float
+    amount_gbp: float
     reason: str
     idempotency_key: Optional[str] = Field(
         default=None, description="omit to let the adapter generate one"
@@ -376,7 +376,7 @@ class ApplyOutageCreditInput(BaseModel):
 class ApplyOutageCreditOutput(BaseModel):
     credit_id: int
     subscription_id: int
-    amount_try: float
+    amount_gbp: float
     reason: str
     created_by: str
     idempotency_key: str
@@ -391,14 +391,14 @@ class ApplyOutageCreditOutput(BaseModel):
 
 class RequestRefundInput(BaseModel):
     payment_id: int
-    amount_try: float
+    amount_gbp: float
     reason: str
 
 
 class RequestRefundOutput(BaseModel):
     refund_ref: str
     payment_id: int
-    amount_try: float
+    amount_gbp: float
     status: str
 
 

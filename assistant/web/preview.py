@@ -40,10 +40,10 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 # --------------------------------------------------------------------------------------
 
 MOCK_CUSTOMERS = {
-    "NH-100042": {"state": "active"},
-    "NH-100017": {"state": "installation_scheduled"},
-    "NH-100083": {"state": "awaiting_payment"},
-    "NH-100005": {"state": "suspended"},
+    "NS-100042": {"state": "active"},
+    "NS-100017": {"state": "installation_scheduled"},
+    "NS-100083": {"state": "awaiting_payment"},
+    "NS-100005": {"state": "suspended"},
 }
 
 _conversation_counter = itertools.count(1)
@@ -52,8 +52,8 @@ _conversations: dict[str, dict[str, Any]] = {}
 _MOCK_TURN_SEQUENCE = [
     {
         "mode": "ROUTER",
-        "reply_tr": "Merhaba! Size nasıl yardımcı olabilirim? Paket önerisi, arıza teşhisi "
-        "ya da mevcut talebinizin durumu hakkında yazabilirsiniz.",
+        "reply_en": "Hello! How can I help? You can ask about package recommendations, "
+        "diagnosing a fault, or the status of an existing request.",
         "actions": [],
         "ticket_key": None,
         "requires_approval": False,
@@ -61,29 +61,29 @@ _MOCK_TURN_SEQUENCE = [
     },
     {
         "mode": "DIAGNOSTIC",
-        "reply_tr": "Aboneliğinizi kontrol ettim: kurulum işiniz OLT port yoğunluğu "
-        "nedeniyle beklemede kalmış. Bu, sık karşılaşılan ve otomatik düzeltilebilen bir "
-        "durum — kurulum işini şimdi yeniden kuyruğa almamıister misiniz?",
-        "actions": [{"label_tr": "Teşhis: provisioning_status kontrol edildi"}],
+        "reply_en": "I have checked your subscription: your setup job is on hold because "
+        "the OLT port is busy. This is common and can be fixed automatically — would you "
+        "like me to queue the setup job again now?",
+        "actions": [{"label_en": "Diagnosis: provisioning_status checked"}],
         "ticket_key": None,
         "requires_approval": False,
         "approval_id": None,
     },
     {
         "mode": "ACTION",
-        "reply_tr": "Bölgenizde devam eden bir arıza kaydı bulundu (INC-2026-014). Bu "
-        "kesinti için hesabınıza 50 TL'ye kadar iyi niyet kredisi tanımlayabilirim, ancak bu "
-        "geri alınamaz bir işlem olduğu için önce onayınızı almam gerekiyor.",
-        "actions": [{"label_tr": "Politika kontrolü: apply_outage_credit"}],
+        "reply_en": "There is an open fault record for your area (INC-2026-014). I can "
+        "apply a goodwill credit of up to £5 to your account for this outage, but as this "
+        "cannot be undone I need your approval first.",
+        "actions": [{"label_en": "Policy check: apply_outage_credit"}],
         "ticket_key": None,
         "requires_approval": True,
         "approval_id": None,  # filled in per-conversation below
     },
     {
         "mode": "ESCALATED",
-        "reply_tr": "Bu konuyu (çift tahsilat) doğrudan çözme yetkim yok; talebinizi "
-        "Faturalama departmanına ilettim. Takip numaranız: TKT-2026-00031.",
-        "actions": [{"label_tr": "Bilet oluşturuldu: BILLING"}],
+        "reply_en": "I am not authorised to resolve this (a double charge) myself; I have "
+        "passed your request to the Billing department. Your reference number is TKT-2026-00031.",
+        "actions": [{"label_en": "Ticket created: BILLING"}],
         "ticket_key": "TKT-2026-00031",
         "requires_approval": False,
         "approval_id": None,
@@ -91,10 +91,10 @@ _MOCK_TURN_SEQUENCE = [
 ]
 
 _MOCK_AUDIT_STEPS = [
-    {"step_type": "mode_decision", "summary": "Niyet 'problem_report' olarak sınıflandırıldı", "reason": "Anahtar kelime: 'kurulum', 'bekliyor'"},
-    {"step_type": "tool_call", "summary": "diag.provisioning_status sorgulandı", "reason": "Teşhis kontrol listesi adım 4/7"},
-    {"step_type": "policy_check", "summary": "retry_provisioning_job: izin verildi", "reason": "job.status=stuck, attempt_count<3"},
-    {"step_type": "action", "summary": "Provisioning işi yeniden kuyruğa alındı", "reason": "Müşteri onayı gerekmiyor (politika)"},
+    {"step_type": "mode_decision", "summary": "Intent classified as 'problem_report'", "reason": "Keywords: 'setup', 'waiting'"},
+    {"step_type": "tool_call", "summary": "diag.provisioning_status queried", "reason": "Diagnostic checklist step 4/7"},
+    {"step_type": "policy_check", "summary": "retry_provisioning_job: allowed", "reason": "job.status=stuck, attempt_count<3"},
+    {"step_type": "action", "summary": "Provisioning job queued again", "reason": "No customer approval needed (policy)"},
 ]
 
 
@@ -116,7 +116,7 @@ def _mock_turn_for(conversation_id: str) -> dict[str, Any]:
 
 @app.get("/")
 def index(request: Request):
-    customer_no = request.cookies.get("demo_customer_no", "NH-100042")
+    customer_no = request.cookies.get("demo_customer_no", "NS-100042")
     return templates.TemplateResponse(request, "site.html", {"customer_no": customer_no})
 
 
@@ -128,7 +128,7 @@ def login_page(request: Request):
 @app.get("/widget-only")
 def widget_only(request: Request):
     """Renders just the widget partial for quick isolated inspection."""
-    return templates.TemplateResponse(request, "_widget.html", {"customer_no": "NH-100042"})
+    return templates.TemplateResponse(request, "_widget.html", {"customer_no": "NS-100042"})
 
 
 # --------------------------------------------------------------------------------------
@@ -141,7 +141,7 @@ async def api_login(request: Request):
     body = await request.json()
     customer_no = str(body.get("customer_no", "")).strip().upper()
     if customer_no not in MOCK_CUSTOMERS:
-        return JSONResponse({"error": {"code": "CUSTOMER_NOT_FOUND", "message": "Bilinmeyen müşteri numarası"}}, status_code=404)
+        return JSONResponse({"error": {"code": "CUSTOMER_NOT_FOUND", "message": "Unknown customer number"}}, status_code=404)
     response = JSONResponse({"status": "ok", "customer_no": customer_no})
     response.set_cookie("demo_customer_no", customer_no, httponly=True, samesite="lax")
     return response
@@ -160,7 +160,7 @@ async def api_chat_stream(request: Request, conversation_id: str | None = None, 
     turn = _mock_turn_for(conversation_id)
 
     async def event_generator():
-        words = turn["reply_tr"].split(" ")
+        words = turn["reply_en"].split(" ")
         for word in words:
             yield {"event": "token", "data": word + " "}
         yield {"event": "final", "data": _json(turn)}
@@ -173,15 +173,15 @@ async def api_approval(approval_id: str, request: Request):
     body = await request.json()
     decision = body.get("decision")
     reply = (
-        "Teşekkürler, iyi niyet kredisini hesabınıza tanımladım."
+        "Thank you; I have applied the goodwill credit to your account."
         if decision == "granted"
-        else "Anlaşıldı, krediyi uygulamadım."
+        else "Understood; I have not applied the credit."
     )
     return JSONResponse({
         "approval_id": approval_id,
         "decision": decision,
         "mode": "CLOSING",
-        "reply_tr": reply,
+        "reply_en": reply,
         "ticket_key": None,
     })
 

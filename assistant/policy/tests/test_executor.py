@@ -35,7 +35,7 @@ def policy_engine(monkeypatch: pytest.MonkeyPatch) -> PolicyEngine:
     clear_tenant_config_cache()
     for key, value in REQUIRED_ENV.items():
         monkeypatch.setenv(key, value)
-    cfg = load_tenant_config("nethiz", config_dir=CONFIG_DIR)
+    cfg = load_tenant_config("netswift", config_dir=CONFIG_DIR)
     clear_tenant_config_cache()
     return PolicyEngine(cfg.policy)
 
@@ -55,8 +55,8 @@ def test_policy_denied_prevents_runner_from_running(policy_engine, audit_log):
     with pytest.raises(PolicyDenied) as exc_info:
         executor.execute(
             "issue_refund",
-            {"payment_id": 88, "amount_try": 100},
-            {"conversation_id": "conv-exec-1", "tenant": "nethiz"},
+            {"payment_id": 88, "amount_gbp": 10},
+            {"conversation_id": "conv-exec-1", "tenant": "netswift"},
         )
 
     assert exc_info.value.decision.escalate_to == "BILLING"
@@ -71,19 +71,19 @@ def test_confirmation_required_then_confirmed_run_succeeds(policy_engine, audit_
     executor = ActionExecutor(policy_engine, audit_log, runner)
     context = {
         "conversation_id": "conv-exec-2",
-        "tenant": "nethiz",
+        "tenant": "netswift",
         "incident": {"exists": True},
         "credit": {"existing_count_30d": 0},
-        "amount_try": 50,
+        "amount_gbp": 5,
     }
 
     with pytest.raises(ConfirmationRequired):
-        executor.execute("apply_outage_credit", {"amount_try": 50}, context, confirmed=False)
+        executor.execute("apply_outage_credit", {"amount_gbp": 5}, context, confirmed=False)
     assert runner.calls == []
 
-    result = executor.execute("apply_outage_credit", {"amount_try": 50}, context, confirmed=True)
+    result = executor.execute("apply_outage_credit", {"amount_gbp": 5}, context, confirmed=True)
     assert result == {"status": "done", "action": "apply_outage_credit"}
-    assert runner.calls == [("apply_outage_credit", {"amount_try": 50})]
+    assert runner.calls == [("apply_outage_credit", {"amount_gbp": 5})]
 
     entries = audit_log.timeline("conv-exec-2")
     step_types = [e.step_type for e in entries]
@@ -96,7 +96,7 @@ def test_allowed_action_without_confirmation_runs_immediately(policy_engine, aud
     executor = ActionExecutor(policy_engine, audit_log, runner)
     context = {
         "conversation_id": "conv-exec-3",
-        "tenant": "nethiz",
+        "tenant": "netswift",
         "job": {"status": "stuck", "attempt_count": 0},
     }
 

@@ -32,7 +32,7 @@ async def test_post_department_message_lands_and_is_read_back() -> None:
     marker = f"adapter-check-{uuid.uuid4()}"
     posted = await handle_post_department_message(
         PostDepartmentMessageInput(
-            channel="operasyon-genel",
+            channel="ops-general",
             title=marker,
             text="mcp-notification adapter check",
             severity="info",
@@ -43,10 +43,10 @@ async def test_post_department_message_lands_and_is_read_back() -> None:
     assert posted.ok, posted.error
     assert posted.source == "notification_api"
     assert posted.data.message.title == marker
-    assert posted.data.message.channel_slug == "operasyon-genel"
+    assert posted.data.message.channel_slug == "ops-general"
     assert posted.data.message.external_ref == marker
 
-    listed = await handle_list_channel_messages(ListChannelMessagesInput(channel="operasyon-genel", limit=50))
+    listed = await handle_list_channel_messages(ListChannelMessagesInput(channel="ops-general", limit=50))
     assert listed.ok, listed.error
     assert any(m.title == marker for m in listed.data.messages)
 

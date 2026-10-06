@@ -1,4 +1,4 @@
-"""Deterministic, idempotent seed data for nethiz_core.
+"""Deterministic, idempotent seed data for netswift_core.
 
 Run standalone with `python -m app.seed`, or via `app.bootstrap` on service startup
 when SEED_ON_STARTUP=true. Safe to call repeatedly: skips if customers already exist.
@@ -41,62 +41,62 @@ logger = logging.getLogger(__name__)
 SEED = 20261005
 
 REGIONS = [
-    ("IST-KAD", "Kadıköy", "İstanbul"),
-    ("IST-BES", "Beşiktaş", "İstanbul"),
-    ("IST-BAG", "Bağcılar", "İstanbul"),
-    ("ANK-CAN", "Çankaya", "Ankara"),
-    ("ANK-KEC", "Keçiören", "Ankara"),
-    ("IZM-KAR", "Karşıyaka", "İzmir"),
-    ("IZM-BOR", "Bornova", "İzmir"),
-    ("BUR-NIL", "Nilüfer", "Bursa"),
-    ("ANT-MUR", "Muratpaşa", "Antalya"),
-    ("ADA-SEY", "Seyhan", "Adana"),
-    ("KON-SEL", "Selçuklu", "Konya"),
-    ("TRA-ORT", "Ortahisar", "Trabzon"),
+    ("LDN-CAM", "Camden", "London"),
+    ("LDN-HAC", "Hackney", "London"),
+    ("LDN-CRO", "Croydon", "London"),
+    ("MAN-DID", "Didsbury", "Manchester"),
+    ("MAN-CHO", "Chorlton", "Manchester"),
+    ("BHM-EDG", "Edgbaston", "Birmingham"),
+    ("BHM-MOS", "Moseley", "Birmingham"),
+    ("LDS-HEA", "Headingley", "Leeds"),
+    ("BRS-CLI", "Clifton", "Bristol"),
+    ("LIV-ANF", "Anfield", "Liverpool"),
+    ("GLA-PAR", "Partick", "Glasgow"),
+    ("EDI-LEI", "Leith", "Edinburgh"),
 ]
 
 PACKAGES = [
     dict(
-        code="FIBER_50_OGRENCI", name="Öğrenci Fiber 50", down_mbps=50, up_mbps=10,
-        commitment_months=12, monthly_price_try=269.00, setup_fee_try=0,
+        code="FIBER_50_STUDENT", name="Student Fibre 50", down_mbps=50, up_mbps=10,
+        commitment_months=12, monthly_price_gbp=26.90, setup_fee_gbp=0,
         target_profile="student", max_devices=8, static_ip=False, tv_included=False,
-        gaming_optimized=False, description="Öğrenciler için uygun fiyatlı fiber paket.",
+        gaming_optimized=False, description="An affordable fibre package for students.",
     ),
     dict(
-        code="FIBER_100_TEMEL", name="Temel Fiber 100", down_mbps=100, up_mbps=20,
-        commitment_months=24, monthly_price_try=349.00, setup_fee_try=0,
+        code="FIBER_100_BASIC", name="Basic Fibre 100", down_mbps=100, up_mbps=20,
+        commitment_months=24, monthly_price_gbp=34.90, setup_fee_gbp=0,
         target_profile="basic", max_devices=12, static_ip=False, tv_included=False,
-        gaming_optimized=False, description="Günlük kullanım için temel fiber paket.",
+        gaming_optimized=False, description="An everyday fibre package.",
     ),
     dict(
-        code="FIBER_200_AILE", name="Aile Fiber 200", down_mbps=200, up_mbps=40,
-        commitment_months=24, monthly_price_try=459.00, setup_fee_try=0,
+        code="FIBER_200_FAMILY", name="Family Fibre 200", down_mbps=200, up_mbps=40,
+        commitment_months=24, monthly_price_gbp=45.90, setup_fee_gbp=0,
         target_profile="family", max_devices=20, static_ip=False, tv_included=True,
-        gaming_optimized=False, description="TV dahil aile paketi.",
+        gaming_optimized=False, description="A family package with TV included.",
     ),
     dict(
-        code="FIBER_400_HOMEOFFICE", name="Home Office Fiber 400", down_mbps=400, up_mbps=80,
-        commitment_months=24, monthly_price_try=629.00, setup_fee_try=199,
+        code="FIBER_400_HOMEOFFICE", name="Home Office Fibre 400", down_mbps=400, up_mbps=80,
+        commitment_months=24, monthly_price_gbp=62.90, setup_fee_gbp=19.90,
         target_profile="home_office", max_devices=30, static_ip=True, tv_included=False,
-        gaming_optimized=False, description="Sabit IP'li ev ofisi paketi.",
+        gaming_optimized=False, description="A home office package with a static IP.",
     ),
     dict(
-        code="FIBER_500_OYUNCU", name="Oyuncu Fiber 500", down_mbps=500, up_mbps=100,
-        commitment_months=12, monthly_price_try=749.00, setup_fee_try=199,
+        code="FIBER_500_GAMER", name="Gamer Fibre 500", down_mbps=500, up_mbps=100,
+        commitment_months=12, monthly_price_gbp=74.90, setup_fee_gbp=19.90,
         target_profile="gamer", max_devices=25, static_ip=False, tv_included=False,
-        gaming_optimized=True, description="Oyuncular için düşük gecikmeli paket.",
+        gaming_optimized=True, description="A low-latency package for gamers.",
     ),
     dict(
-        code="FIBER_1000_PREMIUM", name="Premium Fiber 1000", down_mbps=1000, up_mbps=200,
-        commitment_months=24, monthly_price_try=999.00, setup_fee_try=299,
+        code="FIBER_1000_PREMIUM", name="Premium Fibre 1000", down_mbps=1000, up_mbps=200,
+        commitment_months=24, monthly_price_gbp=99.90, setup_fee_gbp=29.90,
         target_profile="premium", max_devices=50, static_ip=True, tv_included=True,
-        gaming_optimized=True, description="Tüm özelliklerin dahil olduğu premium paket.",
+        gaming_optimized=True, description="A premium package with every feature included.",
     ),
     dict(
-        code="FIBER_200_ESNEK", name="Esnek Fiber 200 (taahhütsüz)", down_mbps=200, up_mbps=40,
-        commitment_months=0, monthly_price_try=589.00, setup_fee_try=299,
+        code="FIBER_200_FLEX", name="Flex Fibre 200 (no contract)", down_mbps=200, up_mbps=40,
+        commitment_months=0, monthly_price_gbp=58.90, setup_fee_gbp=29.90,
         target_profile="basic", max_devices=20, static_ip=False, tv_included=False,
-        gaming_optimized=False, description="Taahhütsüz esnek fiber paket.",
+        gaming_optimized=False, description="A flexible fibre package with no contract.",
     ),
 ]
 
@@ -114,7 +114,7 @@ STATUS_DISTRIBUTION = (
 
 SERVICE_ACCOUNTS = [
     dict(
-        name="nethiz-crm",
+        name="netswift-crm",
         env_key="core_api_key_crm",
         scopes=[
             "customers:*", "subscriptions:*", "payments:*", "billing:refund",
@@ -168,7 +168,7 @@ def _seed_service_accounts(session: Session, settings) -> None:
 def _make_customer(rng: random.Random, idx: int, region_code: str) -> Customer:
     full_name = make_full_name(rng)
     return Customer(
-        customer_no=f"NH-{100000 + idx}",
+        customer_no=f"NS-{100000 + idx}",
         full_name=full_name,
         national_id=make_invalid_national_id(rng),
         phone=make_phone(rng),
@@ -177,7 +177,7 @@ def _make_customer(rng: random.Random, idx: int, region_code: str) -> Customer:
         district=region_code,
         city=region_code,
         region_code=region_code,
-        kvkk_consent_at=utcnow(),
+        gdpr_consent_at=utcnow(),
         created_at=utcnow(),
     )
 
@@ -217,8 +217,8 @@ def _seed_customers_and_subscriptions(session: Session) -> None:
             status="registered",
             contract_start_date=start_date,
             contract_end_date=end_date,
-            monthly_price_try=package.monthly_price_try,
-            early_termination_fee_try=package.monthly_price_try * 2,
+            monthly_price_gbp=package.monthly_price_gbp,
+            early_termination_fee_gbp=package.monthly_price_gbp * 2,
             created_at=now,
             updated_at=now,
         )
@@ -270,12 +270,12 @@ def _advance_subscription(session, subscription, target_status, rng, now, custom
                     subscription_id=subscription.id,
                     customer_id=customer.id,
                     charge_ref=f"seed-fail-{subscription.id}",
-                    amount_try=subscription.monthly_price_try,
+                    amount_gbp=subscription.monthly_price_gbp,
                     status="failed",
                     method="card",
                     idempotency_key=f"seed-idem-{subscription.id}",
                     failure_code="CARD_DECLINED",
-                    failure_message="Kart bankası tarafından reddedildi.",
+                    failure_message="Declined by the card issuer.",
                     created_at=now,
                     updated_at=now,
                 )
@@ -286,7 +286,7 @@ def _advance_subscription(session, subscription, target_status, rng, now, custom
         subscription_id=subscription.id,
         customer_id=customer.id,
         charge_ref=f"seed-charge-{subscription.id}",
-        amount_try=subscription.monthly_price_try,
+        amount_gbp=subscription.monthly_price_gbp,
         status="succeeded",
         method="card",
         idempotency_key=f"seed-idem-{subscription.id}",
@@ -385,7 +385,7 @@ def _advance_subscription(session, subscription, target_status, rng, now, custom
 
     if target_status == "cancelled":
         _record_event(session, subscription, "active", "cancelled", now)
-        subscription.cancellation_reason = "Müşteri talebiyle iptal edildi (seed)."
+        subscription.cancellation_reason = "Cancelled at the customer's request (seed)."
         return
 
 

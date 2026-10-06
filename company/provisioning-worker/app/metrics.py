@@ -3,16 +3,16 @@ from __future__ import annotations
 from prometheus_client import Counter, Gauge, Histogram
 
 PROVISIONING_JOBS_TOTAL = Counter(
-    "nethiz_provisioning_jobs_total", "Provisioning jobs processed, by terminal/claim status.", ["status"]
+    "netswift_provisioning_jobs_total", "Provisioning jobs processed, by terminal/claim status.", ["status"]
 )
 PROVISIONING_JOBS_STUCK = Gauge(
-    "nethiz_provisioning_jobs_stuck", "Provisioning jobs currently flagged stuck."
+    "netswift_provisioning_jobs_stuck", "Provisioning jobs currently flagged stuck."
 )
 PROVISIONING_JOB_DURATION_SECONDS = Histogram(
-    "nethiz_provisioning_job_duration_seconds",
+    "netswift_provisioning_job_duration_seconds",
     "Wall-clock time spent processing a provisioning job.",
     buckets=(0.5, 1, 2, 3, 4, 5, 6, 8, 10, 15),
 )
 WORKER_SWEEPS_TOTAL = Counter(
-    "nethiz_worker_sweeps_total", "Number of stuck-job sweep passes performed by the worker."
+    "netswift_worker_sweeps_total", "Number of stuck-job sweep passes performed by the worker."
 )

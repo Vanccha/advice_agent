@@ -10,7 +10,7 @@ def _payload(external_ref: str) -> dict:
         "department": "BILLING",
         "issue_type": "double_charge",
         "priority": "HIGH",
-        "subject": "Çift tahsilat",
+        "subject": "Double charge",
         "body": "test govde",
         "source": "api",
         "external_ref": external_ref,

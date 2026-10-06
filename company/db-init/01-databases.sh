@@ -1,15 +1,15 @@
 #!/bin/bash
-# Creates the four NetHiz databases and the read-only diagnostic role.
+# Creates the four NetSwift databases and the read-only diagnostic role.
 # Runs once, on first start of an empty data directory.
 set -e
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-SQL
-    SELECT 'CREATE DATABASE nethiz_payment'
-      WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nethiz_payment')\gexec
-    SELECT 'CREATE DATABASE nethiz_ticketing'
-      WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nethiz_ticketing')\gexec
-    SELECT 'CREATE DATABASE nethiz_notify'
-      WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nethiz_notify')\gexec
+    SELECT 'CREATE DATABASE netswift_payment'
+      WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'netswift_payment')\gexec
+    SELECT 'CREATE DATABASE netswift_ticketing'
+      WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'netswift_ticketing')\gexec
+    SELECT 'CREATE DATABASE netswift_notify'
+      WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'netswift_notify')\gexec
 SQL
 
 # Diagnostic role: login only, no schema rights yet. Grants are applied by core-api's
@@ -25,8 +25,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-S
         END IF;
     END
     \$\$;
-    REVOKE ALL ON DATABASE nethiz_core FROM ${READONLY_DIAG_USER};
-    GRANT CONNECT ON DATABASE nethiz_core TO ${READONLY_DIAG_USER};
+    REVOKE ALL ON DATABASE netswift_core FROM ${READONLY_DIAG_USER};
+    GRANT CONNECT ON DATABASE netswift_core TO ${READONLY_DIAG_USER};
     REVOKE ALL ON SCHEMA public FROM ${READONLY_DIAG_USER};
 SQL
 

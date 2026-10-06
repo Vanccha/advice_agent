@@ -26,9 +26,9 @@ async def test_call_against_a_dead_adapter_reports_adapter_unavailable_never_rai
     audit_log: AuditLog,
 ):
     gateway = ToolGateway(
-        {"core": DEAD_ADAPTER}, audit_log, conversation_id="conv-1", tenant="nethiz"
+        {"core": DEAD_ADAPTER}, audit_log, conversation_id="conv-1", tenant="netswift"
     )
-    outcome = await gateway.call("find_customer", {"customer_no": "NH-100042"})
+    outcome = await gateway.call("find_customer", {"customer_no": "NS-100042"})
     assert outcome.ok is False
     assert outcome.error_code == "ADAPTER_UNAVAILABLE"
 
@@ -38,7 +38,7 @@ async def test_budget_exceeded_counts_even_failed_calls(audit_log: AuditLog):
         {"core": DEAD_ADAPTER},
         audit_log,
         conversation_id="conv-2",
-        tenant="nethiz",
+        tenant="netswift",
         max_calls_per_turn=1,
     )
     await gateway.call("find_customer", {})
@@ -48,9 +48,9 @@ async def test_budget_exceeded_counts_even_failed_calls(audit_log: AuditLog):
 
 async def test_every_call_writes_an_audit_entry_with_digest(audit_log: AuditLog):
     gateway = ToolGateway(
-        {"core": DEAD_ADAPTER}, audit_log, conversation_id="conv-3", tenant="nethiz"
+        {"core": DEAD_ADAPTER}, audit_log, conversation_id="conv-3", tenant="netswift"
     )
-    await gateway.call("find_customer", {"customer_no": "NH-100042"})
+    await gateway.call("find_customer", {"customer_no": "NS-100042"})
     timeline = audit_log.timeline("conv-3")
     assert len(timeline) == 1
     assert timeline[0].tool_name == "find_customer"
@@ -59,7 +59,7 @@ async def test_every_call_writes_an_audit_entry_with_digest(audit_log: AuditLog)
 
 
 async def test_empty_adapters_dict_means_every_call_is_unavailable(audit_log: AuditLog):
-    gateway = ToolGateway({}, audit_log, conversation_id="conv-4", tenant="nethiz")
+    gateway = ToolGateway({}, audit_log, conversation_id="conv-4", tenant="netswift")
     outcome = await gateway.call("anything", {})
     assert outcome.ok is False
     assert outcome.error_code == "ADAPTER_UNAVAILABLE"
@@ -81,7 +81,7 @@ def test_from_tenant_config_reads_limits_from_policy(monkeypatch: pytest.MonkeyP
     ):
         monkeypatch.setenv(key, "http://127.0.0.1:59999/mcp")
     clear_tenant_config_cache()
-    tenant_config = load_tenant_config("nethiz", config_dir=config_dir)
+    tenant_config = load_tenant_config("netswift", config_dir=config_dir)
     clear_tenant_config_cache()
 
     gateway = ToolGateway.from_tenant_config(tenant_config, audit_log, conversation_id="conv-5")

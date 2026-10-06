@@ -1,4 +1,4 @@
-"""KVKK masking at the process boundary (contracts §4.7).
+"""UK GDPR masking at the process boundary (contracts §4.7).
 
 Everything that leaves the assistant process for a model provider, a trace, or a ticket
 goes through here first. Masking of free text is regex/validator-driven (`detectors.py`);
@@ -57,17 +57,13 @@ DEFAULT_ALLOW_UNMASKED = frozenset(
 
 
 def mask_national_id_value() -> str:
-    return "*" * 11
+    return "*" * 9
 
 
 def mask_phone_value(raw: str) -> str:
     digits = re.sub(r"\D", "", raw)
-    if digits.startswith("90") and len(digits) > 10:
-        digits = digits[2:]
-    elif digits.startswith("0"):
-        digits = digits[1:]
     last2 = digits[-2:] if len(digits) >= 2 else "??"
-    return f"+90 5** *** ** {last2}"
+    return f"+44 7*** *** *{last2}"
 
 
 def mask_email_value(raw: str) -> str:
@@ -81,7 +77,7 @@ def mask_email_value(raw: str) -> str:
 
 
 def mask_iban_value() -> str:
-    return "TR** **** **** **** **** **** **"
+    return "GB** **** **** **** **** **"
 
 
 def mask_card_value(digits: str) -> str:
@@ -130,9 +126,8 @@ def mask_text(text: str, names: list[str] | None = None) -> MaskResult:
     current = text
 
     # Order matters: email/iban/card first (most specific), then phone, then national id
-    # (phones always carry a leading 0/+90 marker and seeded national ids never start with
-    # 0 — see detectors.py — so by the time we reach national-id matching, remaining bare
-    # 11-digit runs are unambiguous).
+    # (an NI number always starts with two letters, so it can never overlap a phone
+    # number's digit run — see detectors.py).
     for finder, masker in (
         (find_emails, lambda cleaned, raw: mask_email_value(raw)),
         (find_ibans, lambda cleaned, raw: mask_iban_value()),
@@ -192,7 +187,7 @@ def _mask_scalar_field(key: str, value: Any, node: dict[str, Any]) -> Any:
         city = node.get("city")
         if district and city:
             return f"{district}, {city}"
-        return "<adres gizli>"
+        return "<address hidden>"
     return None  # not a recognised PII field name
 
 

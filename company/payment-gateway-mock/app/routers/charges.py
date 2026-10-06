@@ -26,7 +26,7 @@ def _charge_to_response(charge: Charge) -> ChargeResponse:
         charge_ref=charge.charge_ref,
         status=charge.status,
         customer_ref=charge.customer_ref,
-        amount_try=float(charge.amount_try),
+        amount_gbp=float(charge.amount_gbp),
         method=charge.method,
         card_last4=charge.card_last4,
         failure_code=charge.failure_code,
@@ -63,7 +63,7 @@ def build_router(
             charge, created = engine.create_charge(
                 scoped_session,
                 default_failure_rate=settings.psp_failure_rate,
-                amount_try=body.amount_try,
+                amount_gbp=body.amount_gbp,
                 customer_ref=body.customer_ref,
                 method=body.method,
                 card_token=body.card_token,
@@ -123,12 +123,12 @@ def build_router(
         with session_scope(session_factory) as scoped_session:
             charge = engine.get_charge_by_ref(scoped_session, charge_ref)
             refund = engine.refund_charge(
-                scoped_session, charge, amount_try=body.amount_try, reason=body.reason
+                scoped_session, charge, amount_gbp=body.amount_gbp, reason=body.reason
             )
             refund_response = RefundResponse(
                 refund_ref=refund.refund_ref,
                 charge_ref=charge.charge_ref,
-                amount_try=float(refund.amount_try),
+                amount_gbp=float(refund.amount_gbp),
                 status=refund.status,
                 reason=refund.reason,
                 created_at=isoformat(refund.created_at),

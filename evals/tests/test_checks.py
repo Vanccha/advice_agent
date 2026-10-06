@@ -8,13 +8,13 @@ from evals.checks import CaseResult, contains_any, contains_none, error_case
 
 
 def test_contains_any_is_case_insensitive():
-    assert contains_any("Faturalama ekibine ilettim", ["faturalama"])
-    assert not contains_any("Faturalama ekibine ilettim", ["teknik altyapı"])
+    assert contains_any("I passed it to the Billing team", ["billing"])
+    assert not contains_any("I passed it to the Billing team", ["technical infrastructure"])
 
 
 def test_contains_none_is_inverse_of_contains_any():
-    assert contains_none("herşey yolunda", ["arıza", "sorun"])
-    assert not contains_none("bir arıza tespit edildi", ["arıza"])
+    assert contains_none("all is well", ["fault", "problem"])
+    assert not contains_none("a fault was detected", ["fault"])
 
 
 def test_contains_any_handles_none_text():

@@ -16,30 +16,30 @@ def _messages(user_text: str) -> list[ChatMessage]:
 
 def test_complete_is_deterministic_for_a_matching_rule():
     provider = ScriptedProvider(
-        rules=[ScriptedRule(match=r"merhaba", reply="Merhaba, size nasıl yardımcı olabilirim?")]
+        rules=[ScriptedRule(match=r"hello", reply="Hello, how can I help you?")]
     )
-    reply1 = provider.complete(system="sys", messages=_messages("Merhaba, bir sorunum var"))
-    reply2 = provider.complete(system="sys", messages=_messages("Merhaba, bir sorunum var"))
-    assert reply1 == reply2 == "Merhaba, size nasıl yardımcı olabilirim?"
+    reply1 = provider.complete(system="sys", messages=_messages("Hello, I have a problem"))
+    reply2 = provider.complete(system="sys", messages=_messages("Hello, I have a problem"))
+    assert reply1 == reply2 == "Hello, how can I help you?"
 
 
 def test_complete_raises_on_unscripted_prompt_naming_it():
-    provider = ScriptedProvider(rules=[ScriptedRule(match=r"merhaba", reply="selam")])
+    provider = ScriptedProvider(rules=[ScriptedRule(match=r"hello", reply="hi")])
     with pytest.raises(UnscriptedPromptError) as excinfo:
-        provider.complete(system="sys", messages=_messages("hiç eşleşmeyecek bir cümle"))
-    assert "hiç eşleşmeyecek bir cümle" in str(excinfo.value)
+        provider.complete(system="sys", messages=_messages("a sentence that will never match"))
+    assert "a sentence that will never match" in str(excinfo.value)
 
 
 def test_structured_validates_against_the_requested_schema():
     provider = ScriptedProvider(
         rules=[
             ScriptedRule(
-                match=r"çift ödeme",
+                match=r"double payment",
                 structured={"_Issue": {"issue_type": "double_charge", "confidence": 0.95}},
             )
         ]
     )
-    result = provider.structured(system="sys", messages=_messages("çift ödeme yapıldı"), schema=_Issue)
+    result = provider.structured(system="sys", messages=_messages("a double payment was made"), schema=_Issue)
     assert isinstance(result, _Issue)
     assert result.issue_type == "double_charge"
     assert result.confidence == 0.95
@@ -60,10 +60,10 @@ def test_record_mode_collects_unmatched_prompts_but_still_raises():
 
 
 def test_exact_match_requires_exact_text():
-    provider = ScriptedProvider(rules=[ScriptedRule(match="evet", reply="Tamamdır.", exact=True)])
-    assert provider.complete(system="sys", messages=_messages("evet")) == "Tamamdır."
+    provider = ScriptedProvider(rules=[ScriptedRule(match="yes", reply="Done.", exact=True)])
+    assert provider.complete(system="sys", messages=_messages("yes")) == "Done."
     with pytest.raises(UnscriptedPromptError):
-        provider.complete(system="sys", messages=_messages("evet tabii"))
+        provider.complete(system="sys", messages=_messages("yes of course"))
 
 
 def test_health_is_always_ok_and_never_touches_network():

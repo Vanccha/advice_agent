@@ -51,7 +51,7 @@ def _git_commit() -> str:
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="NetHız AI support assistant eval harness")
+    parser = argparse.ArgumentParser(description="NetSwift AI support assistant eval harness")
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT_DIR, help="report output directory")
     parser.add_argument("--only", choices=["scenarios", "advisory"], default=None, help="run one suite only")
     parser.add_argument("--case", default=None, help="run a single case/profile id only")

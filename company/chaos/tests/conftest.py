@@ -6,12 +6,12 @@ import os
 # environment already provides all of these (company-db, core-api, payment-gateway).
 os.environ.setdefault("COMPANY_DB_HOST", "company-db")
 os.environ.setdefault("COMPANY_DB_PORT", "5432")
-os.environ.setdefault("COMPANY_DB_USER", "nethiz")
-os.environ.setdefault("COMPANY_DB_PASSWORD", "nethiz_dev_pw")
+os.environ.setdefault("COMPANY_DB_USER", "netswift")
+os.environ.setdefault("COMPANY_DB_PASSWORD", "netswift_dev_pw")
 os.environ.setdefault("CORE_API_BASE_URL", "http://core-api:8000")
-os.environ.setdefault("CORE_API_KEY_CRM", "nethiz_crm_key_change_me")
+os.environ.setdefault("CORE_API_KEY_CRM", "netswift_crm_key_change_me")
 os.environ.setdefault("PAYMENT_API_BASE_URL", "http://payment-gateway:8000")
-os.environ.setdefault("PSP_API_KEY", "nethiz_psp_key_change_me")
+os.environ.setdefault("PSP_API_KEY", "netswift_psp_key_change_me")
 os.environ.setdefault("PSP_FAILURE_RATE", "0.08")
 
 import httpx

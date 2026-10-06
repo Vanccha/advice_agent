@@ -31,7 +31,7 @@ def find_duplicate_groups(charges: list[dict[str, Any]], window_minutes: int) ->
     for charge in charges:
         if charge.get("status") != "succeeded":
             continue
-        amount = round(float(charge["amount_try"]), 2)
+        amount = round(float(charge["amount_gbp"]), 2)
         by_amount.setdefault(amount, []).append(charge)
 
     groups: list[dict[str, Any]] = []
@@ -44,7 +44,7 @@ def find_duplicate_groups(charges: list[dict[str, Any]], window_minutes: int) ->
             if len(cluster) >= 2:
                 groups.append(
                     {
-                        "amount_try": amount,
+                        "amount_gbp": amount,
                         "charge_refs": [c["charge_ref"] for c in cluster],
                         "timestamps": [c["created_at"] for c in cluster],
                         "count": len(cluster),

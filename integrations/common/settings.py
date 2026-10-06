@@ -40,7 +40,7 @@ class AdapterSettings(BaseSettings):
     DIAG_DATABASE_URL: str
 
     # Identity of this MCP server instance (also becomes the FastAPI/MCP server name).
-    MCP_SERVER_NAME: str = "nethiz-mcp"
+    MCP_SERVER_NAME: str = "netswift-mcp"
 
     LOG_LEVEL: str = "INFO"
 

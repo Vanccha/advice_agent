@@ -10,7 +10,7 @@ _counter = itertools.count(1)
 
 def make_customer(session) -> Customer:
     n = next(_counter)
-    customer = Customer(customer_no=f"NH-{900000 + n}", region_code="IST-KAD")
+    customer = Customer(customer_no=f"NS-{900000 + n}", region_code="LDN-CAM")
     session.add(customer)
     session.flush()
     return customer

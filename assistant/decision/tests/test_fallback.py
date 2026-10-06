@@ -23,7 +23,7 @@ def routing_config(monkeypatch: pytest.MonkeyPatch):
     clear_tenant_config_cache()
     for key, value in REQUIRED_ENV.items():
         monkeypatch.setenv(key, value)
-    cfg = load_tenant_config("nethiz", config_dir=CONFIG_DIR)
+    cfg = load_tenant_config("netswift", config_dir=CONFIG_DIR)
     clear_tenant_config_cache()
     return cfg.routing
 

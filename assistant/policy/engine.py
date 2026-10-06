@@ -10,7 +10,7 @@ from typing import Any
 from core_common.config import ActionPolicy, Condition, PolicyFile
 from core_common.types import Department, PolicyDecision
 
-from policy.messages import reason_tr_for
+from policy.messages import reason_en_for
 
 _MISSING = object()
 
@@ -89,7 +89,7 @@ class PolicyEngine:
                 allowed=False,
                 requires_confirmation=False,
                 reason_code="action_not_in_policy",
-                reason_tr=reason_tr_for("action_not_in_policy"),
+                reason_en=reason_en_for("action_not_in_policy"),
                 escalate_to=None,
             )
 
@@ -99,7 +99,7 @@ class PolicyEngine:
                 allowed=False,
                 requires_confirmation=False,
                 reason_code=reason_code,
-                reason_tr=reason_tr_for(reason_code, action_cfg.reason_tr),
+                reason_en=reason_en_for(reason_code, action_cfg.reason_en),
                 escalate_to=_department(action_cfg.escalate_to),
             )
 
@@ -123,7 +123,7 @@ class PolicyEngine:
             allowed=True,
             requires_confirmation=requires_confirmation,
             reason_code=reason_code,
-            reason_tr=reason_tr_for(reason_code),
+            reason_en=reason_en_for(reason_code),
             escalate_to=None,
         )
 
@@ -142,7 +142,7 @@ class PolicyEngine:
                 allowed=False,
                 requires_confirmation=False,
                 reason_code=reason_code,
-                reason_tr=reason_tr_for(reason_code),
+                reason_en=reason_en_for(reason_code),
                 escalate_to=escalate_to,
                 details={"failed_condition": condition.field},
             )
@@ -163,7 +163,7 @@ class PolicyEngine:
                     allowed=False,
                     requires_confirmation=False,
                     reason_code="rate_limit_exceeded",
-                    reason_tr=reason_tr_for("rate_limit_exceeded"),
+                    reason_en=reason_en_for("rate_limit_exceeded"),
                     escalate_to=None,
                     limit_applied="per_conversation",
                 )
@@ -175,7 +175,7 @@ class PolicyEngine:
                     allowed=False,
                     requires_confirmation=False,
                     reason_code="rate_limit_exceeded",
-                    reason_tr=reason_tr_for("rate_limit_exceeded"),
+                    reason_en=reason_en_for("rate_limit_exceeded"),
                     escalate_to=None,
                     limit_applied="per_customer_per_day",
                 )
@@ -184,20 +184,20 @@ class PolicyEngine:
     def _amount_failure(
         self, action_cfg: ActionPolicy, context: dict[str, Any]
     ) -> PolicyDecision | None:
-        if action_cfg.max_amount_try is None:
+        if action_cfg.max_amount_gbp is None:
             return None
-        amount = context.get("amount_try")
+        amount = context.get("amount_gbp")
         if amount is None:
             return None
-        if amount > action_cfg.max_amount_try:
+        if amount > action_cfg.max_amount_gbp:
             on_fail = action_cfg.on_condition_fail
             escalate_to = _department(on_fail.escalate_to) if on_fail else None
             return PolicyDecision(
                 allowed=False,
                 requires_confirmation=False,
                 reason_code="amount_above_limit",
-                reason_tr=reason_tr_for("amount_above_limit"),
+                reason_en=reason_en_for("amount_above_limit"),
                 escalate_to=escalate_to,
-                limit_applied=f"max_amount_try={action_cfg.max_amount_try}",
+                limit_applied=f"max_amount_gbp={action_cfg.max_amount_gbp}",
             )
         return None

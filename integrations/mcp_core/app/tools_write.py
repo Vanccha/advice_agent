@@ -94,7 +94,7 @@ async def handle_apply_outage_credit(inp: ApplyOutageCreditInput) -> ToolResult[
     idempotency_key = inp.idempotency_key or f"mcp-core-credit-{uuid.uuid4()}"
     payload = {
         "subscription_id": inp.subscription_id,
-        "amount_try": inp.amount_try,
+        "amount_gbp": inp.amount_gbp,
         "reason": inp.reason,
         "idempotency_key": idempotency_key,
     }
@@ -106,7 +106,7 @@ async def handle_apply_outage_credit(inp: ApplyOutageCreditInput) -> ToolResult[
         ApplyOutageCreditOutput(
             credit_id=body["id"],
             subscription_id=body["subscription_id"],
-            amount_try=body["amount_try"],
+            amount_gbp=body["amount_gbp"],
             reason=body["reason"],
             created_by=body["created_by"],
             idempotency_key=body["idempotency_key"],
@@ -123,7 +123,7 @@ async def handle_request_refund(inp: RequestRefundInput) -> ToolResult[Any]:
     of the model inventing one — the policy boundary is enforced by the
     company API itself, not by trusting the caller.
     """
-    payload = {"payment_id": inp.payment_id, "amount_try": inp.amount_try, "reason": inp.reason}
+    payload = {"payment_id": inp.payment_id, "amount_gbp": inp.amount_gbp, "reason": inp.reason}
     result = await core_api_client().post("/v1/refunds", SOURCE_CORE, json=payload)
     if not result.ok:
         return result
@@ -132,7 +132,7 @@ async def handle_request_refund(inp: RequestRefundInput) -> ToolResult[Any]:
         RequestRefundOutput(
             refund_ref=body["refund_ref"],
             payment_id=inp.payment_id,
-            amount_try=body["amount_try"],
+            amount_gbp=body["amount_gbp"],
             status=body["status"],
         ),
         SOURCE_CORE,

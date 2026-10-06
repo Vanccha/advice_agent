@@ -4,7 +4,7 @@ Prometheus (`:9091` on the host) scrapes every company service's `/metrics` ever
 evaluates `rules.yml`. Firing/resolved alerts go to Alertmanager (`:9093`), which fans each
 one out to two receivers (`continue: true` on both, see `alertmanager.yml`):
 
-1. **`nethiz-channels`** — posts into `notification-hub` (the Teams/Slack stand-in,
+1. **`netswift-channels`** — posts into `notification-hub` (the Teams/Slack stand-in,
    `http://localhost:8004`) so a human operator sees it in the right department channel.
 2. **`integration-webhook`** — the company's own configured third-party integration
    endpoint (deployment configuration, see the comment in `alertmanager.yml`).
@@ -13,15 +13,15 @@ one out to two receivers (`continue: true` on both, see `alertmanager.yml`):
 
 | Alert | Meaning | Department / channel | `for` |
 |---|---|---|---|
-| `PaymentGatewayDown` | `payment-gateway` is down or the PSP is in simulated outage | TECHNICAL_INFRA → `teknik-altyapi` | 1m |
-| `CoreApiDown` | `core-api` is not responding to health checks | TECHNICAL_INFRA → `teknik-altyapi` | 1m |
-| `StuckProvisioningJobs` | At least one provisioning job has been stuck | SUBSCRIPTION_OPS → `abonelik-islemleri` | 2m |
-| `HighPaymentFailureRate` | Over half of recent charge attempts failed | BILLING → `faturalama` | 3m |
-| `RegionalOutageDetected` | An open, critical-severity regional incident exists | TECHNICAL_INFRA → `teknik-altyapi` | 1m |
-| `MissedInstallations` | A field-install appointment was missed in the last 24h | FIELD_INSTALL → `saha-kurulum` | 5m |
+| `PaymentGatewayDown` | `payment-gateway` is down or the PSP is in simulated outage | TECHNICAL_INFRA → `technical-infra` | 1m |
+| `CoreApiDown` | `core-api` is not responding to health checks | TECHNICAL_INFRA → `technical-infra` | 1m |
+| `StuckProvisioningJobs` | At least one provisioning job has been stuck | SUBSCRIPTION_OPS → `subscription-ops` | 2m |
+| `HighPaymentFailureRate` | Over half of recent charge attempts failed | BILLING → `billing` | 3m |
+| `RegionalOutageDetected` | An open, critical-severity regional incident exists | TECHNICAL_INFRA → `technical-infra` | 1m |
+| `MissedInstallations` | A field-install appointment was missed in the last 24h | FIELD_INSTALL → `field-install` | 5m |
 
 Any alert whose `department` label notification-hub does not recognise falls back to the
-`operasyon-genel` channel.
+`ops-general` channel.
 
 ## How to check it
 
@@ -30,7 +30,7 @@ Any alert whose `department` label notification-hub does not recognise falls bac
   this multi-service project are still being built — that's expected and not a config error).
 - Alertmanager UI: `http://localhost:9093` (active alerts, silences, routing tree).
 - Department channels: `http://localhost:8004` (list) and `http://localhost:8004/c/<slug>`
-  (stream), e.g. `http://localhost:8004/c/teknik-altyapi`.
+  (stream), e.g. `http://localhost:8004/c/technical-infra`.
 - Config sanity without restarting anything:
   `docker compose logs prometheus alertmanager` — both log a clean config load on startup;
   a bad YAML file or rule expression shows up there immediately.

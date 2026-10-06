@@ -53,10 +53,10 @@ def test_rows_to_dicts_makes_decimal_and_datetime_json_safe() -> None:
     import datetime
     from decimal import Decimal
 
-    rows = [{"amount_try": Decimal("349.00"), "created_at": datetime.datetime(2026, 1, 1, 12, 0, 0), "status": "ok"}]
+    rows = [{"amount_gbp": Decimal("349.00"), "created_at": datetime.datetime(2026, 1, 1, 12, 0, 0), "status": "ok"}]
     safe = rows_to_dicts(rows)
-    assert safe == [{"amount_try": 349.0, "created_at": "2026-01-01T12:00:00", "status": "ok"}]
-    assert isinstance(safe[0]["amount_try"], float)
+    assert safe == [{"amount_gbp": 349.0, "created_at": "2026-01-01T12:00:00", "status": "ok"}]
+    assert isinstance(safe[0]["amount_gbp"], float)
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ def test_live_select_against_diag_view_succeeds(diag_database_url: str) -> None:
     except Exception as exc:  # pragma: no cover - environment dependent
         pytest.skip(f"company-db not reachable: {exc}")
     assert len(rows) == 1
-    assert rows[0]["customer_no"].startswith("NH-")
+    assert rows[0]["customer_no"].startswith("NS-")
 
 
 def test_live_readonly_role_cannot_select_base_tables(diag_database_url: str) -> None:

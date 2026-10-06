@@ -25,7 +25,7 @@ def test_seed_catalogue_is_present(core_api) -> None:
     items = body["items"] if isinstance(body, dict) else body
     assert len(items) >= 7, "the company should ship its full package catalogue"
     codes = {item["code"] for item in items}
-    assert {"FIBER_50_OGRENCI", "FIBER_1000_PREMIUM"} <= codes
+    assert {"FIBER_50_STUDENT", "FIBER_1000_PREMIUM"} <= codes
 
 
 def test_customer_base_is_seeded(core_api) -> None:

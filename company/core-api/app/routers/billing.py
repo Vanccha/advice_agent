@@ -37,7 +37,7 @@ def create_refund(
     now = utcnow()
     refund = Refund(
         payment_id=payment.id,
-        amount_try=body.amount_try,
+        amount_gbp=body.amount_gbp,
         status="requested",
         reason=body.reason,
         created_by=principal.name,
@@ -49,14 +49,14 @@ def create_refund(
     settings = get_settings()
     client = PaymentClient(settings)
     result = client.refund(
-        charge_ref=payment.charge_ref, amount_try=body.amount_try, reason=body.reason
+        charge_ref=payment.charge_ref, amount_gbp=body.amount_gbp, reason=body.reason
     )
 
     refund.refund_ref = result.get("refund_ref")
     refund.status = "completed" if result.get("status") == "succeeded" else "failed"
 
     if refund.status == "completed":
-        if body.amount_try >= float(payment.amount_try):
+        if body.amount_gbp >= float(payment.amount_gbp):
             payment.status = "refunded"
         else:
             payment.status = "partially_refunded"
@@ -66,7 +66,7 @@ def create_refund(
     return {
         "id": refund.id,
         "payment_id": refund.payment_id,
-        "amount_try": float(refund.amount_try),
+        "amount_gbp": float(refund.amount_gbp),
         "status": refund.status,
         "reason": refund.reason,
         "refund_ref": refund.refund_ref,
@@ -82,11 +82,11 @@ def create_credit(
     db: Session = Depends(get_db),
 ) -> dict:
     settings = get_settings()
-    if body.amount_try > settings.credit_max_per_request_try:
+    if body.amount_gbp > settings.credit_max_per_request_gbp:
         raise ApiError(
             "CREDIT_LIMIT_EXCEEDED",
-            f"Credit amount {body.amount_try} exceeds the per-request cap of "
-            f"{settings.credit_max_per_request_try} TRY.",
+            f"Credit amount {body.amount_gbp} exceeds the per-request cap of "
+            f"{settings.credit_max_per_request_gbp} GBP.",
             status_code=400,
         )
 
@@ -95,7 +95,7 @@ def create_credit(
         return {
             "id": existing.id,
             "subscription_id": existing.subscription_id,
-            "amount_try": float(existing.amount_try),
+            "amount_gbp": float(existing.amount_gbp),
             "reason": existing.reason,
             "created_by": existing.created_by,
             "idempotency_key": existing.idempotency_key,
@@ -104,7 +104,7 @@ def create_credit(
 
     credit = Credit(
         subscription_id=body.subscription_id,
-        amount_try=body.amount_try,
+        amount_gbp=body.amount_gbp,
         reason=body.reason,
         created_by=principal.name,
         idempotency_key=body.idempotency_key,
@@ -115,7 +115,7 @@ def create_credit(
     return {
         "id": credit.id,
         "subscription_id": credit.subscription_id,
-        "amount_try": float(credit.amount_try),
+        "amount_gbp": float(credit.amount_gbp),
         "reason": credit.reason,
         "created_by": credit.created_by,
         "idempotency_key": credit.idempotency_key,

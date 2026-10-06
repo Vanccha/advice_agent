@@ -20,27 +20,27 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 DEPARTMENT_LABELS = {
-    "TECHNICAL_INFRA": "Teknik Altyapı",
-    "BILLING": "Faturalama",
-    "SUBSCRIPTION_OPS": "Abonelik İşlemleri",
-    "FIELD_INSTALL": "Saha Kurulum Ekibi",
+    "TECHNICAL_INFRA": "Technical Infrastructure",
+    "BILLING": "Billing",
+    "SUBSCRIPTION_OPS": "Subscription Operations",
+    "FIELD_INSTALL": "Field Installation Team",
 }
 
 STATUS_LABELS = {
-    "NEW": "Yeni",
-    "TRIAGE": "Triyaj",
-    "IN_PROGRESS": "İşlemde",
-    "WAITING_CUSTOMER": "Müşteri Bekleniyor",
-    "RESOLVED": "Çözüldü",
-    "CLOSED": "Kapatıldı",
-    "REJECTED": "Reddedildi",
+    "NEW": "New",
+    "TRIAGE": "Triage",
+    "IN_PROGRESS": "In Progress",
+    "WAITING_CUSTOMER": "Waiting for Customer",
+    "RESOLVED": "Resolved",
+    "CLOSED": "Closed",
+    "REJECTED": "Rejected",
 }
 
 PRIORITY_LABELS = {
-    "LOW": "Düşük",
+    "LOW": "Low",
     "NORMAL": "Normal",
-    "HIGH": "Yüksek",
-    "URGENT": "Acil",
+    "HIGH": "High",
+    "URGENT": "Urgent",
 }
 
 

@@ -1,1 +1,1 @@
-"""NetHız provisioning-worker: background provisioning job runner."""
+"""NetSwift provisioning-worker: background provisioning job runner."""

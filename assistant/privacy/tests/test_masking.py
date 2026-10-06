@@ -10,83 +10,83 @@ from privacy.masking import (
 
 
 def test_mask_text_national_id():
-    result = mask_text("TC kimlik no: 35111111110 kayıtlı.")
-    assert "35111111110" not in result.masked
-    assert "***********" in result.masked
+    result = mask_text("NI number: QQ123456C on file.")
+    assert "QQ123456C" not in result.masked
+    assert "*********" in result.masked
 
 
 def test_mask_text_phone_keeps_last_two_digits():
-    result = mask_text("Telefon: +905321234567")
-    assert result.masked == "Telefon: +90 5** *** ** 67"
+    result = mask_text("Phone: +447700900167")
+    assert result.masked == "Phone: +44 7*** *** *67"
 
 
 def test_mask_text_email():
-    result = mask_text("E-posta: ayse.kaya@ornek-eposta.test")
-    assert result.masked == "E-posta: a***@o***.test"
+    result = mask_text("E-mail: amelia.jones@example-mail.test")
+    assert result.masked == "E-mail: a***@e***.test"
 
 
 def test_mask_text_iban():
-    result = mask_text("IBAN: TR330006100519786457841326")
-    assert result.masked == "IBAN: TR** **** **** **** **** **** **"
+    result = mask_text("IBAN: GB29NWBK60161331926819")
+    assert result.masked == "IBAN: GB** **** **** **** **** **"
 
 
 def test_mask_text_card_number_luhn_valid_only():
-    result = mask_text("Kart 4111111111111111, sipariş no 1234567890123456")
+    result = mask_text("Card 4111111111111111, order no 1234567890123456")
     assert "**** **** **** 1111" in result.masked
     assert "1234567890123456" in result.masked  # not a card -> left alone
 
 
 def test_mask_text_mixed_free_text_and_mapping_roundtrip():
-    original = "Müşteri Ahmet, tel +905321234567, TC 35111111110."
+    original = "Customer James, tel +447700900167, NI QQ123456C."
     result = mask_text(original)
-    assert "+905321234567" not in result.masked
-    assert "35111111110" not in result.masked
+    assert "+447700900167" not in result.masked
+    assert "QQ123456C" not in result.masked
     restored = unmask(result.masked, result.mapping)
     assert restored == original
 
 
 def test_mask_payload_structured_fields():
     payload = {
-        "customer_no": "NH-100042",
-        "full_name": "Ali Kaya",
-        "national_id": "35111111110",
-        "phone": "+905321234567",
-        "email": "ali.kaya@ornek-eposta.test",
-        "address_line": "Fiktif Sokak No:3",
-        "district": "Beşiktaş",
-        "city": "İstanbul",
+        "customer_no": "NS-100042",
+        "full_name": "Amy Khan",
+        "national_id": "QQ123456C",
+        "phone": "+447700900167",
+        "email": "amy.khan@example-mail.test",
+        "address_line": "3 Fictional Street",
+        "district": "Hackney",
+        "city": "London",
         "ticket_key": "TKT-2026-00014",
-        "nested": {"region_code": "IST-BES", "card_number": "4111111111111111"},
+        "nested": {"region_code": "LDN-HAC", "card_number": "4111111111111111"},
     }
     masked = mask_payload(payload)
 
-    assert masked["customer_no"] == "NH-100042"  # allow-listed, untouched
+    assert masked["customer_no"] == "NS-100042"  # allow-listed, untouched
     assert masked["ticket_key"] == "TKT-2026-00014"
     assert masked["full_name"] == "A** K***"
-    assert masked["national_id"] == "***********"
-    assert masked["phone"] == "+90 5** *** ** 67"
-    assert masked["email"] == "a***@o***.test"
-    assert masked["address_line"] == "Beşiktaş, İstanbul"
-    assert masked["nested"]["region_code"] == "IST-BES"
+    assert masked["national_id"] == "*********"
+    assert masked["phone"] == "+44 7*** *** *67"
+    assert masked["email"] == "a***@e***.test"
+    assert masked["address_line"] == "Hackney, London"
+    assert masked["nested"]["region_code"] == "LDN-HAC"
     assert masked["nested"]["card_number"] == "**** **** **** 1111"
 
 
 def test_mask_payload_allow_unmasked_survives_in_lists():
-    payload = {"affected_customers": ["NH-100042", "NH-100099"]}
+    payload = {"affected_customers": ["NS-100042", "NS-100099"]}
     masked = mask_payload(payload)
-    assert masked["affected_customers"] == ["NH-100042", "NH-100099"]
+    assert masked["affected_customers"] == ["NS-100042", "NS-100099"]
 
 
 def test_assert_no_pii_raises_on_raw_national_id():
     with pytest.raises(PIILeakError):
-        assert_no_pii({"observations": ["TC kimlik no 35111111110 ile eşleşti"]})
+        assert_no_pii({"observations": ["matched NI number QQ123456C"]})
 
 
 def test_assert_no_pii_accepts_masked_payload():
     payload = {
-        "full_name": "Ali Kaya",
-        "national_id": "35111111110",
-        "phone": "+905321234567",
+        "full_name": "Amy Khan",
+        "national_id": "QQ123456C",
+        "phone": "+447700900167",
     }
     masked = mask_payload(payload)
     assert_no_pii(masked)  # should not raise

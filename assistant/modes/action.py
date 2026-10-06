@@ -54,21 +54,21 @@ _ROOT_CAUSE_ACTION: dict[str, tuple[str, IssueType, Priority]] = {
     ),
 }
 
-_SUCCESS_REPLY_TR = {
+_SUCCESS_REPLY_EN = {
     "retry_provisioning_job": (
-        "Kurulum işinizin takıldığını tespit ettim ve şimdi yeniden başlattım. Birkaç "
-        "dakika içinde tamamlanmasını bekliyorum."
+        "I found that your setup job had got stuck, and I have restarted it just now. I "
+        "expect it to finish within a few minutes."
     ),
     "enqueue_provisioning_job": (
-        "Ödemenizin alındığını ama kurulum sürecinin başlamadığını gördüm; kurulum "
-        "işinizi şimdi kuyruğa aldım."
+        "I can see your payment was received but the setup process never started; I have "
+        "now queued your setup job."
     ),
 }
 
 
 @dataclass
 class ActionStepResult:
-    reply_tr: str
+    reply_en: str
     next_mode: Mode
     ticket_key: str | None = None
     requires_approval: bool = False
@@ -76,12 +76,12 @@ class ActionStepResult:
     actions: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _department_tr(ctx: TurnContext, department: Department | str | None) -> str:
+def _department_en(ctx: TurnContext, department: Department | str | None) -> str:
     if department is None:
-        return "ilgili ekip"
+        return "the relevant team"
     code = department.value if isinstance(department, Department) else str(department)
     dept_cfg = ctx.tenant_config.departments.get(code)
-    return dept_cfg.display_name_tr if dept_cfg else code
+    return dept_cfg.display_name_en if dept_cfg else code
 
 
 def _build_policy_context(ctx: TurnContext, diagnosis: Diagnosis) -> dict[str, Any]:
@@ -97,7 +97,7 @@ def _build_policy_context(ctx: TurnContext, diagnosis: Diagnosis) -> dict[str, A
         "payment": {"status": evidence.get("payment_status")},
         "incident": {"exists": diagnosis.incident_no is not None},
         "credit": {"existing_count_30d": 0},
-        "amount_try": 50.0,
+        "amount_gbp": 5.0,
     }
     return context
 
@@ -108,8 +108,8 @@ def _build_params(root_cause: str, diagnosis: Diagnosis, customer_no: str) -> di
     if root_cause == diagnostic.ROOT_CAUSE_STUCK_PROVISIONING:
         base["job_id"] = evidence.get("job_id")
     if root_cause == diagnostic.ROOT_CAUSE_REGIONAL_OUTAGE:
-        base["amount_try"] = 50.0
-        base["reason"] = f"Bölgesel kesinti telafisi ({diagnosis.incident_no})"
+        base["amount_gbp"] = 5.0
+        base["reason"] = f"Regional outage compensation ({diagnosis.incident_no})"
     return base
 
 
@@ -132,49 +132,49 @@ def _decision_context(ctx: TurnContext, diagnosis: Diagnosis) -> DecisionContext
 # What the customer is actually told we found, before being told it was handed over.
 # "I am not authorised, I forwarded it" on its own leaves the customer none the wiser —
 # worse, during a payment outage it lets them assume their card is at fault.
-_FINDING_TR: dict[str, str] = {
-    "stuck_provisioning": "Kurulum (provizyon) işleminizin takılı kaldığını tespit ettim.",
+_FINDING_EN: dict[str, str] = {
+    "stuck_provisioning": "I found that your setup (provisioning) job has got stuck.",
     "paid_not_active": (
-        "Ödemenizin alındığını, ancak aboneliğinizin aktifleştirilmediğini tespit ettim."
+        "I found that your payment was received, but your subscription has not been activated."
     ),
-    "double_charge": "Aynı tutarın hesabınızdan iki kez tahsil edildiğini tespit ettim.",
-    "missed_installation": "Kurulum randevunuzun gerçekleştirilmediğini tespit ettim.",
+    "double_charge": "I found that the same amount was taken from your account twice.",
+    "missed_installation": "I found that your installation appointment did not take place.",
     "regional_outage": (
-        "Bölgenizde devam eden bir altyapı arızası olduğunu tespit ettim; sorun size özel değil."
+        "I found an ongoing infrastructure fault in your area; the problem is not specific to you."
     ),
     "payment_system_down": (
-        "Ödeme sistemimiz şu anda geçici olarak hizmet veremiyor. Sorun kartınızda ya da "
-        "cihazınızda değil; sistem normale döndüğünde ödemenizi tekrar deneyebilirsiniz."
+        "Our payment system is temporarily unavailable. The problem is not with your card or "
+        "your device; you can try your payment again once the system is back to normal."
     ),
-    "no_issue_found": "Kayıtlarınızda sorunun kaynağını kesin olarak tespit edemedim.",
-    "customer_not_found": "Kayıtlarınıza ulaşamadım.",
+    "no_issue_found": "I could not pin down the cause of the problem in your records.",
+    "customer_not_found": "I could not reach your records.",
 }
 
 
-# The department reads these fields, so they are Turkish and specific. A subject of
-# "double_charge — NH-100039" and a next step that merely repeats the refusal both make a
+# The department reads these fields, so they are plain-language and specific. A subject of
+# "double_charge — NS-100039" and a next step that merely repeats the refusal both make a
 # human re-do the work the assistant already did.
-_TICKET_SUBJECT_TR: dict[str, str] = {
-    "double_charge": "Çift tahsilat — {customer_no}",
-    "stuck_provisioning": "Provizyon işi takılı kaldı — {customer_no}",
-    "paid_not_active": "Ödeme alındı, abonelik aktif değil — {customer_no}",
-    "regional_outage": "Bölgesel altyapı arızası — {customer_no}",
-    "missed_installation": "Kurulum randevusu gerçekleşmedi — {customer_no}",
-    "payment_system_down": "Ödeme sistemi hizmet veremiyor — {customer_no}",
-    "refund_request": "İade talebi — {customer_no}",
-    "plan_change_request": "Paket değişikliği talebi — {customer_no}",
-    "infrastructure_repair": "Altyapı onarımı gerekiyor — {customer_no}",
+_TICKET_SUBJECT_EN: dict[str, str] = {
+    "double_charge": "Double charge — {customer_no}",
+    "stuck_provisioning": "Provisioning job stuck — {customer_no}",
+    "paid_not_active": "Payment received, subscription not active — {customer_no}",
+    "regional_outage": "Regional infrastructure fault — {customer_no}",
+    "missed_installation": "Installation appointment missed — {customer_no}",
+    "payment_system_down": "Payment system unavailable — {customer_no}",
+    "refund_request": "Refund request — {customer_no}",
+    "plan_change_request": "Package change request — {customer_no}",
+    "infrastructure_repair": "Infrastructure repair needed — {customer_no}",
 }
 
-_NEXT_STEP_TR: dict[str, str] = {
-    "double_charge": "Mükerrer ödemenin iadesi onaylanmalı (ödeme kayıtları kanıtlarda).",
-    "missed_installation": "Müşteriyle iletişime geçilip yeni bir kurulum randevusu planlanmalı.",
-    "regional_outage": "Arıza kaydı üzerinden çözüm süresi güncellenmeli ve müşteri bilgilendirilmeli.",
-    "paid_not_active": "Abonelik elle aktifleştirilmeli ya da provizyon süreci kontrol edilmeli.",
-    "stuck_provisioning": "Provizyon altyapısı kontrol edilmeli; iş yeniden başlatma denemesi sonuç vermedi.",
-    "payment_system_down": "Ödeme altyapısı ekibi devrede olmalı; müşteriye dönüş yapılmalı.",
-    "plan_change_request": "Paket değişikliği ve varsa cayma bedeli hesaplanıp müşteriye bildirilmeli.",
-    "infrastructure_repair": "Saha/şebeke ekibi yönlendirilmeli.",
+_NEXT_STEP_EN: dict[str, str] = {
+    "double_charge": "Approve the refund of the duplicate payment (payment records are in the evidence).",
+    "missed_installation": "Contact the customer and book a new installation appointment.",
+    "regional_outage": "Update the resolution time on the incident record and keep the customer informed.",
+    "paid_not_active": "Activate the subscription manually or check the provisioning process.",
+    "stuck_provisioning": "Check the provisioning infrastructure; restarting the job did not help.",
+    "payment_system_down": "The payment infrastructure team should take over; get back to the customer.",
+    "plan_change_request": "Work out the package change and any early termination fee, and tell the customer.",
+    "infrastructure_repair": "Dispatch the field/network team.",
 }
 
 _ID_EVIDENCE_KEYS = ("record_ids", "observations", "error_codes", "queried_sources")
@@ -207,8 +207,8 @@ def _evidence_list(evidence: dict[str, Any], key: str) -> list[Any]:
     return merged
 
 
-def _finding_tr(root_cause: str) -> str:
-    return _FINDING_TR.get(root_cause, "Durumunuzu inceledim.")
+def _finding_en(root_cause: str) -> str:
+    return _FINDING_EN.get(root_cause, "I have looked into your situation.")
 
 
 def _decide_issue_type(
@@ -352,7 +352,7 @@ def _escalate_with_ticket(
     requester_name: str,
     requester_contact: str,
     attempted_action: str,
-    blocked_reason_tr: str,
+    blocked_reason_en: str,
 ) -> ActionStepResult:
     evidence = diagnosis.evidence
     ticket = build_structured_ticket(
@@ -360,26 +360,26 @@ def _escalate_with_ticket(
         department=department,
         issue_type=issue_type,
         priority=priority,
-        subject_tr=_TICKET_SUBJECT_TR.get(
-            issue_type.value, f"Destek talebi ({issue_type.value}) — {customer_no}"
+        subject_en=_TICKET_SUBJECT_EN.get(
+            issue_type.value, f"Support request ({issue_type.value}) — {customer_no}"
         ).format(customer_no=customer_no),
-        body_tr=(
-            f"Teşhis sonucu: {diagnosis.root_cause}. Müşteri {customer_no} için "
-            f"'{attempted_action}' işlemi politika tarafından engellendi: {blocked_reason_tr} "
-            "Lütfen manuel olarak değerlendirin."
+        body_en=(
+            f"Diagnosis: {diagnosis.root_cause}. For customer {customer_no}, the "
+            f"'{attempted_action}' action was blocked by policy: {blocked_reason_en} "
+            "Please review it manually."
         ),
         requester_customer_no=customer_no,
         requester_name=requester_name,
         requester_contact=requester_contact,
-        suggested_next_step_tr=_NEXT_STEP_TR.get(issue_type.value, blocked_reason_tr),
-        urgency_reason_tr=f"Teşhis güveni: {diagnosis.confidence:.2f}",
+        suggested_next_step_en=_NEXT_STEP_EN.get(issue_type.value, blocked_reason_en),
+        urgency_reason_en=f"Diagnosis confidence: {diagnosis.confidence:.2f}",
         evidence_record_ids=_evidence_record_ids(evidence),
         evidence_observations=_evidence_list(evidence, "observations"),
         evidence_error_codes=_evidence_list(evidence, "error_codes"),
         evidence_queried_sources=evidence.get("queried_sources", []),
         attempted_steps=[
             {"step": f"diagnosis:{diagnosis.root_cause}", "result": "established", "outcome": "info"},
-            {"step": f"policy_check:{attempted_action}", "result": blocked_reason_tr, "outcome": "blocked"},
+            {"step": f"policy_check:{attempted_action}", "result": blocked_reason_en, "outcome": "blocked"},
         ],
         affected_customers=[customer_no],
         incident_ref=diagnosis.incident_no,
@@ -390,23 +390,23 @@ def _escalate_with_ticket(
         ctx.conversation_id,
         StepType.TICKET_CREATED,
         f"created ticket {ticket_ref.ticket_key} for department {department.value}",
-        blocked_reason_tr,
+        blocked_reason_en,
         {"ticket_key": ticket_ref.ticket_key, "department": department.value},
         tenant=ctx.tenant,
     )
-    dept_tr = _department_tr(ctx, department)
-    reply_tr = (
-        f"{_finding_tr(diagnosis.root_cause)} Bu işlemi doğrudan tamamlama yetkim yok, "
-        f"bu nedenle talebinizi {dept_tr} ekibine ilettim. "
-        f"Takip numaranız: {ticket_ref.ticket_key}."
+    dept_en = _department_en(ctx, department)
+    reply_en = (
+        f"{_finding_en(diagnosis.root_cause)} I am not authorised to complete this myself, "
+        f"so I have passed your request to the {dept_en} team. "
+        f"Your reference number is {ticket_ref.ticket_key}."
     )
     return ActionStepResult(
-        reply_tr=reply_tr,
+        reply_en=reply_en,
         next_mode=Mode.ESCALATED,
         ticket_key=ticket_ref.ticket_key,
         actions=[
             {
-                "label_tr": f"Bilet oluşturuldu: {department.value}",
+                "label_en": f"Ticket created: {department.value}",
                 "action_name": attempted_action,
                 "executed": False,
                 "policy_allowed": False,
@@ -429,15 +429,15 @@ def handle_action(
 
     if root_cause == diagnostic.ROOT_CAUSE_NO_ISSUE_FOUND:
         return ActionStepResult(
-            reply_tr=(
-                "Hesabınızı ve aboneliğinizi kontrol ettim, şu anda belirgin bir sorun "
-                "görünmüyor. Sorun devam ederse lütfen detay paylaşın."
+            reply_en=(
+                "I have checked your account and subscription, and I cannot see an obvious "
+                "problem right now. If it carries on, please share a few more details."
             ),
             next_mode=Mode.CLOSING,
         )
     if root_cause == diagnostic.ROOT_CAUSE_CUSTOMER_NOT_FOUND:
         return ActionStepResult(
-            reply_tr="Müşteri numaranızı bulamadım, lütfen numaranızı kontrol edip tekrar deneyin.",
+            reply_en="I could not find your customer number; please check it and try again.",
             next_mode=Mode.CLOSING,
         )
 
@@ -459,23 +459,23 @@ def handle_action(
         except ConfirmationRequired as exc:
             approval_id = _persist_pending_approval(
                 ctx, action_name="apply_outage_credit", params=params, policy_context=policy_context,
-                prompt_tr=exc.decision.reason_tr or "Bu işlem onayınızı gerektiriyor.",
+                prompt_en=exc.decision.reason_en or "This action needs your approval.",
             )
-            reply_tr = (
-                f"Bölgenizde devam eden bir arıza kaydı bulundu ({diagnosis.incident_no}) ve "
-                f"talebinizi {incident_ticket.ticket_key} numaralı kayda ekledim. Kesinti için "
-                "hesabınıza 50 TL'ye kadar iyi niyet kredisi tanımlayabilirim, ancak bu geri "
-                "alınamaz bir işlem olduğu için önce onayınızı almam gerekiyor. Onaylıyor musunuz?"
+            reply_en = (
+                f"There is an open fault record for your area ({diagnosis.incident_no}), and I "
+                f"have added your request to ticket {incident_ticket.ticket_key}. I can apply a "
+                "goodwill credit of up to £5 to your account for the outage, but as this cannot "
+                "be undone I need your approval first. Do you approve?"
             )
             return ActionStepResult(
-                reply_tr=reply_tr,
+                reply_en=reply_en,
                 next_mode=Mode.AWAITING_APPROVAL,
                 ticket_key=incident_ticket.ticket_key,
                 requires_approval=True,
                 approval_id=approval_id,
                 actions=[
                     {
-                        "label_tr": "Onay bekleniyor: apply_outage_credit",
+                        "label_en": "Awaiting approval: apply_outage_credit",
                         "action_name": "apply_outage_credit",
                         "executed": False,
                         "policy_allowed": True,
@@ -484,28 +484,28 @@ def handle_action(
                 ],
             )
         except PolicyDenied as exc:
-            reply_tr = (
-                f"Bölgenizde devam eden bir arıza kaydı bulundu ({diagnosis.incident_no}) ve "
-                f"talebinizi {incident_ticket.ticket_key} numaralı kayda ekledim. Bu kesinti "
-                f"için kredi tanımlayamıyorum: {exc.decision.reason_tr}"
+            reply_en = (
+                f"There is an open fault record for your area ({diagnosis.incident_no}), and I "
+                f"have added your request to ticket {incident_ticket.ticket_key}. I cannot apply "
+                f"a credit for this outage: {exc.decision.reason_en}"
             )
             return ActionStepResult(
-                reply_tr=reply_tr, next_mode=Mode.ESCALATED, ticket_key=incident_ticket.ticket_key,
+                reply_en=reply_en, next_mode=Mode.ESCALATED, ticket_key=incident_ticket.ticket_key,
             )
         else:
             # allowed without confirmation (shouldn't happen per policy.yaml, but handle it)
-            reply_tr = (
-                f"Bölgenizde devam eden bir arıza kaydı bulundu ({diagnosis.incident_no}) ve "
-                f"talebinizi {incident_ticket.ticket_key} numaralı kayda ekledim."
+            reply_en = (
+                f"There is an open fault record for your area ({diagnosis.incident_no}), and I "
+                f"have added your request to ticket {incident_ticket.ticket_key}."
             )
-            return ActionStepResult(reply_tr=reply_tr, next_mode=Mode.CLOSING, ticket_key=incident_ticket.ticket_key)
+            return ActionStepResult(reply_en=reply_en, next_mode=Mode.CLOSING, ticket_key=incident_ticket.ticket_key)
 
     mapping = _ROOT_CAUSE_ACTION.get(root_cause)
     if mapping is None:
         return ActionStepResult(
-            reply_tr=(
-                "Durumu inceledim ancak otomatik çözebileceğim bir adım bulamadım; isterseniz "
-                "bir temsilciye aktarabilirim."
+            reply_en=(
+                "I have looked into it, but there is no step I can take automatically; if you "
+                "like, I can pass you to an agent."
             ),
             next_mode=Mode.CLOSING,
         )
@@ -533,21 +533,21 @@ def handle_action(
             requester_name=requester_name,
             requester_contact=requester_contact,
             attempted_action=action_name,
-            blocked_reason_tr=exc.decision.reason_tr or "politika engeli",
+            blocked_reason_en=exc.decision.reason_en or "blocked by policy",
         )
     except ConfirmationRequired as exc:
         approval_id = _persist_pending_approval(
             ctx, action_name=action_name, params=params, policy_context=policy_context,
-            prompt_tr=exc.decision.reason_tr or "Bu işlem onayınızı gerektiriyor.",
+            prompt_en=exc.decision.reason_en or "This action needs your approval.",
         )
         return ActionStepResult(
-            reply_tr=f"{exc.decision.reason_tr} Onaylıyor musunuz?",
+            reply_en=f"{exc.decision.reason_en} Do you approve?",
             next_mode=Mode.AWAITING_APPROVAL,
             requires_approval=True,
             approval_id=approval_id,
             actions=[
                 {
-                    "label_tr": f"Onay bekleniyor: {action_name}",
+                    "label_en": f"Awaiting approval: {action_name}",
                     "action_name": action_name,
                     "executed": False,
                     "policy_allowed": True,
@@ -556,15 +556,15 @@ def handle_action(
             ],
         )
     else:
-        reply_tr = _SUCCESS_REPLY_TR.get(
-            action_name, f"{action_name} işlemini başarıyla gerçekleştirdim."
+        reply_en = _SUCCESS_REPLY_EN.get(
+            action_name, f"I have successfully carried out {action_name}."
         )
         return ActionStepResult(
-            reply_tr=reply_tr,
+            reply_en=reply_en,
             next_mode=Mode.CLOSING,
             actions=[
                 {
-                    "label_tr": f"İşlem uygulandı: {action_name}",
+                    "label_en": f"Action applied: {action_name}",
                     "action_name": action_name,
                     "executed": True,
                     "policy_allowed": True,
@@ -579,14 +579,14 @@ def _persist_pending_approval(
     action_name: str,
     params: dict[str, Any],
     policy_context: dict[str, Any],
-    prompt_tr: str,
+    prompt_en: str,
 ) -> str:
     with session_scope(ctx.audit_log.session_factory) as session:
         row = PendingApproval(
             conversation_id=ctx.conversation_id,
             action_name=action_name,
             params={"action_params": params, "policy_context": policy_context},
-            prompt_tr=prompt_tr,
+            prompt_en=prompt_en,
             status="pending",
         )
         session.add(row)
@@ -596,7 +596,7 @@ def _persist_pending_approval(
         ctx.conversation_id,
         StepType.APPROVAL_REQUESTED,
         f"approval #{approval_id} requested for action '{action_name}'",
-        prompt_tr,
+        prompt_en,
         {"action_name": action_name},
         tenant=ctx.tenant,
     )

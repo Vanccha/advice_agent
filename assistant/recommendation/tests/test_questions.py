@@ -26,7 +26,7 @@ def test_next_question_none_when_all_answered():
         usage=[UsageType.STUDENT],
         household_size=2,
         device_count=3,
-        budget_try=300,
+        budget_gbp=30,
         commitment_preference="any",
     )
     assert next_question(profile) is None
@@ -40,14 +40,14 @@ def test_profile_is_complete_requires_usage_household_and_budget():
     assert profile_is_complete(AdvisoryProfile(usage=[UsageType.STUDENT], household_size=2)) is False
     # usage + a size + budget -> complete, either size field satisfies the "size" dimension.
     assert profile_is_complete(
-        AdvisoryProfile(usage=[UsageType.STUDENT], device_count=2, budget_try=300)
+        AdvisoryProfile(usage=[UsageType.STUDENT], device_count=2, budget_gbp=30)
     ) is True
     assert profile_is_complete(
-        AdvisoryProfile(usage=[UsageType.STUDENT], household_size=2, budget_try=300)
+        AdvisoryProfile(usage=[UsageType.STUDENT], household_size=2, budget_gbp=30)
     ) is True
 
 
 def test_profile_is_complete_ignores_optional_commitment():
-    profile = AdvisoryProfile(usage=[UsageType.FAMILY], household_size=3, budget_try=400)
+    profile = AdvisoryProfile(usage=[UsageType.FAMILY], household_size=3, budget_gbp=40)
     assert profile_is_complete(profile) is True
     assert profile.commitment_preference is None

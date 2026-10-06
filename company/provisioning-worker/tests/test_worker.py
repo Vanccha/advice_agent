@@ -68,7 +68,7 @@ def test_success_path_activates_modem_and_schedules_installation(session):
         session.query(InstallationAppointment).filter_by(subscription_id=sub.id).one_or_none()
     )
     assert appointment is not None
-    assert appointment.team_code.startswith("FIELD-IST-KAD-")
+    assert appointment.team_code.startswith("FIELD-LDN-CAM-")
 
 
 def test_failure_path_sets_error_and_increments_attempt_count(session):

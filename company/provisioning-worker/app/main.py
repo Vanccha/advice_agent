@@ -50,7 +50,7 @@ def _on_startup() -> None:
 app = create_app(
     service_name=settings.service_name,
     version=settings.service_version,
-    title="NetHız provisioning-worker",
+    title="NetSwift provisioning-worker",
     description="Background provisioning job runner.",
     on_startup=_on_startup,
     log_level=settings.log_level,

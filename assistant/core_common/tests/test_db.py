@@ -17,11 +17,11 @@ def test_bootstrap_schema_and_session_scope_round_trip_sqlite():
     sm = sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
     with session_scope(sm) as session:
-        session.add(Conversation(conversation_id="conv-1", tenant="nethiz", mode="ROUTER"))
+        session.add(Conversation(conversation_id="conv-1", tenant="netswift", mode="ROUTER"))
 
     with session_scope(sm) as session:
         row = session.query(Conversation).filter_by(conversation_id="conv-1").one()
-        assert row.tenant == "nethiz"
+        assert row.tenant == "netswift"
         assert row.mode == "ROUTER"
 
 
@@ -31,11 +31,11 @@ def test_session_scope_rolls_back_on_exception():
     sm = sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
     with session_scope(sm) as session:
-        session.add(Conversation(conversation_id="conv-rollback", tenant="nethiz"))
+        session.add(Conversation(conversation_id="conv-rollback", tenant="netswift"))
 
     try:
         with session_scope(sm) as session:
-            session.add(Conversation(conversation_id="conv-2", tenant="nethiz"))
+            session.add(Conversation(conversation_id="conv-2", tenant="netswift"))
             raise ValueError("boom")
     except ValueError:
         pass

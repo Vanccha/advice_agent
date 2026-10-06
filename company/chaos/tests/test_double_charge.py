@@ -19,30 +19,30 @@ def test_inject_creates_matching_charge_and_payment_rows(core_eng, payment_eng):
     with core_eng.connect() as conn:
         payment = conn.execute(
             text(
-                "SELECT subscription_id, amount_try, status, charge_ref, created_at FROM core.payments "
+                "SELECT subscription_id, amount_gbp, status, charge_ref, created_at FROM core.payments "
                 "WHERE id = :id"
             ),
             {"id": dup_payment_id},
         ).mappings().one()
         original = conn.execute(
-            text("SELECT amount_try, created_at FROM core.payments WHERE id = :id"),
+            text("SELECT amount_gbp, created_at FROM core.payments WHERE id = :id"),
             {"id": candidate["payment_id"]},
         ).mappings().one()
 
     with payment_eng.connect() as conn:
         charge = conn.execute(
-            text("SELECT customer_ref, amount_try, status FROM psp.charges WHERE charge_ref = :ref"),
+            text("SELECT customer_ref, amount_gbp, status FROM psp.charges WHERE charge_ref = :ref"),
             {"ref": dup_charge_ref},
         ).mappings().one()
 
     assert payment["status"] == "succeeded"
-    assert float(payment["amount_try"]) == float(original["amount_try"])
+    assert float(payment["amount_gbp"]) == float(original["amount_gbp"])
     assert payment["subscription_id"] == candidate["subscription_id"]
     delta = payment["created_at"] - original["created_at"]
     assert abs(delta.total_seconds() - 240) < 5
 
     assert charge["status"] == "succeeded"
-    assert float(charge["amount_try"]) == float(original["amount_try"])
+    assert float(charge["amount_gbp"]) == float(original["amount_gbp"])
     assert charge["customer_ref"] == candidate["customer_no"]
 
 

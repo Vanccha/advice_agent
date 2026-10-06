@@ -18,10 +18,10 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 CONFIG_DIR = REPO_ROOT / "config" / "tenants"
 
 INTENT_RULES = [
-    ScriptedRule(match=r"paket|tavsiye|öner", structured={"_IntentResult": {"value": "advisory", "confidence": 0.95, "rationale": "scripted"}}),
-    ScriptedRule(match=r"arıza|çalışmıyor|açılmadı|sorun|kesinti|yanlış tahsilat", structured={"_IntentResult": {"value": "problem_report", "confidence": 0.95, "rationale": "scripted"}}),
-    ScriptedRule(match=r"durum|talebim", structured={"_IntentResult": {"value": "status_query", "confidence": 0.95, "rationale": "scripted"}}),
-    ScriptedRule(match=r"merhaba|selam", structured={"_IntentResult": {"value": "smalltalk", "confidence": 0.95, "rationale": "scripted"}}),
+    ScriptedRule(match=r"package|recommend|suggest", structured={"_IntentResult": {"value": "advisory", "confidence": 0.95, "rationale": "scripted"}}),
+    ScriptedRule(match=r"fault|not working|not (been )?switched on|problem|outage|wrong charge|charged twice", structured={"_IntentResult": {"value": "problem_report", "confidence": 0.95, "rationale": "scripted"}}),
+    ScriptedRule(match=r"status|my request", structured={"_IntentResult": {"value": "status_query", "confidence": 0.95, "rationale": "scripted"}}),
+    ScriptedRule(match=r"\bhello\b|\bhi\b", structured={"_IntentResult": {"value": "smalltalk", "confidence": 0.95, "rationale": "scripted"}}),
 ]
 
 
@@ -30,7 +30,7 @@ def client(tmp_path, monkeypatch: pytest.MonkeyPatch):
     db_path = tmp_path / "assistant_test.db"
     monkeypatch.setenv("ASSISTANT_DATABASE_URL", f"sqlite:///{db_path}")
     monkeypatch.setenv("TENANT_CONFIG_DIR", str(CONFIG_DIR))
-    monkeypatch.setenv("TENANT", "nethiz")
+    monkeypatch.setenv("TENANT", "netswift")
     monkeypatch.setenv("LLM_PROVIDER", "scripted")
     monkeypatch.setenv("DECISION_SERVICE", "llm_structured")
     monkeypatch.setenv("WEBHOOK_SECRET", "test-webhook-secret")

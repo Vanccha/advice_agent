@@ -29,7 +29,7 @@ def payment_engine(settings: ChaosSettings) -> Engine:
 
 @contextmanager
 def core_tx(settings: ChaosSettings) -> Generator[Connection, None, None]:
-    """One transaction against nethiz_core. Commits on success, rolls back on error."""
+    """One transaction against netswift_core. Commits on success, rolls back on error."""
     engine = core_engine(settings)
     with engine.begin() as conn:
         yield conn
@@ -37,7 +37,7 @@ def core_tx(settings: ChaosSettings) -> Generator[Connection, None, None]:
 
 @contextmanager
 def payment_tx(settings: ChaosSettings) -> Generator[Connection, None, None]:
-    """One transaction against nethiz_payment."""
+    """One transaction against netswift_payment."""
     engine = payment_engine(settings)
     with engine.begin() as conn:
         yield conn

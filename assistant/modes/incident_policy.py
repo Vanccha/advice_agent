@@ -41,7 +41,7 @@ def ensure_incident_ticket(
                 "ticket_key": ticket_ref.ticket_key,
                 "author": "assistant",
                 "author_type": "system",
-                "body": f"Ek etkilenen müşteri: {customer_no} (bölgesel arıza {incident_no}).",
+                "body": f"Additional affected customer: {customer_no} (regional fault {incident_no}).",
                 "is_internal": True,
             },
         )
@@ -65,17 +65,17 @@ def ensure_incident_ticket(
         department=Department.TECHNICAL_INFRA,
         issue_type=IssueType.REGIONAL_OUTAGE,
         priority=Priority.HIGH,
-        subject_tr=f"Bölgesel kesinti — {incident_no}",
-        body_tr=(
-            f"{incident_no} numaralı bölgesel arıza nedeniyle {customer_no} numaralı "
-            "müşteri hizmet alamıyor. Bölgedeki tüm etkilenen müşteriler bu bilete "
-            "bağlanacaktır."
+        subject_en=f"Regional outage — {incident_no}",
+        body_en=(
+            f"Customer {customer_no} has no service because of regional fault "
+            f"{incident_no}. Every affected customer in the region will be linked to this "
+            "ticket."
         ),
         requester_customer_no=customer_no,
         requester_name=requester_name,
         requester_contact=requester_contact,
-        suggested_next_step_tr="Bölgesel arızanın giderilme sürecini takip edin.",
-        urgency_reason_tr="Bölgedeki birden fazla müşteri hizmet kesintisi yaşıyor.",
+        suggested_next_step_en="Follow the regional fault through to resolution.",
+        urgency_reason_en="Several customers in the region are without service.",
         evidence_record_ids={"incident_no": incident_no},
         evidence_queried_sources=["mcp-core:get_active_incidents_for_region"],
         incident_ref=incident_no,

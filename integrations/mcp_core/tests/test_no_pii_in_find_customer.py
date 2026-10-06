@@ -30,7 +30,7 @@ async def test_live_find_customer_result_has_no_national_id() -> None:
     except httpx.HTTPError:
         pytest.skip("core-api not reachable")
 
-    result = await handle_find_customer(FindCustomerInput(customer_no="NH-100001"))
+    result = await handle_find_customer(FindCustomerInput(customer_no="NS-100001"))
     if not result.ok:
         pytest.skip(f"diag_db not reachable from this environment: {result.error}")
     assert len(result.data.customers) == 1

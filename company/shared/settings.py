@@ -6,19 +6,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class CompanySettings(BaseSettings):
-    """Base settings every NetHız service shares."""
+    """Base settings every NetSwift service shares."""
 
     model_config = SettingsConfigDict(env_file=None, extra="ignore")
 
-    service_name: str = "nethiz-service"
+    service_name: str = "netswift-service"
     service_version: str = "1.0.0"
     log_level: str = "INFO"
 
-    company_db_user: str = "nethiz"
-    company_db_password: str = "nethiz_dev_pw"
+    company_db_user: str = "netswift"
+    company_db_password: str = "netswift_dev_pw"
     company_db_host: str = "localhost"
     company_db_port: int = 5432
-    company_db_name: str = "nethiz_core"
+    company_db_name: str = "netswift_core"
 
     @property
     def database_url(self) -> str:

@@ -1,1 +1,1 @@
-"""Ticketing service — NetHız internal Jira/Zendesk stand-in."""
+"""Ticketing service — NetSwift internal Jira/Zendesk stand-in."""

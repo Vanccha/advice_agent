@@ -17,7 +17,7 @@ def test_runner_routes_a_known_action_to_its_tool():
 def test_runner_passes_through_an_adapter_unavailable_outcome_without_raising():
     gateway = FakeGateway({})  # no canned response -> ADAPTER_UNAVAILABLE
     runner = make_action_runner(gateway)
-    result = runner("apply_outage_credit", {"subscription_id": 1, "amount_try": 50})
+    result = runner("apply_outage_credit", {"subscription_id": 1, "amount_gbp": 50})
     assert result["ok"] is False
     assert result["error_code"] == "ADAPTER_UNAVAILABLE"
 
@@ -42,5 +42,5 @@ def test_enqueue_provisioning_job_is_mapped():
 def test_runner_handles_send_department_message():
     gateway = FakeGateway({"post_department_message": {"posted": True}})
     runner = make_action_runner(gateway)
-    result = runner("send_department_message", {"channel": "faturalama", "text": "..."})
+    result = runner("send_department_message", {"channel": "billing", "text": "..."})
     assert result["ok"] is True

@@ -23,15 +23,15 @@ class PaymentClient:
     def create_charge(
         self,
         *,
-        amount_try: float,
+        amount_gbp: float,
         customer_ref: str,
         method: str,
         card_token: str | None,
         idempotency_key: str,
     ) -> dict[str, Any]:
         body = {
-            "amount_try": float(amount_try),
-            "currency": "TRY",
+            "amount_gbp": float(amount_gbp),
+            "currency": "GBP",
             "customer_ref": customer_ref,
             "method": method,
             "card_token": card_token,
@@ -63,11 +63,11 @@ class PaymentClient:
             )
         return response.json()
 
-    def refund(self, *, charge_ref: str, amount_try: float, reason: str) -> dict[str, Any]:
+    def refund(self, *, charge_ref: str, amount_gbp: float, reason: str) -> dict[str, Any]:
         try:
             response = self._client.post(
                 f"/psp/v1/charges/{charge_ref}/refunds",
-                json_body={"amount_try": float(amount_try), "reason": reason},
+                json_body={"amount_gbp": float(amount_gbp), "reason": reason},
                 raise_for_status=False,
             )
         except httpx.HTTPError as exc:  # pragma: no cover

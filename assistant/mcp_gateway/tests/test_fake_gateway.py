@@ -16,10 +16,10 @@ def audit_log() -> AuditLog:
 
 
 async def test_call_returns_canned_response(audit_log: AuditLog):
-    gateway = FakeGateway({"find_customer": {"customer_no": "NH-100042"}}, audit_log)
-    outcome = await gateway.call("find_customer", {"customer_no": "NH-100042"})
+    gateway = FakeGateway({"find_customer": {"customer_no": "NS-100042"}}, audit_log)
+    outcome = await gateway.call("find_customer", {"customer_no": "NS-100042"})
     assert outcome.ok is True
-    assert outcome.data == {"customer_no": "NH-100042"}
+    assert outcome.data == {"customer_no": "NS-100042"}
 
 
 async def test_unknown_tool_is_adapter_unavailable_not_an_exception(audit_log: AuditLog):
@@ -49,19 +49,19 @@ async def test_reset_turn_budget_allows_more_calls(audit_log: AuditLog):
 
 async def test_every_call_writes_an_audit_entry_with_a_digest_not_raw_output(audit_log: AuditLog):
     gateway = FakeGateway(
-        {"find_customer": {"customer_no": "NH-100042", "phone": "0532 111 22 31"}},
+        {"find_customer": {"customer_no": "NS-100042", "phone": "07700 900 131"}},
         audit_log,
         conversation_id="conv-mcp-1",
     )
-    await gateway.call("find_customer", {"customer_no": "NH-100042"})
+    await gateway.call("find_customer", {"customer_no": "NS-100042"})
     timeline = audit_log.timeline("conv-mcp-1")
     assert len(timeline) == 1
     entry = timeline[0]
     assert entry.tool_name == "find_customer"
     assert entry.tool_output_digest is not None
     assert len(entry.tool_output_digest) == 64
-    assert "0532 111 22 31" not in str(entry.tool_input)
-    assert "0532 111 22 31" not in str(entry.evidence)
+    assert "07700 900 131" not in str(entry.tool_input)
+    assert "07700 900 131" not in str(entry.evidence)
 
 
 async def test_catalog_groups_by_adapter(audit_log: AuditLog):

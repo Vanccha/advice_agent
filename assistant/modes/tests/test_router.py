@@ -10,7 +10,7 @@ def test_complaint_routes_to_diagnostic(tenant_config, session_factory) -> None:
     })
     orch = build_orchestrator(tenant_config, session_factory, gateway=gateway)
     result = orch.handle_message(
-        conversation_id=None, customer_no="NH-100001", message="İnternetim hala açılmadı, arıza var"
+        conversation_id=None, customer_no="NS-100001", message="My internet still has not been switched on, there is a fault"
     )
     # DIAGNOSTIC auto-advances into ACTION within the same turn (fixed checklist, no
     # further user input needed) and the stuck job gets fixed without a ticket.
@@ -22,10 +22,10 @@ def test_complaint_routes_to_diagnostic(tenant_config, session_factory) -> None:
 def test_advisory_request_routes_to_advisory(tenant_config, session_factory) -> None:
     orch = build_orchestrator(tenant_config, session_factory)
     result = orch.handle_message(
-        conversation_id=None, customer_no="NH-100001", message="Bana uygun bir paket önerir misiniz?"
+        conversation_id=None, customer_no="NS-100001", message="Could you recommend a package that suits me?"
     )
     assert result.mode == Mode.ADVISORY.value
-    assert "kullanıyorsunuz" in result.reply_tr or "cihaz" in result.reply_tr or result.reply_tr
+    assert "use the internet" in result.reply_en or "devices" in result.reply_en or result.reply_en
 
 
 def test_low_confidence_intent_hands_over_instead_of_guessing(tenant_config, session_factory) -> None:
@@ -33,6 +33,6 @@ def test_low_confidence_intent_hands_over_instead_of_guessing(tenant_config, ses
 
     provider = make_scripted_provider([(r".*", "problem_report", 0.1)])
     orch = build_orchestrator(tenant_config, session_factory, provider=provider)
-    result = orch.handle_message(conversation_id=None, customer_no="NH-100001", message="asdkjasndkj")
+    result = orch.handle_message(conversation_id=None, customer_no="NS-100001", message="asdkjasndkj")
     assert result.mode == Mode.CLOSING.value
-    assert "temsilci" in result.reply_tr.lower()
+    assert "agent" in result.reply_en.lower()

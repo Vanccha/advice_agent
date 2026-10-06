@@ -16,7 +16,7 @@ from app.routers import charges as charges_router
 from app.routers import control as control_router
 from app.settings import Settings
 
-TEST_DB_NAME = "nethiz_payment_test"
+TEST_DB_NAME = "netswift_payment_test"
 TEST_API_KEY = "test_psp_key_do_not_use_in_prod"
 TEST_WEBHOOK_SECRET = "test_webhook_secret"
 

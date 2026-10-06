@@ -1,41 +1,42 @@
-# NetHız Telekom + Harici AI Destek Asistanı
+# NetSwift Telecom + External AI Support Assistant
 
-Kurumsal bir şirkete **dışarıdan eklenen** AI destek asistanının gerçekçi provası.
-Repo iki ayrı dünyadan oluşur ve bu ayrım bilerek serttir:
+A realistic rehearsal of an AI support assistant **bolted onto** an enterprise from outside.
+The repo is made of two separate worlds, and the separation is deliberately strict:
 
-- **`company/` — NetHız Telekom:** hayali bir fiber internet sağlayıcısı. Kendi veritabanları,
-  kendi REST API'leri, kendi bilet sistemi, kendi izleme yığını var. Kodunda asistanın adı bile
-  geçmez; asistandan habersiz yazılmış gibi davranır.
-- **`assistant/` — ürün:** şirketin kodunu hiç bilmeyen misafir sistem. Şirkete yalnızca
-  `integrations/` altındaki adaptörler (MCP sunucuları) üzerinden erişir.
+- **`company/` — NetSwift Telecom:** a fictional UK fibre broadband provider. It has its own
+  databases, its own REST APIs, its own ticketing system and its own monitoring stack. The
+  assistant's name never appears in its code; it behaves as if it were written without any
+  knowledge of the assistant.
+- **`assistant/` — the product:** a guest system that knows nothing about the company's code.
+  It reaches the company only through the adapters (MCP servers) under `integrations/`.
 
-Yeni bir müşteriye geçmek için yalnızca `integrations/` ve `config/tenants/<müşteri>/` değişir.
+Moving to a new customer changes only `integrations/` and `config/tenants/<customer>/`.
 
-## Mimari
+## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph COMPANY["company/ — NetHız Telekom (asistandan habersiz)"]
+    subgraph COMPANY["company/ — NetSwift Telecom (unaware of the assistant)"]
         direction TB
-        CORE["core-api<br/>abonelik · ödeme kaydı · provizyon<br/>randevu · arıza kaydı"]
-        WORKER["provisioning-worker<br/>arka plan provizyon işi"]
-        PSP["payment-gateway-mock<br/>tahsilat · iade · kesinti"]
-        TKT["ticketing<br/>bilet API + departman paneli"]
-        NTF["notification-hub<br/>departman kanalları"]
+        CORE["core-api<br/>subscriptions · payment records · provisioning<br/>appointments · incidents"]
+        WORKER["provisioning-worker<br/>background provisioning jobs"]
+        PSP["payment-gateway-mock<br/>charges · refunds · outages"]
+        TKT["ticketing<br/>ticket API + department panel"]
+        NTF["notification-hub<br/>department channels"]
         PROM["prometheus + alertmanager"]
-        CDB[("company-db<br/>nethiz_core · payment<br/>ticketing · notify")]
+        CDB[("company-db<br/>netswift_core · payment<br/>ticketing · notify")]
         CORE --- CDB
         WORKER --- CDB
         PSP --- CDB
         TKT --- CDB
         NTF --- CDB
-        CORE -->|tahsilat| PSP
+        CORE -->|charge| PSP
         PSP -->|webhook| CORE
-        TKT -->|departman mesajı| NTF
+        TKT -->|department message| NTF
         PROM -->|scrape| CORE & WORKER & PSP & TKT & NTF
     end
 
-    subgraph INTEG["integrations/ — adaptörler (yeni müşteride değişen tek katman)"]
+    subgraph INTEG["integrations/ — adapters (the only layer that changes per customer)"]
         direction TB
         MC["mcp-core"]
         MP["mcp-payment"]
@@ -44,16 +45,16 @@ flowchart LR
         MN["mcp-notification"]
     end
 
-    subgraph ASSIST["assistant/ — ürün (şirket kodunu import etmez)"]
+    subgraph ASSIST["assistant/ — the product (never imports company code)"]
         direction TB
-        MODES["Durum makinesi<br/>Yönlendirici → Danışma / Teşhis / Durum → Aksiyon"]
-        DEC["DecisionService<br/>güven skorlu kararlar"]
-        POL["Yetki motoru<br/>policy.yaml"]
-        REC["Deterministik paket skorlama"]
-        PRIV["KVKK maskeleme"]
-        AUD["Değiştirilemez denetim kaydı"]
-        WEB["Sohbet widget'ı"]
-        ADB[("assistant-db<br/>konuşma · audit")]
+        MODES["State machine<br/>Router → Advisory / Diagnostic / Status → Action"]
+        DEC["DecisionService<br/>confidence-scored decisions"]
+        POL["Authority engine<br/>policy.yaml"]
+        REC["Deterministic package scoring"]
+        PRIV["UK GDPR masking"]
+        AUD["Tamper-proof audit log"]
+        WEB["Chat widget"]
+        ADB[("assistant-db<br/>conversations · audit")]
         WEB --> MODES --> DEC
         MODES --> REC
         MODES --> POL
@@ -61,8 +62,8 @@ flowchart LR
         MODES --- ADB
     end
 
-    CORE -. salt okunur diag view'ları .-> MC
-    CORE -->|"yazma: yalnız REST + scope'lu API anahtarı"| MC
+    CORE -. read-only diag views .-> MC
+    CORE -->|"writes: REST only + scoped API key"| MC
     PSP --- MP
     TKT --- MT
     PROM --- MM
@@ -72,146 +73,152 @@ flowchart LR
     MT <--> MODES
     MM <--> MODES
     MN <--> MODES
-    PROM -->|alarm webhook'u| MM -->|proaktif teşhis| MODES
-    TKT -->|bilet durum webhook'u| MODES
-    MODES -->|maskelenmiş izler| LF["Langfuse<br/>(ayrı compose dosyası)"]
+    PROM -->|alert webhook| MM -->|proactive diagnosis| MODES
+    TKT -->|ticket status webhook| MODES
+    MODES -->|masked traces| LF["Langfuse<br/>(separate compose file)"]
 
     PRIV -.-> MODES
 ```
 
-### Değişmez kurallar (hepsi testle zorlanır)
+### Invariants (all enforced by tests)
 
-| Kural | Nasıl garanti altına alındı |
+| Rule | How it is guaranteed |
 |---|---|
-| Asistan şirket kodunu import edemez | `tests/architecture/test_boundaries.py` AST taraması |
-| Şirket kodu asistandan habersizdir | Aynı test: `assistant`, `llm`, `openai`, `mcp` … kelimeleri şirket ağacında yasak |
-| Asistan şirket veritabanına **yazamaz** | `readonly_diag` rolü yalnız `diag.*` view'larını `SELECT` edebilir; `core.*` tamamen kapalı (`tests/integration/test_readonly_role.py`) |
-| Teşhis verisinde kimlik bilgisi yok | `diag.*` view'larında `national_id`/adres kolonu yok; test ediyor |
-| Model kendi yetkisine karar veremez | Her aksiyon önce `policy.yaml`'ı yorumlayan yetki motorundan geçer; tanımsız aksiyon reddedilir |
-| Denetim kaydı değiştirilemez | `asst.audit_entries` üzerinde `BEFORE UPDATE OR DELETE` trigger'ı + hash zinciri |
+| The assistant cannot import company code | `tests/architecture/test_boundaries.py` AST scan |
+| Company code knows nothing about the assistant | Same test: the words `assistant`, `llm`, `openai`, `mcp` … are banned in the company tree |
+| The assistant **cannot write** to a company database | The `readonly_diag` role can only `SELECT` from `diag.*` views; `core.*` is closed entirely (`tests/integration/test_readonly_role.py`) |
+| No identity data in diagnostic data | `diag.*` views have no `national_id`/address columns; tested |
+| The model cannot decide its own authority | Every action first goes through the authority engine that interprets `policy.yaml`; undefined actions are denied |
+| The audit log cannot be altered | `BEFORE UPDATE OR DELETE` trigger on `asst.audit_entries` + a hash chain |
 
-## Kurulum
+## Setup
 
-Gereken tek şey Docker. (Makine arm64 olduğu için .NET + MS SQL Server yerine
-Python 3.12 + FastAPI + PostgreSQL kullanıldı; gerekçe `CLAUDE.md`'de.)
+All you need is Docker. (Because the host is arm64, Python 3.12 + FastAPI + PostgreSQL were
+used instead of .NET + MS SQL Server; the reasoning is in `CLAUDE.md`.)
 
 ```bash
-cp .env.example .env          # OPENAI_API_KEY'i kendi anahtarınla doldur
-make up                       # şirket + asistan, tek komut
-make smoke                    # sağlık ve seed kontrolü
-make open                     # demo adreslerini yazdırır
+cp .env.example .env          # fill in OPENAI_API_KEY with your own key
+make up                       # company + assistant, single command
+make smoke                    # health and seed checks
+make open                     # prints the demo URLs
 ```
 
-| Arayüz | Adres |
+| Interface | URL |
 |---|---|
-| Müşteri sohbet widget'ı (NetHız sitesine gömülü) | http://localhost:8080 |
-| Departman bilet paneli | http://localhost:8003/agent |
-| Departman kanalları (Teams/Slack yerine) | http://localhost:8004 |
-| Şirket API dokümanı (OpenAPI) | http://localhost:8001/docs |
+| Customer chat widget (embedded in the NetSwift site) | http://localhost:8080 |
+| Department ticket panel | http://localhost:8003/agent |
+| Department channels (stand-in for Teams/Slack) | http://localhost:8004 |
+| Company API docs (OpenAPI) | http://localhost:8001/docs |
 | Prometheus / Alertmanager | http://localhost:9091 · http://localhost:9093 |
 
-İzleme (isteğe bağlı, ayrı dosya — ayrıntı: `docs/observability.md`):
+Observability (optional, separate file — details in `docs/observability.md`):
 
 ```bash
-make up-observability         # + self-hosted Langfuse (kendi PostgreSQL'i ile)
+make up-observability         # + self-hosted Langfuse (with its own PostgreSQL)
 ```
 
-`LANGFUSE_ENABLED=false` iken ya da Langfuse ayakta değilken asistan hiç etkilenmez;
-izler yerel JSONL dosyasına düşer.
+With `LANGFUSE_ENABLED=false`, or while Langfuse is down, the assistant is not affected at
+all; traces fall back to a local JSONL file.
 
-## Testler
+## Tests
 
 ```bash
-make test               # tüm paketler, her biri kendi pytest sürecinde
-make test-arch          # yalnız mimari sınır testleri
-make test-integration   # çalışan yığına karşı uçtan uca testler
+make test               # every suite, each in its own pytest process
+make test-arch          # architecture boundary tests only
+make test-integration   # end-to-end tests against the running stack
 ```
 
-## Chaos — arıza enjeksiyonu
+## Chaos — failure injection
 
 ```bash
 make chaos SCENARIO=stuck_provisioning
-make chaos SCENARIO=regional_outage CHAOS_ARGS="--region IST-KAD"
+make chaos SCENARIO=regional_outage CHAOS_ARGS="--region LDN-CAM"
 make chaos-status
 make chaos-reset
 ```
 
-| Senaryo | Şirkette ne olur | Asistandan beklenen |
+| Scenario | What happens at the company | What the assistant should do |
 |---|---|---|
-| `stuck_provisioning` | Provizyon işi takılı kalır | Kendi çözer: işi yeniden başlatır, bilet açmaz |
-| `paid_not_active` | Ödeme alınmış, abonelik aktifleşmemiş | Küçük düzeltmeyi yapar; iade gerekiyorsa Faturalama'ya aktarır |
-| `regional_outage` | Bir bölgede altyapı arızası, tüm müşteriler etkilenir | Mevcut olaya bağlar, **müşteri başına bilet açmaz**, onayla ≤50 TL telafi önerebilir |
-| `double_charge` | Aynı tutar iki kez tahsil edilir | Tespit eder, iade yetkisi olmadığı için kanıtlarıyla Faturalama'ya aktarır |
-| `missed_installation` | Kurulum randevusu kaçırılır | Saha Kurulum Ekibi'ne yapılandırılmış bilet açar |
-| `payment_down` | Ödeme servisi tamamen çöker | İzleme alarmı tetiklenir, asistan proaktif teşhis başlatır |
+| `stuck_provisioning` | A provisioning job gets stuck | Fixes it itself: restarts the job, opens no ticket |
+| `paid_not_active` | Payment taken, subscription never activated | Applies the small fix; hands over to Billing if a refund is needed |
+| `regional_outage` | An infrastructure fault in one region affects every customer there | Links to the existing incident, **opens no ticket per customer**, may offer up to £5 compensation with consent |
+| `double_charge` | The same amount is taken twice | Detects it and, lacking refund authority, hands it to Billing with the evidence |
+| `missed_installation` | An installation appointment is missed | Opens a structured ticket for the Field Installation Team |
+| `payment_down` | The payment service goes down completely | A monitoring alert fires and the assistant starts a proactive diagnosis |
 
-## Demo akışı
+## Demo walkthrough
 
-> Müşteriye sunum yapar gibi, adım adım.
+> Step by step, as if presenting to a customer.
 
-1. **Sahne kurulumu.** `make up && make open`. Üç sekme aç: müşteri widget'ı, departman bilet
-   paneli, departman kanalları. "Bu üçü şirketin kendi dünyası; asistan bunların hiçbirinin
-   kodunu bilmiyor" diye çerçevele.
-2. **Danışma.** Widget'tan giriş yapmadan sor: *"Evde 4 kişiyiz, akşamları dizi izliyoruz,
-   bütçem 500 TL."* Asistan 3–5 soru sorar ve paket önerir. Vurgulanacak nokta: **öneri
-   deterministik bir skorlama fonksiyonundan gelir**, model yalnızca soruyu sorar ve sonucu
-   Türkçe anlatır — aynı girdi her zaman aynı öneriyi verir.
-3. **Asistanın kendi çözdüğü sorun.** `make chaos SCENARIO=stuck_provisioning` (çıktıdaki
-   müşteri numarasıyla giriş yap) → *"İnternetim hâlâ açılmadı."* Asistan kaydı, ödemeyi ve
-   provizyon işini kontrol eder, takılı işi yeniden başlatır. **Bilet açılmaz.**
-4. **Yetki sınırı.** `make chaos SCENARIO=double_charge` → *"Hesabımdan iki kez para çekilmiş."*
-   Asistan çift tahsilatı tespit eder, ama iade yetkisi **yoktur**: Faturalama'ya kanıtlarla
-   (iki ödeme ID'si, tutar, zaman farkı, denediği adımlar) bilet açar. Bilet panelinde aç ve
-   göster: departman müşteriye aynı soruları yeniden sormak zorunda değil.
-5. **Genel olay.** `make chaos SCENARIO=regional_outage` → aynı bölgeden iki farklı müşteri
-   numarasıyla sor. Asistan ikisini de **aynı** olaya bağlar; ikinci bir bilet açılmaz.
-6. **Proaktif davranış.** `make chaos SCENARIO=payment_down` → Prometheus alarmı tetiklenir,
-   Alertmanager hem departman kanalına hem asistana gider; asistan teşhisi kendiliğinden
-   başlatır.
-7. **Döngünün kapanması.** Bilet panelinden biletin durumunu değiştir → webhook asistana
-   ulaşır → müşteri widget'ında bilgilendirme görünür.
-8. **Şeffaflık ve uyum.** Widget'taki "Asistan ne yaptı?" panelini aç: her adım, gerekçesi ve
-   dayandığı kayıt. Ardından `docker compose exec assistant …` ile audit kaydının hash
-   zincirini doğrula; veritabanının `UPDATE`/`DELETE`'i reddettiğini göster. KVKK: modele ve
-   izlere giden veride TC/telefon/adres maskeli.
-9. **Kapanış.** `config/tenants/_example/` klasörünü aç: ikinci bir müşteriye geçmek için
-   değişen tek şey bu klasör ve gerekirse yeni adaptörler.
+1. **Set the scene.** `make up && make open`. Open three tabs: the customer widget, the
+   department ticket panel and the department channels. Frame it: "These three are the
+   company's own world; the assistant knows the code of none of them."
+2. **Advice.** Without signing in, ask the widget: *"There are 4 of us at home, we stream
+   shows every evening, my budget is £50."* The assistant asks 3–5 questions and recommends a
+   package. The point to stress: **the recommendation comes from a deterministic scoring
+   function**; the model only asks the questions and explains the result — the same input
+   always gives the same recommendation.
+3. **A problem the assistant fixes itself.** `make chaos SCENARIO=stuck_provisioning` (sign
+   in with the customer number in the output) → *"My internet still hasn't been switched
+   on."* The assistant checks the record, the payment and the provisioning job, and restarts
+   the stuck job. **No ticket is opened.**
+4. **The authority boundary.** `make chaos SCENARIO=double_charge` → *"I've been charged
+   twice."* The assistant detects the double charge, but it has **no** refund authority: it
+   opens a ticket for Billing with the evidence (both payment IDs, the amount, the time gap,
+   the steps it tried). Open it in the ticket panel and show that the department does not
+   have to ask the customer the same questions again.
+5. **A known incident.** `make chaos SCENARIO=regional_outage` → ask with two different
+   customer numbers from the same region. The assistant links both to the **same** incident;
+   no second ticket is opened.
+6. **Proactive behaviour.** `make chaos SCENARIO=payment_down` → the Prometheus alert fires,
+   Alertmanager notifies both the department channel and the assistant, and the assistant
+   starts a diagnosis on its own.
+7. **Closing the loop.** Change the ticket's status in the ticket panel → the webhook reaches
+   the assistant → a notification appears in the customer's widget.
+8. **Transparency and compliance.** Open the widget's "What did the assistant do?" panel:
+   every step, its reason and the record it relied on. Then verify the audit log's hash chain
+   with `docker compose exec assistant …` and show that the database rejects
+   `UPDATE`/`DELETE`. UK GDPR: NI numbers, phone numbers and addresses are masked in
+   everything sent to the model and to traces.
+9. **Wrap-up.** Open `config/tenants/_example/`: moving to a second customer changes only this
+   folder and, if needed, new adapters.
 
-Her senaryodan sonra `make chaos-reset`.
+Run `make chaos-reset` after each scenario.
 
-## İkinci kiracı (çok kiracılılık kanıtı)
+## Second tenant (proof of multi-tenancy)
 
-`config/tenants/_example/` boş bir şablon değil, çalışan ikinci bir müşteri: farklı abone
-numarası formatı (`OR-2045118`), farklı departman adları, daha katı devretme eşiği, telafi
-yetkisi **yok**, randevu değiştirme yetkisi **var**, bütçe odaklı öneri ağırlıkları.
+`config/tenants/_example/` is not an empty template but a working second customer: a
+different account number format (`OR-2045118`), different department names, a stricter
+handover threshold, **no** compensation authority, **with** authority to reschedule
+appointments, and budget-focused recommendation weights.
 
 ```bash
 docker compose run --rm -e TENANT=_example test-runner \
   env PYTHONPATH=/workspace/assistant python -c "
 from fastapi.testclient import TestClient
 from api.main import app
-with TestClient(app) as c: print(c.post('/api/login', json={'customer_no':'NH-100001'}).json())"
+with TestClient(app) as c: print(c.post('/api/login', json={'customer_no':'NS-100001'}).json())"
 ```
 
-Aynı imaj ve aynı kodla: `nethiz`'de geçerli olan müşteri numarası burada format hatası
-alır, giriş ekranı kiracının etiketini gösterir, yetki motoru kararlarını o müşterinin
-`policy.yaml`'ından verir. Ayrıntı ve dürüst sınırlar: `config/tenants/_example/README.md`.
+Same image, same code: a customer number valid for `netswift` gets a format error here, the
+sign-in page shows that tenant's label, and the authority engine takes its decisions from that
+customer's `policy.yaml`. Details and honest limits: `config/tenants/_example/README.md`.
 
-## Değerlendirme
+## Evaluation
 
 ```bash
 make eval
 ```
 
-Her chaos senaryosu için farklı üsluplarda (kibar / sinirli / eksik bilgi veren) Türkçe
-kullanıcı mesajları ve danışma modu için 10 kullanıcı profili çalıştırılır; doğru mod, doğru
-teşhis, doğru aksiyon ya da doğru departman ve "gereksiz bilet açılmaması" ölçülür, sonunda
-bir başarı raporu üretilir. Varsayılan koşu deterministiktir ve API anahtarı gerektirmez
-(`EVAL_MODE=scripted`); gerçek modelle çalıştırmak için `EVAL_MODE=live`.
+For every chaos scenario, user messages in different tones (polite / angry / vague) are run,
+plus 10 customer profiles for advisory mode; the right mode, the right diagnosis, the right
+action or the right department, and "no unnecessary ticket" are measured, and a pass-rate
+report is produced at the end. The default run is deterministic and needs no API key
+(`EVAL_MODE=scripted`); set `EVAL_MODE=live` to run against a real model.
 
-## Daha fazlası
+## More
 
-- `CLAUDE.md` — mimari kurallar ve çalışma anlaşmaları
-- `docs/contracts.md` — şemalar, endpoint imzaları, webhook payload'ları (tek doğruluk kaynağı)
-- `docs/observability.md` — Langfuse kurulumu ve izleme
-- `company/monitoring/README.md` — alarm kuralları ve hangi departmana gittikleri
+- `CLAUDE.md` — architecture rules and working agreements
+- `docs/contracts.md` — schemas, endpoint signatures, webhook payloads (single source of truth)
+- `docs/observability.md` — Langfuse setup and tracing
+- `company/monitoring/README.md` — alert rules and which department each one goes to

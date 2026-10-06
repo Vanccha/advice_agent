@@ -12,16 +12,16 @@ from shared.clock import utcnow
 from app.models import InstallationAppointment, NetworkIncident, ProvisioningJob, Subscription
 
 PROVISIONING_JOBS_STUCK = Gauge(
-    "nethiz_provisioning_jobs_stuck", "Provisioning jobs currently flagged stuck."
+    "netswift_provisioning_jobs_stuck", "Provisioning jobs currently flagged stuck."
 )
 OPEN_INCIDENTS = Gauge(
-    "nethiz_open_incidents", "Open or monitoring network incidents.", ["severity"]
+    "netswift_open_incidents", "Open or monitoring network incidents.", ["severity"]
 )
 MISSED_APPOINTMENTS_24H = Gauge(
-    "nethiz_missed_appointments_24h", "Installation appointments missed in the last 24h."
+    "netswift_missed_appointments_24h", "Installation appointments missed in the last 24h."
 )
 SUBSCRIPTIONS_TOTAL = Gauge(
-    "nethiz_subscriptions_total", "Subscriptions by status.", ["status"]
+    "netswift_subscriptions_total", "Subscriptions by status.", ["status"]
 )
 
 ALL_SEVERITIES = ("minor", "major", "critical")

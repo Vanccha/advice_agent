@@ -19,9 +19,9 @@ def test_channel_seeding_is_idempotent(app_client):
 
     assert len(channels) == 5
     assert slugs == {
-        "teknik-altyapi",
-        "faturalama",
-        "abonelik-islemleri",
-        "saha-kurulum",
-        "operasyon-genel",
+        "technical-infra",
+        "billing",
+        "subscription-ops",
+        "field-install",
+        "ops-general",
     }

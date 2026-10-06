@@ -1,44 +1,44 @@
-"""Reason-code → Turkish sentence fallback table (contracts §4.6).
+"""Reason-code → customer-facing sentence fallback table (contracts §4.6).
 
-Used by `PolicyEngine` whenever `policy.yaml` does not already carry an explicit `reason_tr`
+Used by `PolicyEngine` whenever `policy.yaml` does not already carry an explicit `reason_en`
 for the situation (e.g. a generic condition failure, an unknown action, a rate limit hit).
-When the policy file *does* provide `reason_tr` (the four hard-denied actions, and any
-`on_condition_fail.reason_tr` an operator adds later), that value always wins.
+When the policy file *does* provide `reason_en` (the four hard-denied actions, and any
+`on_condition_fail.reason_en` an operator adds later), that value always wins.
 """
 from __future__ import annotations
 
-REASON_CODE_TR: dict[str, str] = {
+REASON_CODE_EN: dict[str, str] = {
     "action_not_in_policy": (
-        "Bu işlem tanımlı politikalar arasında yer almıyor, bu nedenle gerçekleştiremiyorum."
+        "This action is not covered by any defined policy, so I cannot carry it out."
     ),
-    "action_not_allowed": "Bu işlem için yetkim yok, ilgili ekibe aktarıyorum.",
-    "condition_failed": "Bu işlem şu an gerekli koşulları sağlamadığı için gerçekleştirilemiyor.",
-    "amount_above_limit": "Talep edilen tutar izin verilen üst sınırı aşıyor.",
-    "rate_limit_exceeded": "Bu işlem için izin verilen deneme sayısına ulaşıldı.",
+    "action_not_allowed": "I am not authorised to do this, so I am passing it to the relevant team.",
+    "condition_failed": "This action cannot be carried out because its conditions are not met right now.",
+    "amount_above_limit": "The requested amount exceeds the permitted limit.",
+    "rate_limit_exceeded": "The permitted number of attempts for this action has been reached.",
     "provisioning_retry_limit": (
-        "Yeniden deneme sayısı sınırına ulaşıldığı için bu işlemi Abonelik İşlemleri "
-        "ekibine aktarıyorum."
+        "The retry limit has been reached, so I am passing this to the Subscription "
+        "Operations team."
     ),
     "credit_not_applicable": (
-        "Bu kesinti için telafi tanımlayamıyorum, Faturalama ekibine aktarıyorum."
+        "I cannot apply compensation for this outage, so I am passing it to the Billing team."
     ),
-    "action_allowed": "Bu işlem politika kurallarına uygun, gerçekleştirebilirim.",
+    "action_allowed": "This action complies with policy, so I can carry it out.",
     "action_allowed_requires_confirmation": (
-        "Bu işlem geri alınamaz olduğu için devam etmeden önce onayınız gerekiyor."
+        "This action cannot be undone, so I need your approval before going ahead."
     ),
 }
 
-_DEFAULT_DENIAL_TR = REASON_CODE_TR["condition_failed"]
+_DEFAULT_DENIAL_EN = REASON_CODE_EN["condition_failed"]
 
 
-def reason_tr_for(reason_code: str | None, override: str | None = None) -> str:
-    """Resolve the Turkish sentence for a reason code.
+def reason_en_for(reason_code: str | None, override: str | None = None) -> str:
+    """Resolve the customer-facing sentence for a reason code.
 
-    `override` (typically `ActionPolicy.reason_tr` or `OnConditionFail`-adjacent text taken
+    `override` (typically `ActionPolicy.reason_en` or `OnConditionFail`-adjacent text taken
     straight from `policy.yaml`) always wins when present.
     """
     if override:
         return override
-    if reason_code and reason_code in REASON_CODE_TR:
-        return REASON_CODE_TR[reason_code]
-    return _DEFAULT_DENIAL_TR
+    if reason_code and reason_code in REASON_CODE_EN:
+        return REASON_CODE_EN[reason_code]
+    return _DEFAULT_DENIAL_EN

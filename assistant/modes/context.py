@@ -41,7 +41,7 @@ class TurnContext:
     ticket_service: TicketService
     # contracts §4.3 advisory verbalization: the same (already PII-guarded) provider the
     # rest of the turn uses, so ADVISORY can ask it to narrate `recommend_packages`'
-    # output in Turkish without any mode needing to know how the provider is constructed.
+    # output in the tenant's language without any mode needing to know how the provider is constructed.
     provider: LLMProvider
 
     customer_no: str | None

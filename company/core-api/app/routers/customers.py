@@ -21,9 +21,9 @@ router = APIRouter(tags=["customers"])
 def _next_customer_no(db: Session) -> str:
     last = db.scalar(select(Customer).order_by(Customer.id.desc()))
     if last is None:
-        return "NH-100001"
+        return "NS-100001"
     last_seq = int(last.customer_no.split("-")[1])
-    return f"NH-{last_seq + 1}"
+    return f"NS-{last_seq + 1}"
 
 
 @router.post(
@@ -42,7 +42,7 @@ def create_customer(body: CustomerCreate, db: Session = Depends(get_db)) -> dict
         district=body.district,
         city=body.city,
         region_code=body.region_code,
-        kvkk_consent_at=utcnow() if body.kvkk_consent else None,
+        gdpr_consent_at=utcnow() if body.gdpr_consent else None,
         created_at=utcnow(),
     )
     db.add(customer)
@@ -95,7 +95,7 @@ def get_customer(customer_no: str, db: Session = Depends(get_db)) -> dict:
                 "id": sub.id,
                 "status": sub.status,
                 "package_code": package.code if package else None,
-                "monthly_price_try": float(sub.monthly_price_try),
+                "monthly_price_gbp": float(sub.monthly_price_gbp),
             }
         )
     payload = customer_out(customer)

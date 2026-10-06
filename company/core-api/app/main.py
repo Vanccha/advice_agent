@@ -31,7 +31,7 @@ def _on_startup() -> None:
 app = create_app(
     service_name=settings.service_name,
     version=settings.service_version,
-    title="NetHız core-api",
+    title="NetSwift core-api",
     description="Subscriptions, payments, provisioning, incidents and notifications.",
     on_startup=_on_startup,
     log_level=settings.log_level,

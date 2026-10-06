@@ -1,47 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Talepler — NetHız Destek Masası{% endblock %}
+{% block title %}Tickets — NetSwift Service Desk{% endblock %}
 {% block content %}
-<h1>Talepler</h1>
+<h1>Tickets</h1>
 
 <form class="filters" method="get" action="/agent">
     <label>
-        Departman
+        Department
         <select name="department">
-            <option value="">Tümü</option>
+            <option value="">All</option>
             {% for code, label in all_departments.items() %}
             <option value="{{ code }}" {% if department == code %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
     </label>
     <label>
-        Durum
+        Status
         <select name="status">
-            <option value="">Tümü</option>
+            <option value="">All</option>
             {% for code, label in all_statuses.items() %}
             <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
     </label>
     <label>
-        Ara (müşteri no / konu)
-        <input type="text" name="q" value="{{ q }}" placeholder="NH-100042 veya konu" />
+        Search (customer no / subject)
+        <input type="text" name="q" value="{{ q }}" placeholder="NS-100042 or subject" />
     </label>
-    <button type="submit">Filtrele</button>
+    <button type="submit">Filter</button>
 </form>
 
-<p class="result-count">{{ total }} talepten {{ tickets|length }} tanesi gösteriliyor.</p>
+<p class="result-count">Showing {{ tickets|length }} of {{ total }} tickets.</p>
 
 <table class="ticket-table">
     <thead>
         <tr>
-            <th>Talep No</th>
-            <th>Departman</th>
-            <th>Öncelik</th>
-            <th>Durum</th>
-            <th>Konu</th>
-            <th>Müşteri No</th>
-            <th>SLA Bitişi</th>
-            <th>Oluşturulma</th>
+            <th>Ticket No</th>
+            <th>Department</th>
+            <th>Priority</th>
+            <th>Status</th>
+            <th>Subject</th>
+            <th>Customer No</th>
+            <th>SLA Due</th>
+            <th>Created</th>
         </tr>
     </thead>
     <tbody>
@@ -53,21 +53,21 @@
             <td><span class="badge badge-status-{{ t.status }}">{{ status_labels.get(t.status, t.status) }}</span></td>
             <td>{{ t.subject }}</td>
             <td>{{ t.requester_customer_no or "-" }}</td>
-            <td>{{ t.sla_due_at.strftime("%d.%m.%Y %H:%M") }}</td>
-            <td>{{ t.created_at.strftime("%d.%m.%Y %H:%M") }}</td>
+            <td>{{ t.sla_due_at.strftime("%d/%m/%Y %H:%M") }}</td>
+            <td>{{ t.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="empty">Kayıt bulunamadı.</td></tr>
+        <tr><td colspan="8" class="empty">No records found.</td></tr>
         {% endfor %}
     </tbody>
 </table>
 
 <div class="pagination">
     {% if offset > 0 %}
-    <a href="/agent?department={{ department }}&status={{ status }}&q={{ q }}&limit={{ limit }}&offset={{ offset - limit if offset - limit > 0 else 0 }}">« Önceki</a>
+    <a href="/agent?department={{ department }}&status={{ status }}&q={{ q }}&limit={{ limit }}&offset={{ offset - limit if offset - limit > 0 else 0 }}">« Previous</a>
     {% endif %}
     {% if offset + limit < total %}
-    <a href="/agent?department={{ department }}&status={{ status }}&q={{ q }}&limit={{ limit }}&offset={{ offset + limit }}">Sonraki »</a>
+    <a href="/agent?department={{ department }}&status={{ status }}&q={{ q }}&limit={{ limit }}&offset={{ offset + limit }}">Next »</a>
     {% endif %}
 </div>
 {% endblock %}

@@ -46,7 +46,7 @@ OUTPUTS (every method): core_common.types.Decision[T] where T is:
         (decision.fallback.apply_confidence_floor) and treats low confidence as "escalate
         to a human", never as "retry with a guess".
     Decision.rationale:  short, English, human-readable justification — this goes into the
-        audit log (contracts §4.8) verbatim, so it must never contain Turkish user-facing
+        audit log (contracts §4.8) verbatim, so it must never contain customer-facing
         text or raw PII.
     Decision.model:      identifies the concrete backing model/version string.
     Decision.raw:        the adapter's raw structured response, for debugging/audit,

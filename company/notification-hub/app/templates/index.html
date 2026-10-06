@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Kanallar — NetHız Bildirim Merkezi{% endblock %}
+{% block title %}Channels — NetSwift Notification Hub{% endblock %}
 {% block content %}
-<h1>Kanallar</h1>
+<h1>Channels</h1>
 <ul class="channel-list">
   {% for row in rows %}
   <li class="channel-row">
@@ -11,7 +11,7 @@
         <span class="channel-name">{{ row.channel.display_name }}</span>
         <span class="channel-desc">{{ row.channel.description or "" }}</span>
       </span>
-      <span class="channel-count">{{ row.count }} mesaj</span>
+      <span class="channel-count">{{ row.count }} message{{ "" if row.count == 1 else "s" }}</span>
     </a>
     {% if row.latest %}
     <a class="latest-preview severity-{{ row.latest.severity }}" href="/c/{{ row.channel.slug }}">
@@ -20,7 +20,7 @@
       <p>{{ row.latest.text }}</p>
     </a>
     {% else %}
-    <div class="latest-preview empty">Bu kanalda henüz mesaj yok.</div>
+    <div class="latest-preview empty">No messages in this channel yet.</div>
     {% endif %}
   </li>
   {% endfor %}

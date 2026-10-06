@@ -2,7 +2,7 @@
 
 Reads ``<TENANT_CONFIG_DIR>/<tenant>/{tenant,policy,routing}.yaml``, expands ``${ENV_VAR}``
 placeholders from ``os.environ``, validates every file against a Pydantic model, and caches
-the result per tenant. Works unchanged for ``nethiz`` and ``_example``.
+the result per tenant. Works unchanged for ``netswift`` and ``_example``.
 
 Import as: ``from core_common.config import load_tenant_config, TenantConfig, ConfigError``.
 """
@@ -43,14 +43,14 @@ class AdapterConfig(BaseModel):
 class DepartmentConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    display_name_tr: str
+    display_name_en: str
     channel: str
 
 
 class CustomerIdentifierConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    label_tr: str
+    label_en: str
     pattern: str
     example: str
 
@@ -58,10 +58,10 @@ class CustomerIdentifierConfig(BaseModel):
 class PersonaConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    name_tr: str
-    tone_tr: str
+    name_en: str
+    tone_en: str
     language: str
-    disclaimers_tr: list[str] = Field(default_factory=list)
+    disclaimers_en: list[str] = Field(default_factory=list)
 
 
 class TenantFile(BaseModel):
@@ -120,14 +120,14 @@ class ActionPolicy(BaseModel):
 
     allowed: bool
     requires_confirmation: bool = False
-    description_tr: str | None = None
+    description_en: str | None = None
     conditions: list[Condition] = Field(default_factory=list)
     on_condition_fail: OnConditionFail | None = None
     rate_limit: RateLimit | None = None
-    max_amount_try: float | None = None
+    max_amount_gbp: float | None = None
     escalate_to: str | None = None
     reason_code: str | None = None
-    reason_tr: str | None = None
+    reason_en: str | None = None
 
 
 class DecisionPolicyConfig(BaseModel):
@@ -201,7 +201,7 @@ class RecommendationConfig(BaseModel):
     # still sees the closest option and the reply says it is tight.
     speed_hard_filter_ratio: float = 0.5
     usage_profile_map: dict[str, list[str]]
-    reason_codes_tr: dict[str, str]
+    reason_codes_en: dict[str, str]
 
 
 class RoutingFile(BaseModel):
@@ -294,7 +294,7 @@ def load_tenant_config(tenant: str | None = None, config_dir: str | os.PathLike[
     """Load (and cache) the full configuration for one tenant.
 
     Args:
-        tenant: tenant directory name (e.g. ``"nethiz"``, ``"_example"``). Defaults to
+        tenant: tenant directory name (e.g. ``"netswift"``, ``"_example"``). Defaults to
             ``get_settings().TENANT``.
         config_dir: overrides ``get_settings().TENANT_CONFIG_DIR`` — mainly for tests.
     """

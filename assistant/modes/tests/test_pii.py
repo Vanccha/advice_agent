@@ -14,8 +14,8 @@ def test_no_raw_pii_in_audit_trail_or_ticket(tenant_config, session_factory) -> 
     })
     orch = build_orchestrator(tenant_config, session_factory, gateway=gateway)
     result = orch.handle_message(
-        conversation_id=None, customer_no="NH-100001",
-        message="Faturamda yanlış tahsilat var, iki kere çekilmiş, lütfen bakın 05551112233",
+        conversation_id=None, customer_no="NS-100001",
+        message="There is a wrong charge on my bill, I was charged twice, please check 07700900133",
     )
     assert result.ticket_key == "TKT-2026-00061"
 

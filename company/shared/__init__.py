@@ -1,1 +1,1 @@
-"""Shared building blocks for NetHız internal services."""
+"""Shared building blocks for NetSwift internal services."""

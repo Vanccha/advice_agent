@@ -28,7 +28,7 @@ DIAG_VIEW_STATEMENTS = [
     """
     CREATE OR REPLACE VIEW diag.subscription_status AS
     SELECT c.customer_no, s.id AS subscription_id, p.code AS package_code, p.name AS package_name,
-           s.status, s.monthly_price_try, s.contract_start_date, s.contract_end_date,
+           s.status, s.monthly_price_gbp, s.contract_start_date, s.contract_end_date,
            s.activated_at, s.updated_at, c.region_code
     FROM core.subscriptions s
     JOIN core.customers c ON c.id = s.customer_id
@@ -37,7 +37,7 @@ DIAG_VIEW_STATEMENTS = [
     """
     CREATE OR REPLACE VIEW diag.payment_status AS
     SELECT c.customer_no, pay.subscription_id, pay.id AS payment_id, pay.charge_ref,
-           pay.amount_try, pay.status, pay.method, pay.failure_code, pay.failure_message,
+           pay.amount_gbp, pay.status, pay.method, pay.failure_code, pay.failure_message,
            pay.created_at, pay.updated_at
     FROM core.payments pay
     JOIN core.customers c ON c.id = pay.customer_id

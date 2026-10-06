@@ -38,12 +38,12 @@ def _skip_if_unreachable() -> None:
 
 
 async def test_find_customer_by_customer_no() -> None:
-    result = await handle_find_customer(FindCustomerInput(customer_no="NH-100001"))
+    result = await handle_find_customer(FindCustomerInput(customer_no="NS-100001"))
     if not result.ok:
         pytest.skip(f"diag_db not reachable: {result.error}")
     assert result.source == "diag_db"
     assert len(result.data.customers) == 1
-    assert result.data.customers[0].customer_no == "NH-100001"
+    assert result.data.customers[0].customer_no == "NS-100001"
 
 
 async def test_find_customer_without_any_filter_is_invalid_input() -> None:
@@ -53,11 +53,11 @@ async def test_find_customer_without_any_filter_is_invalid_input() -> None:
 
 
 async def test_get_subscription_status_by_customer_no() -> None:
-    result = await handle_get_subscription_status(GetSubscriptionStatusInput(customer_no="NH-100001"))
+    result = await handle_get_subscription_status(GetSubscriptionStatusInput(customer_no="NS-100001"))
     if not result.ok:
         pytest.skip(f"diag_db not reachable: {result.error}")
     assert len(result.data.subscriptions) >= 1
-    assert result.data.subscriptions[0].customer_no == "NH-100001"
+    assert result.data.subscriptions[0].customer_no == "NS-100001"
 
 
 async def test_list_packages_returns_the_seeded_catalogue() -> None:
@@ -65,7 +65,7 @@ async def test_list_packages_returns_the_seeded_catalogue() -> None:
     assert result.ok is True
     assert result.source == "core_api"
     codes = {p.code for p in result.data.packages}
-    assert "FIBER_100_TEMEL" in codes
+    assert "FIBER_100_BASIC" in codes
 
 
 async def test_get_region_health_without_region_lists_all_regions() -> None:

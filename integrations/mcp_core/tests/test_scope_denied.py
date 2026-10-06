@@ -29,7 +29,7 @@ def _skip_if_unreachable() -> None:
 
 
 async def test_request_refund_is_always_scope_denied() -> None:
-    result = await handle_request_refund(RequestRefundInput(payment_id=1, amount_try=1.0, reason="test"))
+    result = await handle_request_refund(RequestRefundInput(payment_id=1, amount_gbp=1.0, reason="test"))
     assert result.ok is False
     assert result.error.code == "SCOPE_DENIED"
     assert result.source == "core_api"

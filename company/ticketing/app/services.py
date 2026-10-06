@@ -157,7 +157,7 @@ def create_ticket(
             from_status=None,
             to_status="NEW",
             actor="system",
-            note="Talep oluşturuldu.",
+            note="Ticket created.",
         )
     )
     # Commit now (not just flush): the webhook delivery below runs as a background

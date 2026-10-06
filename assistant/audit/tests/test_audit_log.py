@@ -19,11 +19,11 @@ def audit_log() -> AuditLog:
 def test_append_builds_a_valid_chain(audit_log: AuditLog):
     e1 = audit_log.append(
         "conv-1", StepType.MODE_DECISION, "router chose advisory", "intent=advisory", {},
-        tenant="nethiz",
+        tenant="netswift",
     )
     e2 = audit_log.append(
         "conv-1", StepType.POLICY_CHECK, "checked retry_provisioning_job", "ok", {},
-        tenant="nethiz",
+        tenant="netswift",
     )
     assert e1.prev_hash == "0" * 64
     assert e2.prev_hash == e1.entry_hash
@@ -35,17 +35,17 @@ def test_append_builds_a_valid_chain(audit_log: AuditLog):
 
 
 def test_timeline_returns_entries_in_order(audit_log: AuditLog):
-    audit_log.append("conv-2", StepType.MODE_DECISION, "first", None, {}, tenant="nethiz")
-    audit_log.append("conv-2", StepType.ACTION, "second", None, {}, tenant="nethiz")
+    audit_log.append("conv-2", StepType.MODE_DECISION, "first", None, {}, tenant="netswift")
+    audit_log.append("conv-2", StepType.ACTION, "second", None, {}, tenant="netswift")
 
     entries = audit_log.timeline("conv-2")
     assert [e.summary for e in entries] == ["first", "second"]
 
 
 def test_tampering_with_middle_entry_breaks_verification(audit_log: AuditLog):
-    audit_log.append("conv-3", StepType.MODE_DECISION, "first", None, {}, tenant="nethiz")
-    middle = audit_log.append("conv-3", StepType.POLICY_CHECK, "second", None, {}, tenant="nethiz")
-    audit_log.append("conv-3", StepType.ACTION, "third", None, {}, tenant="nethiz")
+    audit_log.append("conv-3", StepType.MODE_DECISION, "first", None, {}, tenant="netswift")
+    middle = audit_log.append("conv-3", StepType.POLICY_CHECK, "second", None, {}, tenant="netswift")
+    audit_log.append("conv-3", StepType.ACTION, "third", None, {}, tenant="netswift")
 
     assert audit_log.verify_chain("conv-3").ok is True
 
@@ -67,6 +67,6 @@ def test_append_rejects_raw_pii_in_evidence(audit_log: AuditLog):
             StepType.DECISION_SERVICE,
             "looked up customer",
             None,
-            {"observations": ["TC kimlik no 35111111110 ile eşleşti"]},
-            tenant="nethiz",
+            {"observations": ["matched NI number QQ123456C"]},
+            tenant="netswift",
         )

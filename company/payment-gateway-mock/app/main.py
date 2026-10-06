@@ -26,7 +26,7 @@ def _on_startup() -> None:
 app = create_app(
     service_name=settings.service_name,
     version=settings.service_version,
-    title="NetHız Payment Gateway (PSP simulator)",
+    title="NetSwift Payment Gateway (PSP simulator)",
     description="Simulated payment service provider: charges, refunds, webhooks, chaos control.",
     on_startup=_on_startup,
     log_level=settings.log_level,

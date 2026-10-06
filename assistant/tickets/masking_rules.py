@@ -20,7 +20,7 @@ from privacy.masking import DEFAULT_ALLOW_UNMASKED, mask_email_value, mask_full_
 
 def mask_requester_contact(raw_contact: str) -> str:
     """`contact` is either a phone or an email; detect which and mask with the matching
-    rule (contracts §4.7: phone -> `+90 5** *** ** NN`, email -> `a***@d***.com`)."""
+    rule (contracts §4.7: phone -> `+44 7*** *** *NN`, email -> `a***@d***.com`)."""
     if EMAIL_RE.fullmatch(raw_contact.strip()):
         return mask_email_value(raw_contact)
     return mask_phone_value(raw_contact)

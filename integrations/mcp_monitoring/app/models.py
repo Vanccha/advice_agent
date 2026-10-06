@@ -131,4 +131,4 @@ class NormalizedAlert(BaseModel):
     description: str
     labels: dict[str, Any]
     starts_at: Optional[str]
-    source: Literal["nethiz-alertmanager"] = "nethiz-alertmanager"
+    source: Literal["netswift-alertmanager"] = "netswift-alertmanager"

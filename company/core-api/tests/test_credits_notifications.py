@@ -11,7 +11,7 @@ def test_credit_cap_exceeded_returns_400(client, crm_headers):
         "/v1/credits",
         json={
             "subscription_id": subscription["id"],
-            "amount_try": 999,
+            "amount_gbp": 999,
             "reason": "test over cap",
             "idempotency_key": f"credit-{uuid.uuid4()}",
         },
@@ -26,7 +26,7 @@ def test_credit_within_cap_succeeds_and_is_idempotent(client, crm_headers):
     idem_key = f"credit-{uuid.uuid4()}"
     body = {
         "subscription_id": subscription["id"],
-        "amount_try": 50,
+        "amount_gbp": 5,
         "reason": "goodwill",
         "idempotency_key": idem_key,
     }

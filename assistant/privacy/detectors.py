@@ -1,4 +1,4 @@
-"""Regex/validator primitives for KVKK masking (contracts §4.7).
+"""Regex/validator primitives for UK GDPR masking (contracts §4.7).
 
 Each detector is intentionally narrow: it is better to miss an edge case than to mask (or
 fail to mask) the wrong thing. Composition and substitution happen in `masking.py`.
@@ -11,23 +11,21 @@ import re
 # Patterns
 # --------------------------------------------------------------------------------------
 
-# 11 digits, used as a Turkish national id. Seeded fake values always have a non-zero
-# first digit (contracts §6.1) and are never also a valid phone number (which always
-# carries a leading trunk/country marker) — see module docstring reasoning below.
-NATIONAL_ID_RE = re.compile(r"\b[1-9]\d{10}\b")
+# UK National Insurance number: two prefix letters, six digits, a suffix letter A-D,
+# optionally written in pairs ("QQ 12 34 56 C"). Upper case only, so ordinary words
+# followed by numbers are never mistaken for one. Seeded fake values use prefixes HMRC
+# never allocates (contracts §6.1), but the detector deliberately does not care — any
+# NI-shaped value is masked.
+NATIONAL_ID_RE = re.compile(r"\b[A-Z]{2} ?\d{2} ?\d{2} ?\d{2} ?[A-D]\b")
 
-# Turkish mobile numbers: optional "+90"/"0" + one of the reserved operator prefixes
-# (contracts §6.2) + 7 more digits, loosely separated by spaces/dashes.
-_OPERATOR_PREFIXES = ("530", "532", "535", "541", "544", "551", "555")
-PHONE_RE = re.compile(
-    r"(?:\+90[\s-]?|0)(?:" + "|".join(_OPERATOR_PREFIXES) + r")[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}\b"
-)
+# UK mobile numbers: "+44 7" or "07" + 9 more digits, loosely separated by spaces/dashes.
+PHONE_RE = re.compile(r"(?:\+44[\s-]?|\b0)7\d{3}[\s-]?\d{3}[\s-]?\d{3}\b")
 
 EMAIL_RE = re.compile(r"\b[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}\b")
 
-# Turkish IBAN: "TR" + 2 check digits + 20 bank/account digits (26 chars total), loosely
+# UK IBAN: "GB" + 2 check digits + 4-letter bank code + 14 digits (22 chars total), loosely
 # grouped in blocks of 4 for display.
-IBAN_RE = re.compile(r"\bTR\d{2}(?:[ ]?\d{4}){5}[ ]?\d{2}\b")
+IBAN_RE = re.compile(r"\bGB\d{2} ?[A-Z]{4}(?: ?\d{4}){3} ?\d{2}\b")
 
 # Candidate payment-card-like digit runs (13-19 digits, optionally grouped). Only promoted
 # to "this is a card number" after a Luhn check — see `find_card_numbers`.

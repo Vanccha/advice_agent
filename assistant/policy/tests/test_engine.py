@@ -22,7 +22,7 @@ def engine(monkeypatch: pytest.MonkeyPatch) -> PolicyEngine:
     clear_tenant_config_cache()
     for key, value in REQUIRED_ENV.items():
         monkeypatch.setenv(key, value)
-    cfg = load_tenant_config("nethiz", config_dir=CONFIG_DIR)
+    cfg = load_tenant_config("netswift", config_dir=CONFIG_DIR)
     clear_tenant_config_cache()
     return PolicyEngine(cfg.policy)
 
@@ -76,22 +76,22 @@ MATRIX = [
     # apply_outage_credit
     (
         "apply_outage_credit",
-        {"incident": {"exists": True}, "credit": {"existing_count_30d": 0}, "amount_try": 50},
+        {"incident": {"exists": True}, "credit": {"existing_count_30d": 0}, "amount_gbp": 5},
         True, True, None, None,
     ),
     (
         "apply_outage_credit",
-        {"incident": {"exists": True}, "credit": {"existing_count_30d": 0}, "amount_try": 51},
+        {"incident": {"exists": True}, "credit": {"existing_count_30d": 0}, "amount_gbp": 5.1},
         False, False, None, "amount_above_limit",
     ),
     (
         "apply_outage_credit",
-        {"incident": {"exists": True}, "credit": {"existing_count_30d": 1}, "amount_try": 50},
+        {"incident": {"exists": True}, "credit": {"existing_count_30d": 1}, "amount_gbp": 5},
         False, False, "BILLING", "credit_not_applicable",
     ),
     (
         "apply_outage_credit",
-        {"incident": {"exists": False}, "credit": {"existing_count_30d": 0}, "amount_try": 10},
+        {"incident": {"exists": False}, "credit": {"existing_count_30d": 0}, "amount_gbp": 1},
         False, False, "BILLING", "credit_not_applicable",
     ),
     # hard-denied, escalation-only actions
@@ -128,7 +128,7 @@ def test_policy_matrix(
         assert decision.escalate_to == expected_escalate
     if expected_reason is not None:
         assert decision.reason_code == expected_reason
-    assert decision.reason_tr  # every decision carries a Turkish sentence
+    assert decision.reason_en  # every decision carries a customer-facing sentence
 
 
 def test_unknown_action_is_denied_by_default(engine: PolicyEngine):
@@ -143,6 +143,6 @@ def test_describe_allowed_actions_matches_policy_file(engine: PolicyEngine):
     assert "issue_refund" not in allowed
 
 
-def test_explicit_denial_reason_tr_comes_from_policy_file(engine: PolicyEngine):
+def test_explicit_denial_reason_en_comes_from_policy_file(engine: PolicyEngine):
     decision = engine.check("issue_refund", {})
-    assert decision.reason_tr == "İade işlemleri Faturalama ekibinin onayını gerektirir."
+    assert decision.reason_en == "Refunds need approval from the Billing team."

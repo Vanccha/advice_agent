@@ -1,4 +1,4 @@
-"""Failure-injection CLI for the NetHiz company stack.
+"""Failure-injection CLI for the NetSwift company stack.
 
 This package owns no business logic of its own: it reaches into the company's
 own databases and REST APIs (as a privileged operator tool would) to put the

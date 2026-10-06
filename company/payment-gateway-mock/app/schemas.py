@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 
 
 class ChargeCreateRequest(BaseModel):
-    amount_try: float = Field(gt=0)
-    currency: str = "TRY"
+    amount_gbp: float = Field(gt=0)
+    currency: str = "GBP"
     customer_ref: str
     method: Literal["card", "eft"]
     card_token: str | None = None
@@ -19,8 +19,8 @@ class ChargeResponse(BaseModel):
     charge_ref: str
     status: str
     customer_ref: str
-    amount_try: float
-    currency: str = "TRY"
+    amount_gbp: float
+    currency: str = "GBP"
     method: str
     card_last4: str | None = None
     failure_code: str | None = None
@@ -36,14 +36,14 @@ class ChargeListResponse(BaseModel):
 
 
 class RefundCreateRequest(BaseModel):
-    amount_try: float = Field(gt=0)
+    amount_gbp: float = Field(gt=0)
     reason: str | None = None
 
 
 class RefundResponse(BaseModel):
     refund_ref: str
     charge_ref: str
-    amount_try: float
+    amount_gbp: float
     status: str
     reason: str | None = None
     created_at: str

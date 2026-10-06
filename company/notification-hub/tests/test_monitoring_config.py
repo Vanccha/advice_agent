@@ -66,13 +66,13 @@ def test_alertmanager_routes_both_receivers_with_continue_true():
     routes = data["route"]["routes"]
     by_receiver = {r["receiver"]: r for r in routes}
 
-    assert "nethiz-channels" in by_receiver
+    assert "netswift-channels" in by_receiver
     assert "integration-webhook" in by_receiver
-    assert by_receiver["nethiz-channels"]["continue"] is True
+    assert by_receiver["netswift-channels"]["continue"] is True
     assert by_receiver["integration-webhook"]["continue"] is True
 
     receivers_by_name = {r["name"]: r for r in data["receivers"]}
-    nethiz_url = receivers_by_name["nethiz-channels"]["webhook_configs"][0]["url"]
+    netswift_url = receivers_by_name["netswift-channels"]["webhook_configs"][0]["url"]
     integration_url = receivers_by_name["integration-webhook"]["webhook_configs"][0]["url"]
-    assert nethiz_url == "http://notification-hub:8000/api/v1/alertmanager"
+    assert netswift_url == "http://notification-hub:8000/api/v1/alertmanager"
     assert integration_url.startswith("http://")

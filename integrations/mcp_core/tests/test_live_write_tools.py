@@ -32,7 +32,7 @@ async def test_apply_outage_credit_over_cap_is_credit_limit_exceeded() -> None:
     result = await handle_apply_outage_credit(
         ApplyOutageCreditInput(
             subscription_id=2,
-            amount_try=999.0,
+            amount_gbp=999.0,
             reason="integration test: over cap",
             idempotency_key=f"test-{uuid.uuid4()}",
         )
@@ -43,9 +43,9 @@ async def test_apply_outage_credit_over_cap_is_credit_limit_exceeded() -> None:
 
 async def test_apply_outage_credit_within_cap_succeeds_and_generates_idempotency_key() -> None:
     result = await handle_apply_outage_credit(
-        ApplyOutageCreditInput(subscription_id=2, amount_try=10.0, reason="integration test: small credit")
+        ApplyOutageCreditInput(subscription_id=2, amount_gbp=10.0, reason="integration test: small credit")
     )
     assert result.ok is True
-    assert result.data.amount_try == 10.0
+    assert result.data.amount_gbp == 10.0
     assert result.data.idempotency_key  # auto-generated since none was given
     assert result.data.created_by == "partner-integration"

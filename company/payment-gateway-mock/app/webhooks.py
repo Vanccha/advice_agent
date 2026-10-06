@@ -24,7 +24,7 @@ def build_event_payload(event: str, charge: Charge) -> dict[str, Any]:
         "event": event,
         "charge_ref": charge.charge_ref,
         "status": charge.status,
-        "amount_try": float(charge.amount_try),
+        "amount_gbp": float(charge.amount_gbp),
         "customer_ref": charge.customer_ref,
         "failure_code": charge.failure_code,
         "occurred_at": isoformat(utcnow()),

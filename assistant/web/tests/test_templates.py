@@ -1,5 +1,5 @@
 """Template-level tests for assistant/web (no HTTP server involved — these render the Jinja
-templates directly). Covers: Turkish user-facing labels, the element ids/data attributes the
+templates directly). Covers: user-facing labels, the element ids/data attributes the
 widget's own JS (and this project's e2e checks) depend on, and the hard rule that nothing
 under assistant/ hardcodes a company/backend hostname — the widget must only use relative
 URLs (CLAUDE.md rule 4 / contracts.md boundary tests)."""
@@ -17,7 +17,7 @@ STATIC_DIR = WEB_DIR / "static"
 
 _ABSOLUTE_URL_ATTR_RE = re.compile(r'(?:href|src|action)\s*=\s*["\']https?://', re.IGNORECASE)
 _ABSOLUTE_URL_JS_RE = re.compile(r'(?:fetch|EventSource)\s*\(\s*["\']https?://', re.IGNORECASE)
-_SUSPICIOUS_HOST_RE = re.compile(r'localhost|127\.0\.0\.1|assistant:8000|nethiz\.com', re.IGNORECASE)
+_SUSPICIOUS_HOST_RE = re.compile(r'localhost|127\.0\.0\.1|assistant:8000|netswift\.com', re.IGNORECASE)
 
 
 @pytest.fixture(scope="module")
@@ -39,29 +39,29 @@ def render(jinja_env: Environment, name: str, **context) -> str:
 
 # The login form belongs to the product, not to one customer, so every customer-specific
 # string on it arrives as context. These fixtures stand in for two different tenant files.
-NETHIZ_LOGIN_CONTEXT = {
-    "identifier_label_tr": "Müşteri numarası",
-    "identifier_example": "NH-100042",
-    "identifier_html_pattern": r"NH-\d{6}",
+NETSWIFT_LOGIN_CONTEXT = {
+    "identifier_label_en": "Customer number",
+    "identifier_example": "NS-100042",
+    "identifier_html_pattern": r"NS-\d{6}",
     "example_customers": [
-        {"customer_no": "NH-100042", "note_tr": "aktif abonelik"},
-        {"customer_no": "NH-100017", "note_tr": "kurulum bekliyor"},
-        {"customer_no": "NH-100083", "note_tr": "ödeme beklemede"},
+        {"customer_no": "NS-100042", "note_en": "active subscription"},
+        {"customer_no": "NS-100017", "note_en": "awaiting installation"},
+        {"customer_no": "NS-100083", "note_en": "payment pending"},
     ],
 }
 
 OTHER_TENANT_LOGIN_CONTEXT = {
-    "identifier_label_tr": "Abone numarası",
+    "identifier_label_en": "Account number",
     "identifier_example": "OR-2045118",
     "identifier_html_pattern": "OR-[0-9]{7}",
-    "example_customers": [{"customer_no": "OR-2045118", "note_tr": "örnek"}],
+    "example_customers": [{"customer_no": "OR-2045118", "note_en": "example"}],
 }
 
 
-def test_login_page_has_turkish_labels_and_demo_disclaimer(jinja_env):
-    html = render(jinja_env, "login.html", **NETHIZ_LOGIN_CONTEXT)
+def test_login_page_has_labels_and_demo_disclaimer(jinja_env):
+    html = render(jinja_env, "login.html", **NETSWIFT_LOGIN_CONTEXT)
 
-    assert "Müşteri numarası" in html
+    assert "Customer number" in html
     assert "demo" in html.lower()
     assert 'data-testid="demo-login-note"' in html
     # no password field anywhere — this is explicitly a password-less demo login
@@ -69,7 +69,7 @@ def test_login_page_has_turkish_labels_and_demo_disclaimer(jinja_env):
 
 
 def test_login_page_has_required_ids_and_example_customers(jinja_env):
-    html = render(jinja_env, "login.html", **NETHIZ_LOGIN_CONTEXT)
+    html = render(jinja_env, "login.html", **NETSWIFT_LOGIN_CONTEXT)
 
     assert 'id="login-form"' in html
     assert 'data-testid="login-form"' in html
@@ -80,22 +80,22 @@ def test_login_page_has_required_ids_and_example_customers(jinja_env):
     assert 'data-testid="login-submit"' in html
 
     assert 'data-testid="example-customers"' in html
-    example_customer_nos = re.findall(r'data-customer-no="(NH-\d{6})"', html)
+    example_customer_nos = re.findall(r'data-customer-no="(NS-\d{6})"', html)
     assert len(example_customer_nos) >= 3
-    assert "NH-100042" in example_customer_nos
+    assert "NS-100042" in example_customer_nos
 
 
 def test_login_page_is_tenant_driven_not_hardcoded(jinja_env):
     """Rendered for a different tenant, the page must carry that tenant's identifier —
-    label, placeholder, input pattern and demo shortcuts — and none of NetHiz's."""
+    label, placeholder, input pattern and demo shortcuts — and none of NetSwift's."""
     html = render(jinja_env, "login.html", **OTHER_TENANT_LOGIN_CONTEXT)
 
-    assert "Abone numarası" in html
-    assert "Müşteri numarası" not in html
+    assert "Account number" in html
+    assert "Customer number" not in html
     assert 'placeholder="OR-2045118"' in html
     assert 'pattern="OR-[0-9]{7}"' in html
     assert 'data-customer-no="OR-2045118"' in html
-    assert "NH-" not in html
+    assert "NS-" not in html
 
 
 # --------------------------------------------------------------------------------------
@@ -147,27 +147,27 @@ def test_widget_partial_has_required_ids_and_data_testids(jinja_env):
         assert f'data-testid="{testid}"' in html, f"missing data-testid={testid!r}"
 
 
-def test_widget_mode_badge_defaults_to_router_in_turkish(jinja_env):
+def test_widget_mode_badge_defaults_to_router(jinja_env):
     html = render(jinja_env, "_widget.html", customer_no=None)
     assert 'data-mode="ROUTER"' in html
-    assert "Yönlendiriliyor" in html
+    assert "Routing" in html
 
 
-def test_widget_renders_turkish_user_facing_copy(jinja_env):
+def test_widget_renders_user_facing_copy(jinja_env):
     html = render(jinja_env, "_widget.html", customer_no=None)
-    assert "Mesajınızı yazın" in html
-    assert "Asistan ne yaptı?" in html
-    assert "Onayınız gerekiyor" in html
-    assert "Onayla" in html
-    assert "Reddet" in html
+    assert "Type your message" in html
+    assert "What did the assistant do?" in html
+    assert "Your approval is needed" in html
+    assert "Approve" in html
+    assert "Decline" in html
 
 
 def test_widget_session_chip_only_rendered_when_customer_no_given(jinja_env):
-    with_customer = render(jinja_env, "_widget.html", customer_no="NH-100042")
+    with_customer = render(jinja_env, "_widget.html", customer_no="NS-100042")
     without_customer = render(jinja_env, "_widget.html", customer_no=None)
 
     assert 'data-testid="session-chip"' in with_customer
-    assert "NH-100042" in with_customer
+    assert "NS-100042" in with_customer
     assert 'data-testid="session-chip"' not in without_customer
 
 
@@ -179,16 +179,16 @@ def test_widget_session_chip_only_rendered_when_customer_no_given(jinja_env):
 def test_site_page_embeds_the_widget_and_is_visually_a_guest(jinja_env):
     html = render(jinja_env, "site.html", customer_no=None)
 
-    # it is obviously NetHız's own page...
-    assert "NetHız" in html
-    assert "Fiber" in html
+    # it is obviously NetSwift's own page...
+    assert "NetSwift" in html
+    assert "Fibre" in html
 
     # ...with the widget included as a distinguishable, separately-styled guest.
     assert 'id="chat-widget"' in html
     assert 'id="chat-launcher"' in html
     assert "/static/widget.css" in html
     assert "/static/site.css" in html
-    assert "üçüncü taraf" in html  # footer disclosure inside the widget
+    assert "third-party" in html  # footer disclosure inside the widget
 
 
 def test_site_page_links_to_login(jinja_env):

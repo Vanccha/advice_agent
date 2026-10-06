@@ -1,5 +1,5 @@
 /**
- * NetHız destek asistanı — embeddable chat widget.
+ * NetSwift support assistant — embeddable chat widget.
  *
  * Plain vanilla JS, no build step, no CDN. Talks to exactly the endpoints documented in
  * docs/contracts.md §4.2, always via relative URLs (never a hardcoded host):
@@ -23,19 +23,19 @@
   "use strict";
 
   var MODE_LABELS = {
-    ROUTER: "Yönlendiriliyor",
-    ADVISORY: "Danışma",
-    DIAGNOSTIC: "Teşhis",
-    STATUS_QUERY: "Durum",
-    ACTION: "İşlem",
-    AWAITING_APPROVAL: "Onay bekleniyor",
-    ESCALATED: "Aktarıldı",
-    CLOSING: "Tamamlandı"
+    ROUTER: "Routing",
+    ADVISORY: "Advice",
+    DIAGNOSTIC: "Diagnosis",
+    STATUS_QUERY: "Status",
+    ACTION: "Action",
+    AWAITING_APPROVAL: "Awaiting approval",
+    ESCALATED: "Handed over",
+    CLOSING: "Done"
   };
 
   function formatTime(date) {
     try {
-      return date.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+      return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
     } catch (e) {
       return "";
     }
@@ -85,7 +85,7 @@
         })
         .catch(function () {
           showError(
-            "Giriş yapılamadı. Müşteri numarasını kontrol edip tekrar deneyin (ör. NH-100042)."
+            "Sign-in failed. Please check the customer number and try again."
           );
         });
     }
@@ -94,7 +94,7 @@
       event.preventDefault();
       var value = (input && input.value || "").trim().toUpperCase();
       if (!value) {
-        showError("Lütfen bir müşteri numarası girin.");
+        showError("Please enter a customer number.");
         return;
       }
       submitLogin(value);
@@ -223,7 +223,7 @@
       var fragment = tplApproval.content.cloneNode(true);
       var card = fragment.querySelector(".nh-approval-card");
       var textEl = fragment.querySelector('[data-field="prompt"]');
-      if (textEl) textEl.textContent = promptText || "Bu işlemi onaylıyor musunuz?";
+      if (textEl) textEl.textContent = promptText || "Do you approve this action?";
       if (card) card.setAttribute("data-approval-id", approvalId);
 
       var buttons = fragment.querySelectorAll("[data-decision]");
@@ -252,16 +252,16 @@
           var status = document.createElement("p");
           status.className = "nh-approval-card__result";
           status.textContent =
-            decision === "granted" ? "Onaylandı." : "Reddedildi.";
+            decision === "granted" ? "Approved." : "Declined.";
           if (card) card.appendChild(status);
           if (data && data.mode) setMode(data.mode);
-          if (data && data.reply_tr) addMessage("assistant", data.reply_tr);
+          if (data && data.reply_en) addMessage("assistant", data.reply_en);
           if (data && data.ticket_key) addTicketChip(data.ticket_key, data.department);
         })
         .catch(function () {
           var status = document.createElement("p");
           status.className = "nh-approval-card__result nh-approval-card__result--error";
-          status.textContent = "İsteğiniz gönderilemedi, lütfen tekrar deneyin.";
+          status.textContent = "Your request could not be sent; please try again.";
           if (card) card.appendChild(status);
           for (var i = 0; i < buttons.length; i++) buttons[i].disabled = false;
         });
@@ -279,8 +279,8 @@
         var chip = document.createElement("span");
         chip.className = "nh-actions-box__chip";
         var label =
-          (action && (action.label_tr || action.name || action.type)) ||
-          (typeof action === "string" ? action : "işlem");
+          (action && (action.label_en || action.name || action.type)) ||
+          (typeof action === "string" ? action : "action");
         chip.textContent = String(label);
         box.appendChild(chip);
       }
@@ -293,11 +293,11 @@
       if (!data) return;
       state.conversationId = data.conversation_id || state.conversationId;
       if (data.mode) setMode(data.mode);
-      if (data.reply_tr) addMessage("assistant", data.reply_tr);
+      if (data.reply_en) addMessage("assistant", data.reply_en);
       renderActions(data.actions);
       if (data.ticket_key) addTicketChip(data.ticket_key, data.department);
       if (data.requires_approval && data.approval_id) {
-        addApprovalCard(data.approval_id, data.reply_tr);
+        addApprovalCard(data.approval_id, data.reply_en);
       }
     }
 
@@ -322,7 +322,7 @@
         .catch(function () {
           setTyping(false);
           showError(
-            "Şu anda asistana ulaşılamıyor. Lütfen birazdan tekrar deneyin."
+            "The assistant cannot be reached right now. Please try again shortly."
           );
         });
     }
@@ -367,21 +367,21 @@
           data = null;
         }
         if (!data) {
-          showError("Şu anda asistana ulaşılamıyor. Lütfen birazdan tekrar deneyin.");
+          showError("The assistant cannot be reached right now. Please try again shortly.");
           return;
         }
         state.conversationId = data.conversation_id || state.conversationId;
         if (data.mode) setMode(data.mode);
-        if (streamed && data.reply_tr) {
+        if (streamed && data.reply_en) {
           // the streamed text IS the reply; avoid rendering it twice.
-          streamed.bubble.textContent = data.reply_tr;
-        } else if (data.reply_tr) {
-          addMessage("assistant", data.reply_tr);
+          streamed.bubble.textContent = data.reply_en;
+        } else if (data.reply_en) {
+          addMessage("assistant", data.reply_en);
         }
         renderActions(data.actions);
         if (data.ticket_key) addTicketChip(data.ticket_key, data.department);
         if (data.requires_approval && data.approval_id) {
-          addApprovalCard(data.approval_id, data.reply_tr);
+          addApprovalCard(data.approval_id, data.reply_en);
         }
       });
 
@@ -473,7 +473,7 @@
       if (!state.conversationId || !auditSteps) {
         if (auditSteps) {
           auditSteps.innerHTML =
-            '<li class="nh-widget__audit-empty">Henüz görüntülenecek bir adım yok.</li>';
+            '<li class="nh-widget__audit-empty">No steps to show yet.</li>';
         }
         return;
       }
@@ -490,7 +490,7 @@
         })
         .catch(function () {
           auditSteps.innerHTML =
-            '<li class="nh-widget__audit-empty">Kayıt şu anda getirilemedi.</li>';
+            '<li class="nh-widget__audit-empty">The record could not be loaded right now.</li>';
         });
     }
 
@@ -499,7 +499,7 @@
       auditSteps.innerHTML = "";
       if (!steps.length) {
         auditSteps.innerHTML =
-          '<li class="nh-widget__audit-empty">Henüz görüntülenecek bir adım yok.</li>';
+          '<li class="nh-widget__audit-empty">No steps to show yet.</li>';
         return;
       }
       for (var i = 0; i < steps.length; i++) {
@@ -508,7 +508,7 @@
         li.className = "nh-widget__audit-step";
         var title = document.createElement("div");
         title.className = "nh-widget__audit-step-title";
-        title.textContent = step.summary || step.step_type || "Adım";
+        title.textContent = step.summary || step.step_type || "Step";
         li.appendChild(title);
         if (step.reason) {
           var reason = document.createElement("div");
@@ -523,10 +523,10 @@
     // Lightweight connectivity probe — relative URL, uses the documented /health endpoint.
     fetch("/health", { credentials: "same-origin" })
       .then(function (response) {
-        connectionStatus.textContent = response.ok ? "Çevrimiçi" : "Bağlantı sorunu";
+        connectionStatus.textContent = response.ok ? "Online" : "Connection problem";
       })
       .catch(function () {
-        if (connectionStatus) connectionStatus.textContent = "Bağlantı yok";
+        if (connectionStatus) connectionStatus.textContent = "Offline";
       });
   }
 

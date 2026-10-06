@@ -22,7 +22,7 @@ class PolicyDenied(Exception):
     """Raised when `PolicyEngine.check()` denies an action outright."""
 
     def __init__(self, decision: PolicyDecision) -> None:
-        super().__init__(decision.reason_tr or decision.reason_code or "policy denied")
+        super().__init__(decision.reason_en or decision.reason_code or "policy denied")
         self.decision = decision
 
 
@@ -30,7 +30,7 @@ class ConfirmationRequired(Exception):
     """Raised when an action is allowed but needs explicit user confirmation first."""
 
     def __init__(self, decision: PolicyDecision) -> None:
-        super().__init__(decision.reason_tr or "confirmation required")
+        super().__init__(decision.reason_en or "confirmation required")
         self.decision = decision
 
 
@@ -63,7 +63,7 @@ class ActionExecutor:
             conversation_id,
             StepType.POLICY_CHECK,
             f"policy check for action '{action_name}'",
-            decision.reason_tr,
+            decision.reason_en,
             {"action_name": action_name},
             tenant=tenant,
             actor=actor,
@@ -79,7 +79,7 @@ class ActionExecutor:
                 conversation_id,
                 StepType.APPROVAL_REQUESTED,
                 f"confirmation requested for action '{action_name}'",
-                decision.reason_tr,
+                decision.reason_en,
                 {"action_name": action_name},
                 tenant=tenant,
                 actor=actor,
@@ -95,7 +95,7 @@ class ActionExecutor:
             conversation_id,
             StepType.ACTION,
             f"executed action '{action_name}'",
-            decision.reason_tr,
+            decision.reason_en,
             {"action_name": action_name},
             tenant=tenant,
             actor=actor,

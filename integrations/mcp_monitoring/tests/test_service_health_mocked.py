@@ -82,7 +82,7 @@ async def test_a_firing_alert_overrides_a_service_that_prometheus_still_calls_up
         {
             "labels": {"alertname": "PaymentGatewayDown", "severity": "critical"},
             "status": {"state": "active"},
-            "annotations": {"summary": "Ödeme ağ geçidi erişilemez durumda"},
+            "annotations": {"summary": "Payment gateway unreachable"},
         }
     ]
     with respx.mock(base_url=base_url, assert_all_called=False) as mock:

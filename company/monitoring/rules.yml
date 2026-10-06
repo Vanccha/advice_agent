@@ -1,5 +1,5 @@
 groups:
-  - name: nethiz-alerts
+  - name: netswift-alerts
     rules:
       - alert: PaymentGatewayDown
         expr: up{job="payment-gateway"} == 0 or psp_outage == 1
@@ -8,11 +8,10 @@ groups:
           severity: critical
           department: TECHNICAL_INFRA
         annotations:
-          summary: "Ödeme ağ geçidi erişilemez durumda"
+          summary: "Payment gateway unreachable"
           description: >-
-            payment-gateway servisi bir dakikadır health check'e yanıt vermiyor ya da PSP
-            kasıtlı kesinti (outage) modunda. Yeni ödemeler başarısız olabilir, acil kontrol
-            gerekiyor.
+            The payment-gateway service has not answered its health check for a minute, or the
+            PSP is in deliberate outage mode. New payments may fail; urgent checks are needed.
 
       - alert: CoreApiDown
         expr: up{job="core-api"} == 0
@@ -21,22 +20,22 @@ groups:
           severity: critical
           department: TECHNICAL_INFRA
         annotations:
-          summary: "Core API erişilemez durumda"
+          summary: "Core API unreachable"
           description: >-
-            core-api servisi bir dakikadır health check'e yanıt vermiyor. Abonelik, müşteri ve
-            fatura işlemlerinin tamamı etkileniyor olabilir.
+            The core-api service has not answered its health check for a minute. Every
+            subscription, customer and billing operation may be affected.
 
       - alert: StuckProvisioningJobs
-        expr: nethiz_provisioning_jobs_stuck > 0
+        expr: netswift_provisioning_jobs_stuck > 0
         for: 2m
         labels:
           severity: warning
           department: SUBSCRIPTION_OPS
         annotations:
-          summary: "Takılı kalan kurulum (provisioning) işleri var"
+          summary: "Stuck provisioning jobs"
           description: >-
-            En az bir provisioning işi iki dakikadır 'stuck' durumda kalmış. Etkilenen
-            aboneliklerin kurulum durumu manuel olarak kontrol edilmeli.
+            At least one provisioning job has been 'stuck' for two minutes. The setup status of
+            the affected subscriptions should be checked manually.
 
       - alert: HighPaymentFailureRate
         expr: >-
@@ -47,31 +46,31 @@ groups:
           severity: critical
           department: BILLING
         annotations:
-          summary: "Ödeme başarısızlık oranı yüksek"
+          summary: "High payment failure rate"
           description: >-
-            Son beş dakikada denenen ödemelerin yarısından fazlası başarısız oldu. PSP veya
-            kart sağlayıcı tarafında bir sorun olabilir, faturalama ekibi bilgilendirilmeli.
+            More than half of the payments attempted in the last five minutes failed. There may
+            be a problem at the PSP or the card provider; the billing team should be informed.
 
       - alert: RegionalOutageDetected
-        expr: nethiz_open_incidents{severity="critical"} > 0
+        expr: netswift_open_incidents{severity="critical"} > 0
         for: 1m
         labels:
           severity: critical
           department: TECHNICAL_INFRA
         annotations:
-          summary: "Bölgesel kesinti tespit edildi"
+          summary: "Regional outage detected"
           description: >-
-            Açık ve kritik seviyeli bir bölgesel arıza kaydı mevcut. Etkilenen bölgedeki
-            müşteriler bilgilendirilmeli ve saha ekibi yönlendirilmeli.
+            There is an open, critical regional fault record. Customers in the affected region
+            should be informed and the field team dispatched.
 
       - alert: MissedInstallations
-        expr: nethiz_missed_appointments_24h > 0
+        expr: netswift_missed_appointments_24h > 0
         for: 5m
         labels:
           severity: warning
           department: FIELD_INSTALL
         annotations:
-          summary: "Kaçırılan kurulum randevuları var"
+          summary: "Missed installation appointments"
           description: >-
-            Son 24 saat içinde en az bir saha kurulum randevusu kaçırıldı. Müşteriyle yeniden
-            randevu planlanması gerekiyor.
+            At least one field installation appointment was missed in the last 24 hours. A new
+            appointment needs to be booked with the customer.

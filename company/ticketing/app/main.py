@@ -27,8 +27,8 @@ def build_app(settings: TicketingSettings | None = None):
     app = create_app(
         service_name=settings.service_name,
         version=settings.service_version,
-        title="NetHız Ticketing",
-        description="Department ticketing service (Jira/Zendesk stand-in) for NetHız Telekom.",
+        title="NetSwift Ticketing",
+        description="Department ticketing service (Jira/Zendesk stand-in) for NetSwift Telecom.",
         on_startup=on_startup,
         log_level=settings.log_level,
     )

@@ -7,26 +7,26 @@ from __future__ import annotations
 from typing import Any
 
 from core_common.config import RoutingFile
-from core_common.tr import format_money_try
+from core_common.text import format_money
 from core_common.types import AdvisoryProfile, CommitmentPreference, PackageOffer, UsageType
 
-# Turkish label for each catalogue `target_profile` value (contracts §1.1 packages table).
-# routing.yaml's `profile_match` reason template expects a `{profile_tr}` placeholder but
-# does not itself supply this lookup, so it is kept here as the minimal piece of Turkish
+# Customer-facing label for each catalogue `target_profile` value (contracts §1.1 packages
+# table). routing.yaml's `profile_match` reason template expects a `{profile_en}` placeholder
+# but does not itself supply this lookup, so it is kept here as the minimal piece of
 # vocabulary needed to fill an otherwise-templated string (never free text).
-_TARGET_PROFILE_TR = {
-    "student": "Öğrenci",
-    "family": "Aile",
-    "home_office": "Ev Ofisi",
-    "gamer": "Oyuncu",
-    "basic": "Temel",
-    "premium": "Premium",
-    "small_business": "Küçük İşletme",
+_TARGET_PROFILE_EN = {
+    "student": "student",
+    "family": "family",
+    "home_office": "home office",
+    "gamer": "gaming",
+    "basic": "everyday",
+    "premium": "premium",
+    "small_business": "small business",
 }
 
 
 def _money(amount: float) -> str:
-    return format_money_try(amount).removesuffix(" TL")
+    return format_money(amount)
 
 
 def _speed_component(
@@ -47,8 +47,8 @@ def _budget_component(
     profile: AdvisoryProfile, package: dict[str, Any], tolerance: float, templates: dict[str, str]
 ) -> tuple[float, str | None, bool]:
     """Returns (score, reason, excluded)."""
-    budget = profile.budget_try
-    price = package["monthly_price_try"]
+    budget = profile.budget_gbp
+    price = package["monthly_price_gbp"]
     if budget is None:
         return 1.0, None, False
     if price > budget * (1 + tolerance):
@@ -58,11 +58,11 @@ def _budget_component(
         # spends all of it, otherwise `budget_fit`'s weight has nothing to act on and a
         # tenant that wants price-first advice cannot express it (1.0 down to 0.5).
         score = 1.0 - 0.5 * (price / budget)
-        return score, templates["budget_ok"].format(monthly_price_try=_money(price)), False
+        return score, templates["budget_ok"].format(monthly_price_gbp=_money(price)), False
     # over budget but within the 15% tolerance band
     overage_ratio = (price - budget) / (budget * tolerance) if tolerance else 1.0
     score = max(0.0, 1.0 - overage_ratio)
-    return score, templates["budget_over"].format(monthly_price_try=_money(price)), False
+    return score, templates["budget_over"].format(monthly_price_gbp=_money(price)), False
 
 
 def _profile_component(
@@ -72,8 +72,8 @@ def _profile_component(
     matches = any(target_profile in usage_profile_map.get(usage.value, []) for usage in profile.usage)
     if not matches or target_profile is None:
         return 0.0, None
-    profile_tr = _TARGET_PROFILE_TR.get(target_profile, target_profile)
-    return 1.0, templates["profile_match"].format(profile_tr=profile_tr)
+    profile_en = _TARGET_PROFILE_EN.get(target_profile, target_profile)
+    return 1.0, templates["profile_match"].format(profile_en=profile_en)
 
 
 def _commitment_component(
@@ -132,7 +132,7 @@ def recommend_packages(
     """Pure, deterministic. Same input always produces the same output."""
     rec_cfg = routing_config.recommendation
     weights = rec_cfg.weights
-    templates = rec_cfg.reason_codes_tr
+    templates = rec_cfg.reason_codes_en
 
     device_count = profile.device_count or 1
     required_mbps = max(rec_cfg.min_mbps_floor, device_count * rec_cfg.mbps_per_device)
@@ -181,7 +181,7 @@ def recommend_packages(
         scored = adequate
 
     # Highest score first; ties -> lower price, then shorter commitment.
-    scored.sort(key=lambda item: (-item[0], item[1]["monthly_price_try"], item[1]["commitment_months"]))
+    scored.sort(key=lambda item: (-item[0], item[1]["monthly_price_gbp"], item[1]["commitment_months"]))
 
     top = scored[:3]
     offers: list[PackageOffer] = []
@@ -193,7 +193,7 @@ def recommend_packages(
                 down_mbps=package["down_mbps"],
                 up_mbps=package["up_mbps"],
                 commitment_months=package["commitment_months"],
-                monthly_price_try=package["monthly_price_try"],
+                monthly_price_gbp=package["monthly_price_gbp"],
                 score=score,
                 reasons=reasons,
                 is_best=(index == 0),

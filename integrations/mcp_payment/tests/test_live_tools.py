@@ -39,10 +39,10 @@ def _skip_if_unreachable() -> None:
         pytest.skip("payment-gateway not reachable from this environment")
 
 
-async def _plant_charge(customer_ref: str, amount_try: float) -> None:
+async def _plant_charge(customer_ref: str, amount_gbp: float) -> None:
     payload = {
-        "amount_try": amount_try,
-        "currency": "TRY",
+        "amount_gbp": amount_gbp,
+        "currency": "GBP",
         "customer_ref": customer_ref,
         "method": "card",
         "idempotency_key": f"mcp-payment-test-{uuid.uuid4()}",
@@ -61,7 +61,7 @@ async def test_detect_duplicate_charges_finds_a_live_planted_pair() -> None:
     )
     assert result.ok is True
     assert len(result.data.duplicate_groups) == 1
-    assert result.data.duplicate_groups[0].amount_try == 459.00
+    assert result.data.duplicate_groups[0].amount_gbp == 459.00
     assert result.data.duplicate_groups[0].count == 2
 
 
@@ -85,7 +85,7 @@ async def test_list_customer_charges_sees_the_planted_charge() -> None:
     assert result.ok is True
     assert result.source == "payment_api"
     assert len(result.data.charges) == 1
-    assert result.data.charges[0].amount_try == 77.00
+    assert result.data.charges[0].amount_gbp == 77.00
 
 
 async def test_get_payment_status_for_seeded_customer() -> None:
@@ -93,11 +93,11 @@ async def test_get_payment_status_for_seeded_customer() -> None:
 
     if not os.environ.get("DIAG_DATABASE_URL"):
         pytest.skip("DIAG_DATABASE_URL not set")
-    result = await handle_get_payment_status(GetPaymentStatusInput(customer_no="NH-100001"))
+    result = await handle_get_payment_status(GetPaymentStatusInput(customer_no="NS-100001"))
     if not result.ok:
         pytest.skip(f"diag_db not reachable: {result.error}")
     assert len(result.data.payments) >= 1
-    assert result.data.payments[0].customer_no == "NH-100001"
+    assert result.data.payments[0].customer_no == "NS-100001"
 
 
 async def test_get_payment_status_without_any_filter_is_invalid_input() -> None:

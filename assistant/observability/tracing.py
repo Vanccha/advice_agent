@@ -60,7 +60,7 @@ class TracingHandle:
         logger.warning(message)
 
 
-_DISABLED_HANDLE = TracingHandle(enabled=False, tenant="nethiz", client=None)
+_DISABLED_HANDLE = TracingHandle(enabled=False, tenant="netswift", client=None)
 _state_lock = threading.Lock()
 _current_handle: TracingHandle = _DISABLED_HANDLE
 
@@ -74,7 +74,7 @@ def init_tracing(settings: Any) -> TracingHandle:
     """
     global _current_handle
 
-    tenant = getattr(settings, "TENANT", "nethiz")
+    tenant = getattr(settings, "TENANT", "netswift")
     enabled = bool(getattr(settings, "LANGFUSE_ENABLED", False))
 
     if not enabled:

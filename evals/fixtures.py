@@ -20,7 +20,7 @@ dict repr always produces for a given root cause. `choose_department` is also co
 completeness, by one generic fixture — but tracing `modes/action.py` shows it is **not
 reachable** by this dataset: every denied action here (`issue_refund`,
 `reschedule_installation`, `repair_infrastructure`) has an `escalate_to` in
-`config/tenants/nethiz/policy.yaml`, and `exc.decision.escalate_to or
+`config/tenants/netswift/policy.yaml`, and `exc.decision.escalate_to or
 _decide_department(...)` short-circuits before the call would ever happen. This is
 confirmed by reading the code, not assumed — see `evals/README.md`.
 
@@ -73,7 +73,7 @@ def build_intent_rules(scenarios_doc: dict[str, Any], advisory_doc: dict[str, An
         rules.append(_rule(case["message"], intent))
 
     for profile in advisory_doc.get("profiles", []):
-        conversation = profile.get("conversation_tr") or []
+        conversation = profile.get("conversation_en") or []
         if conversation:
             rules.append(_rule(conversation[0], "advisory"))
 
@@ -96,7 +96,7 @@ def build_decision_rules(routing_config: RoutingFile) -> list[ScriptedRule]:
     """`classify_issue_type`/`assess_urgency` (confidently scripted for every root cause in
     `_SCRIPTED_ROOT_CAUSES`) plus one defensive, documented-as-unreachable
     `choose_department` fixture. `routing_config.urgency_floor` supplies the urgency value
-    so this never drifts out of sync with `config/tenants/nethiz/routing.yaml`."""
+    so this never drifts out of sync with `config/tenants/netswift/routing.yaml`."""
     rules: list[ScriptedRule] = []
     for root_cause in _SCRIPTED_ROOT_CAUSES:
         urgency = routing_config.urgency_floor.get(root_cause, "NORMAL")

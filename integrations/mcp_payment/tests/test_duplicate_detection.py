@@ -10,7 +10,7 @@ from app.duplicates import find_duplicate_groups
 def _charge(ref: str, amount: float, created_at: str, status: str = "succeeded") -> dict:
     return {
         "charge_ref": ref,
-        "amount_try": amount,
+        "amount_gbp": amount,
         "created_at": created_at,
         "status": status,
     }
@@ -23,7 +23,7 @@ def test_finds_a_planted_duplicate_pair() -> None:
     ]
     groups = find_duplicate_groups(charges, window_minutes=60)
     assert len(groups) == 1
-    assert groups[0]["amount_try"] == 459.00
+    assert groups[0]["amount_gbp"] == 459.00
     assert groups[0]["charge_refs"] == ["ch_1", "ch_2"]
     assert groups[0]["count"] == 2
 
@@ -80,7 +80,7 @@ def test_mixed_amounts_and_duplicates_in_one_batch() -> None:
     ]
     groups = find_duplicate_groups(charges, window_minutes=60)
     assert len(groups) == 1
-    assert groups[0]["amount_try"] == 459.00
+    assert groups[0]["amount_gbp"] == 459.00
     assert groups[0]["charge_refs"] == ["ch_1", "ch_2"]
 
 

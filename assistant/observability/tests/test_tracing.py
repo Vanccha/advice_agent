@@ -30,7 +30,7 @@ def test_disabled_makes_no_network_attempt_and_does_not_raise(monkeypatch):
 
     # trace_turn must also work fully offline, writing only to the fallback sink.
     with tracing.trace_turn(
-        masked_customer_ref="NH-1****2", conversation_id="conv-1", mode="ADVISORY"
+        masked_customer_ref="NS-1****2", conversation_id="conv-1", mode="ADVISORY"
     ):
         pass
 
@@ -69,7 +69,7 @@ def test_unreachable_host_warns_once_never_raises_and_falls_back_to_jsonl(
     assert "unreachable" in warnings[0].getMessage()
 
     with tracing.trace_turn(
-        masked_customer_ref="NH-1****2",
+        masked_customer_ref="NS-1****2",
         conversation_id="conv-42",
         mode="DIAGNOSTIC",
         chaos_scenario="stuck_provisioning",
@@ -82,7 +82,7 @@ def test_unreachable_host_warns_once_never_raises_and_falls_back_to_jsonl(
     assert len(lines) == 2  # one "turn" record + one "event" record
     turn_record = json.loads(lines[0])
     assert turn_record["session_id"] == "conv-42"
-    assert turn_record["tags"] == ["nethiz", "NH-1****2", "DIAGNOSTIC", "stuck_provisioning"]
+    assert turn_record["tags"] == ["netswift", "NS-1****2", "DIAGNOSTIC", "stuck_provisioning"]
 
 
 class _FakeClientHealthy:
@@ -123,18 +123,18 @@ def test_four_filterable_dimensions_are_attached_to_propagate_attributes(monkeyp
     assert handle.enabled is True
 
     with tracing.trace_turn(
-        masked_customer_ref="NH-1****2",
+        masked_customer_ref="NS-1****2",
         conversation_id="conv-7",
         mode="ACTION",
         chaos_scenario=None,
     ):
         pass
 
-    assert captured["user_id"] == "NH-1****2"
+    assert captured["user_id"] == "NS-1****2"
     assert captured["session_id"] == "conv-7"
     # The four filterable tags a demo needs: tenant, masked customer ref, mode and chaos
     # scenario. The masked ref is additionally set as Langfuse's own user_id.
-    assert captured["tags"] == ["nethiz", "NH-1****2", "ACTION", "none"]
+    assert captured["tags"] == ["netswift", "NS-1****2", "ACTION", "none"]
 
 
 def test_payload_containing_raw_pii_is_redacted_before_it_reaches_the_emitter(monkeypatch):
@@ -153,20 +153,20 @@ def test_payload_containing_raw_pii_is_redacted_before_it_reaches_the_emitter(mo
 
     tracing.record_tool_call(
         "get_customer_overview",
-        tool_input={"customer_no": "NH-100042"},
+        tool_input={"customer_no": "NS-100042"},
         tool_output={
             "full_name": "Ahmet Yilmaz",
-            "national_id": "12345678901",
-            "phone": "+905551234567",
-            "email": "ahmet.yilmaz@ornek-eposta.test",
+            "national_id": "QQ123456C",
+            "phone": "+447700900167",
+            "email": "ahmet.yilmaz@example-mail.test",
         },
     )
 
     assert len(fake_client.events) == 1
     emitted = json.dumps(fake_client.events[0], ensure_ascii=False)
-    assert "12345678901" not in emitted
-    assert "+905551234567" not in emitted
-    assert "ahmet.yilmaz@ornek-eposta.test" not in emitted
+    assert "QQ123456C" not in emitted
+    assert "+447700900167" not in emitted
+    assert "ahmet.yilmaz@example-mail.test" not in emitted
     assert "Ahmet Yilmaz" not in emitted
 
 

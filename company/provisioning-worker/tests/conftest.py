@@ -4,9 +4,9 @@ import os
 
 os.environ.setdefault("COMPANY_DB_HOST", "localhost")
 os.environ.setdefault("COMPANY_DB_PORT", "5432")
-os.environ.setdefault("COMPANY_DB_USER", "nethiz")
-os.environ.setdefault("COMPANY_DB_PASSWORD", "nethiz_dev_pw")
-os.environ["COMPANY_DB_NAME"] = "nethiz_core_test_worker"
+os.environ.setdefault("COMPANY_DB_USER", "netswift")
+os.environ.setdefault("COMPANY_DB_PASSWORD", "netswift_dev_pw")
+os.environ["COMPANY_DB_NAME"] = "netswift_core_test_worker"
 os.environ.setdefault("PROVISION_SUCCESS_RATE", "0.9")
 os.environ.setdefault("WORKER_INTERVAL_SECONDS", "5")
 os.environ.setdefault("STUCK_AFTER_SECONDS", "300")
@@ -76,7 +76,7 @@ def require_db():
 
 @pytest.fixture(scope="session", autouse=False)
 def db_engine(require_db):
-    _ensure_database("nethiz_core_test_worker")
+    _ensure_database("netswift_core_test_worker")
     _bootstrap_core_schema()
     from app.db import get_engine
 

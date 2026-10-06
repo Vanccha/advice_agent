@@ -5,16 +5,16 @@ import os
 # Must run before any `app.*` import: settings are read from env at import time.
 os.environ.setdefault("COMPANY_DB_HOST", "localhost")
 os.environ.setdefault("COMPANY_DB_PORT", "5432")
-os.environ.setdefault("COMPANY_DB_USER", "nethiz")
-os.environ.setdefault("COMPANY_DB_PASSWORD", "nethiz_dev_pw")
-os.environ["COMPANY_DB_NAME"] = "nethiz_core_test"
-os.environ.setdefault("CORE_API_KEY_CRM", "nethiz_crm_key_change_me")
-os.environ.setdefault("CORE_API_KEY_PARTNER", "nethiz_partner_key_change_me")
-os.environ.setdefault("WEBHOOK_SECRET", "nethiz_webhook_secret_change_me")
+os.environ.setdefault("COMPANY_DB_USER", "netswift")
+os.environ.setdefault("COMPANY_DB_PASSWORD", "netswift_dev_pw")
+os.environ["COMPANY_DB_NAME"] = "netswift_core_test"
+os.environ.setdefault("CORE_API_KEY_CRM", "netswift_crm_key_change_me")
+os.environ.setdefault("CORE_API_KEY_PARTNER", "netswift_partner_key_change_me")
+os.environ.setdefault("WEBHOOK_SECRET", "netswift_webhook_secret_change_me")
 os.environ.setdefault("READONLY_DIAG_USER", "readonly_diag")
 os.environ.setdefault("READONLY_DIAG_PASSWORD", "diag_dev_pw")
-os.environ.setdefault("PSP_API_KEY", "nethiz_psp_key_change_me")
-os.environ.setdefault("CREDIT_MAX_PER_REQUEST_TRY", "250")
+os.environ.setdefault("PSP_API_KEY", "netswift_psp_key_change_me")
+os.environ.setdefault("CREDIT_MAX_PER_REQUEST_GBP", "25")
 os.environ.setdefault("RESEND_COOLDOWN_SECONDS", "120")
 os.environ.setdefault("PAYMENT_API_BASE_URL", "http://payment-gateway:8000")
 os.environ["SEED_ON_STARTUP"] = "false"
@@ -69,7 +69,7 @@ def require_db():
 
 @pytest.fixture(scope="session")
 def app_client(require_db):
-    ensure_database("nethiz_core_test")
+    ensure_database("netswift_core_test")
     from fastapi.testclient import TestClient
 
     from app.main import app

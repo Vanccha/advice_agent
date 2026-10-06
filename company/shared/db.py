@@ -10,7 +10,7 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
 class Base(DeclarativeBase):
-    """Declarative base for every NetHiz service schema."""
+    """Declarative base for every NetSwift service schema."""
 
 
 def make_engine(database_url: str, **kwargs: object) -> Engine:

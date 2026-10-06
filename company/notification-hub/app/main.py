@@ -15,8 +15,8 @@ settings = get_settings()
 app = create_app(
     service_name=settings.service_name,
     version=settings.service_version,
-    title="NetHız Bildirim Merkezi",
-    description="Teams/Slack benzeri dahili departman kanalları ve uyarı yayını.",
+    title="NetSwift Notification Hub",
+    description="Teams/Slack-style internal department channels and alert broadcasting.",
     on_startup=run_bootstrap,
     log_level=settings.log_level,
 )

@@ -97,7 +97,7 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
         evidence["payment_ids"] = payment_ids
         evidence["error_codes"] = []
         evidence["observations"] = [
-            "İki başarılı ödeme aynı abonelik için kısa süre arayla tespit edildi."
+            "Two successful payments for the same subscription were found a short time apart."
         ]
         _step(ctx, "diagnostic: duplicate charge detected", "detect_duplicate_charges matched", evidence)
         return Diagnosis(
@@ -271,7 +271,7 @@ def _duplicate_pairs_from_payment_records(records: list[dict[str, Any]]) -> list
     succeeded = [r for r in records if r.get("status") == "succeeded" and r.get("payment_id") is not None]
     by_amount: dict[Any, list[int]] = {}
     for record in succeeded:
-        by_amount.setdefault(record.get("amount_try"), []).append(record["payment_id"])
+        by_amount.setdefault(record.get("amount_gbp"), []).append(record["payment_id"])
     return [ids for ids in by_amount.values() if len(ids) >= 2]
 
 

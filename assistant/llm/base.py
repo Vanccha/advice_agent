@@ -62,7 +62,7 @@ class LLMProvider(Protocol):
         temperature: float = 0.2,
         max_tokens: int | None = None,
     ) -> str:
-        """Free-text completion: used for user-facing Turkish verbalization, never for a
+        """Free-text completion: used for user-facing verbalization, never for a
         decision that drives routing or authority."""
         ...
 

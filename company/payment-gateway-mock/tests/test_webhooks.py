@@ -24,9 +24,9 @@ def test_webhook_delivery_success_recorded(client, auth_headers, settings, sessi
         resp = client.post(
             "/psp/v1/charges",
             json={
-                "amount_try": 150.0,
-                "currency": "TRY",
-                "customer_ref": "NH-100002",
+                "amount_gbp": 150.0,
+                "currency": "GBP",
+                "customer_ref": "NS-100002",
                 "method": "card",
                 "card_token": "tok_test_2",
                 "idempotency_key": "wh-success-1",
@@ -63,9 +63,9 @@ def test_webhook_delivery_retries_and_records_each_attempt(
         resp = client.post(
             "/psp/v1/charges",
             json={
-                "amount_try": 75.0,
-                "currency": "TRY",
-                "customer_ref": "NH-100003",
+                "amount_gbp": 75.0,
+                "currency": "GBP",
+                "customer_ref": "NS-100003",
                 "method": "card",
                 "card_token": "tok_test_3",
                 "idempotency_key": "wh-fail-1",
@@ -98,9 +98,9 @@ def test_refund_also_triggers_webhook(client, auth_headers, settings, session_fa
         created = client.post(
             "/psp/v1/charges",
             json={
-                "amount_try": 60.0,
-                "currency": "TRY",
-                "customer_ref": "NH-100004",
+                "amount_gbp": 60.0,
+                "currency": "GBP",
+                "customer_ref": "NS-100004",
                 "method": "card",
                 "card_token": "tok_test_4",
                 "idempotency_key": "wh-refund-1",
@@ -109,7 +109,7 @@ def test_refund_also_triggers_webhook(client, auth_headers, settings, session_fa
         ).json()
         refund_resp = client.post(
             f"/psp/v1/charges/{created['charge_ref']}/refunds",
-            json={"amount_try": 60.0},
+            json={"amount_gbp": 60.0},
             headers=auth_headers,
         )
         assert refund_resp.status_code == 201

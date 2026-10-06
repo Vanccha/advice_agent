@@ -60,7 +60,7 @@ that case's `expect:` block is asserted. Injection strategy (see
   customers and asserts the incident still has exactly one ticket
   (`find_tickets_by_incident`).
 - `payment_down`: injected once (a global PSP outage flag, no customer to pick); all tone
-  variants are sent as the same fixed seeded customer (`NH-100001`).
+  variants are sent as the same fixed seeded customer (`NS-100001`).
 
 The chaos CLI is reset once after all of a scenario id's variants have run (never between
 variants of the *same* id — each already has independent state), and once more at the end
@@ -77,13 +77,13 @@ asserted against. It also:
 - calls `recommend_packages` a second time with the same input and asserts the result is
   byte-for-byte identical (`invariants.deterministic`);
 - asserts every `PackageOffer.reasons` string matches one of `routing.yaml:
-  recommendation.reason_codes_tr`'s templates (built into a regex per template with each
+  recommendation.reason_codes_en`'s templates (built into a regex per template with each
   `{placeholder}` turned into a wildcard) — `invariants.reasons_from_config_only`;
 - asserts every returned `package_code` is a code the live catalogue actually has
   (`invariants.no_package_outside_catalogue`), and that `1 <= len(offers) <= 3`
   (`invariants.min/max_offers_returned`).
 
-As a secondary, best-effort check, the profile's `conversation_tr` is also played through
+As a secondary, best-effort check, the profile's `conversation_en` is also played through
 the real `Orchestrator`'s ADVISORY mode (padded with a neutral "farketmez" answer if the
 scripted conversation runs out of turns before the question budget does) and the verbalised
 reply is checked to never name a package outside the catalogue — this does **not** have to
@@ -107,15 +107,15 @@ never folded into a silent pass, and never presented as if the assistant had bee
 
 ## Interpretation of ambiguous expectation keys
 
-- **`must_not_blame_customer`**: asserts the reply does not contain any of a small Turkish
-  blame-phrase list (`evals/checks.py: BLAME_PHRASES_TR`) pinning the fault on the
-  customer's own card/device/input (e.g. "kartınızda bir sorun", "cihazınızdan
-  kaynaklanıyor"). This is necessarily a judgement call for a string-matching harness; the
+- **`must_not_blame_customer`**: asserts the reply does not contain any of a small
+  blame-phrase list (`evals/checks.py: BLAME_PHRASES_EN`) pinning the fault on the
+  customer's own card/device/input (e.g. "a problem with your card", "caused by
+  your device"). This is necessarily a judgement call for a string-matching harness; the
   list is a module-level constant specifically so it's easy to find and extend.
 - **`action_executed` / `action_executed_any`**: read from `asst.action_records`
   (`core_common.models.ActionRecord`, written by `policy.executor.ActionExecutor`) filtered
   by `conversation_id` and `executed=True` — the authoritative record of what actually ran,
-  rather than parsing the Turkish reply text for a label.
+  rather than parsing the reply text for a label.
 - **`policy_denied_action`**: an `ActionRecord` for that `conversation_id` with
   `action_name` equal to the expected value and `policy_allowed=False`.
 - **`ticket_department` / `ticket_department_if_created`**: fetched from the live
@@ -138,10 +138,10 @@ never folded into a silent pass, and never presented as if the assistant had bee
 - **`must_not_execute_action`**: no `asst.action_records` row for this conversation has
   `executed=True` — smalltalk/out-of-scope/status-query must never reach `ActionExecutor`
   at all, not merely "not mention" an action in the reply.
-- **`reply_must_mention_any_tr` / `reply_must_not_mention_any_tr`**: case-insensitive
-  substring match against `TurnResult.reply_tr` (the last turn's reply — every scenario
+- **`reply_must_mention_any_en` / `reply_must_not_mention_any_en`**: case-insensitive
+  substring match against `TurnResult.reply_en` (the last turn's reply — every scenario
   case in this dataset resolves in a single turn; see below).
-- **`min_down_mbps` / `max_monthly_price_try`** (like `must_have_static_ip`/`must_have_tv`/
+- **`min_down_mbps` / `max_monthly_price_gbp`** (like `must_have_static_ip`/`must_have_tv`/
   `must_have_no_commitment`): checked against the **best** (top-ranked) offer only, not
   every item in the returned top-3. A top-3 list legitimately includes a cheaper/slower
   comparison alternative alongside the best recommendation — `must_not_recommend` is the
@@ -160,7 +160,7 @@ Tracing `assistant/modes/action.py::handle_action`: every root cause this harnes
 scenarios produce resolves — success or policy denial + ticket — inside the **same**
 `handle_message()` call that ran `DIAGNOSTIC` immediately followed by `ACTION`
 (`modes/orchestrator.py`'s dispatch loop `continue`s between modes within one turn). So
-`TurnResult.diagnosis`, `TurnResult.reply_tr`, and any ticket/action already reflect the
+`TurnResult.diagnosis`, `TurnResult.reply_en`, and any ticket/action already reflect the
 full outcome after the very first message for `stuck_provisioning`, `paid_not_active`,
 `double_charge`, `missed_installation`, and `payment_system_down`.
 
@@ -184,7 +184,7 @@ every root cause that reaches its `_ROOT_CAUSE_ACTION` mapping — every scenari
 dataset except `regional_outage`, which resolves through a separate branch
 (`ensure_incident_ticket` + `apply_outage_credit`) before ever reaching that mapping.
 `choose_department` is only called when a denied action's policy entry has **no**
-`escalate_to` — tracing `config/tenants/nethiz/policy.yaml` shows every denied action this
+`escalate_to` — tracing `config/tenants/netswift/policy.yaml` shows every denied action this
 dataset's diagnoses reach (`issue_refund`, `reschedule_installation`,
 `repair_infrastructure`) has one, so `exc.decision.escalate_to or _decide_department(...)`
 short-circuits before the call would happen: `choose_department` is **not reachable** by

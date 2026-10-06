@@ -9,14 +9,14 @@ from sqlalchemy.exc import SQLAlchemyError
 # Point this test session at a dedicated test database, but keep connection params (user,
 # password, host, port) from the environment so the test-runner container (COMPANY_DB_HOST=
 # company-db) and a local run (COMPANY_DB_HOST=localhost) both work unchanged.
-os.environ.setdefault("COMPANY_DB_USER", "nethiz")
-os.environ.setdefault("COMPANY_DB_PASSWORD", "nethiz_dev_pw")
+os.environ.setdefault("COMPANY_DB_USER", "netswift")
+os.environ.setdefault("COMPANY_DB_PASSWORD", "netswift_dev_pw")
 os.environ.setdefault("COMPANY_DB_HOST", "localhost")
 os.environ.setdefault("COMPANY_DB_PORT", "55432")
-os.environ.setdefault("NOTIFY_API_KEY", "nethiz_notify_key_change_me")
-os.environ["COMPANY_DB_NAME"] = "nethiz_notify_test"
+os.environ.setdefault("NOTIFY_API_KEY", "netswift_notify_key_change_me")
+os.environ["COMPANY_DB_NAME"] = "netswift_notify_test"
 
-TEST_DB_NAME = "nethiz_notify_test"
+TEST_DB_NAME = "netswift_notify_test"
 
 
 def _database_available() -> bool:
@@ -49,7 +49,7 @@ _DB_AVAILABLE = _database_available()
 
 @pytest.fixture(scope="session")
 def app_client():
-    """A TestClient against the real app, backed by nethiz_notify_test. Skips if DB is down."""
+    """A TestClient against the real app, backed by netswift_notify_test. Skips if DB is down."""
     if not _DB_AVAILABLE:
         pytest.skip(f"company-db is not reachable at {os.environ['COMPANY_DB_HOST']}; "
                     "skipping DB-backed notification-hub tests")

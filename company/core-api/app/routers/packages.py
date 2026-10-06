@@ -27,7 +27,7 @@ def list_packages(
     if profile:
         stmt = stmt.where(Package.target_profile == profile)
     if max_price is not None:
-        stmt = stmt.where(Package.monthly_price_try <= max_price)
+        stmt = stmt.where(Package.monthly_price_gbp <= max_price)
     if is_active is not None:
         stmt = stmt.where(Package.is_active == is_active)
     rows, total = paginate(db, stmt.order_by(Package.id), offset=offset, limit=limit)

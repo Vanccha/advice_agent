@@ -49,16 +49,16 @@ def _full_section_4_1_input(external_ref: str, incident_ref: str | None = None) 
         department="BILLING",
         issue_type="double_charge",
         priority="HIGH",
-        subject="Cift tahsilat - NH-100042 (2 x 459,00 TRY)",
-        body="Iki odeme aynı gun, aynı tutar, 4 dakika arayla succeeded.",
+        subject="Cift tahsilat - NS-100042 (2 x £45.90)",
+        body="Two payments on the same day, same amount, 4 minutes apart, both succeeded.",
         source="api",
         external_ref=external_ref,
         incident_ref=incident_ref,
-        requester=RequesterInput(customer_no="NH-100042", name="A K", contact="+905551234567"),
+        requester=RequesterInput(customer_no="NS-100042", name="A K", contact="+447700900167"),
         evidence=EvidenceInput(
             record_ids={"subscription_id": 42, "payment_ids": [88, 89]},
             error_codes=[],
-            observations=["Iki odeme aynı gun, aynı tutar, 4 dakika arayla succeeded."],
+            observations=["Two payments on the same day, same amount, 4 minutes apart, both succeeded."],
             queried_sources=["diag.payment_status", "payment_api:list_customer_charges"],
         ),
         attempted_steps=[
@@ -67,9 +67,9 @@ def _full_section_4_1_input(external_ref: str, incident_ref: str | None = None) 
                 step="policy_check:issue_refund", result="denied: refund_not_permitted", outcome="blocked"
             ),
         ],
-        affected_customers=["NH-100042"],
-        suggested_next_step="88 numarali odemenin iadesi (459,00 TRY) onaylanmali.",
-        urgency_reason="Musteriden iki kez tahsilat alindi, yasal sure icinde iade gerekiyor.",
+        affected_customers=["NS-100042"],
+        suggested_next_step="Approve the refund of payment 88 (£45.90).",
+        urgency_reason="The customer was charged twice; a refund is due within the statutory period.",
     )
 
 
@@ -90,22 +90,22 @@ async def test_structured_ticket_round_trips_field_for_field_and_reads_back() ->
     assert ticket.body == inp.body
     assert ticket.source == inp.source
     assert ticket.external_ref == external_ref
-    assert ticket.requester_customer_no == "NH-100042"
+    assert ticket.requester_customer_no == "NS-100042"
     assert ticket.requester_name == "A K"
-    assert ticket.requester_contact == "+905551234567"
+    assert ticket.requester_contact == "+447700900167"
     assert ticket.evidence == {
         "record_ids": {"subscription_id": 42, "payment_ids": [88, 89]},
         "error_codes": [],
-        "observations": ["Iki odeme aynı gun, aynı tutar, 4 dakika arayla succeeded."],
+        "observations": ["Two payments on the same day, same amount, 4 minutes apart, both succeeded."],
         "queried_sources": ["diag.payment_status", "payment_api:list_customer_charges"],
     }
     assert ticket.attempted_steps == [
         {"step": "get_payment_status", "result": "2 succeeded charges found", "outcome": "info"},
         {"step": "policy_check:issue_refund", "result": "denied: refund_not_permitted", "outcome": "blocked"},
     ]
-    assert ticket.affected_customers == ["NH-100042"]
-    assert ticket.suggested_next_step == "88 numarali odemenin iadesi (459,00 TRY) onaylanmali."
-    assert ticket.urgency_reason == "Musteriden iki kez tahsilat alindi, yasal sure icinde iade gerekiyor."
+    assert ticket.affected_customers == ["NS-100042"]
+    assert ticket.suggested_next_step == "Approve the refund of payment 88 (£45.90)."
+    assert ticket.urgency_reason == "The customer was charged twice; a refund is due within the statutory period."
 
     read_back = await handle_get_ticket(GetTicketInput(ticket_key=ticket.ticket_key))
     assert read_back.ok, read_back.error
@@ -165,7 +165,7 @@ async def test_list_customer_tickets_and_add_ticket_comment() -> None:
     assert created.ok, created.error
     ticket_key = created.data.ticket.ticket_key
 
-    listed = await handle_list_customer_tickets(ListCustomerTicketsInput(customer_no="NH-100042"))
+    listed = await handle_list_customer_tickets(ListCustomerTicketsInput(customer_no="NS-100042"))
     assert listed.ok, listed.error
     assert any(t.ticket_key == ticket_key for t in listed.data.tickets)
 

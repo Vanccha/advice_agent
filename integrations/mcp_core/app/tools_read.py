@@ -88,7 +88,7 @@ async def handle_find_customer(inp: FindCustomerInput) -> ToolResult[Any]:
 
 _SUBSCRIPTION_STATUS_SQL = """
     SELECT customer_no, subscription_id, package_code, package_name, status,
-           monthly_price_try, contract_start_date, contract_end_date,
+           monthly_price_gbp, contract_start_date, contract_end_date,
            activated_at, updated_at, region_code
     FROM diag.subscription_status
     WHERE (CAST(:customer_no AS text) IS NULL OR customer_no = CAST(:customer_no AS text))

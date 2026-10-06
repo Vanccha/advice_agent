@@ -38,9 +38,9 @@ async def test_post_department_message_maps_channel_not_found() -> None:
 async def test_post_department_message_never_raises_when_hub_is_down() -> None:
     base_url = settings().NOTIFICATION_API_BASE_URL
     with respx.mock(base_url=base_url, assert_all_called=False) as mock:
-        mock.post("/api/v1/channels/faturalama/messages").mock(side_effect=httpx.ConnectError("refused"))
+        mock.post("/api/v1/channels/billing/messages").mock(side_effect=httpx.ConnectError("refused"))
         result = await handle_post_department_message(
-            PostDepartmentMessageInput(channel="faturalama", title="t", text="x")
+            PostDepartmentMessageInput(channel="billing", title="t", text="x")
         )
 
     assert result.ok is False
@@ -50,17 +50,17 @@ async def test_post_department_message_never_raises_when_hub_is_down() -> None:
 async def test_post_department_message_forwards_fields_and_external_ref() -> None:
     base_url = settings().NOTIFICATION_API_BASE_URL
     with respx.mock(base_url=base_url, assert_all_called=False) as mock:
-        route = mock.post("/api/v1/channels/faturalama/messages").mock(
+        route = mock.post("/api/v1/channels/billing/messages").mock(
             return_value=httpx.Response(
                 201,
                 json={
                     "id": 1,
-                    "channel_slug": "faturalama",
+                    "channel_slug": "billing",
                     "title": "t",
                     "text": "x",
                     "severity": "warning",
                     "source": "mcp-notification",
-                    "fields": {"amount_try": 459.0},
+                    "fields": {"amount_gbp": 459.0},
                     "external_ref": "conv-1:double_charge",
                     "created_at": "2026-10-05T12:00:00Z",
                 },
@@ -68,11 +68,11 @@ async def test_post_department_message_forwards_fields_and_external_ref() -> Non
         )
         result = await handle_post_department_message(
             PostDepartmentMessageInput(
-                channel="faturalama",
+                channel="billing",
                 title="t",
                 text="x",
                 severity="warning",
-                fields={"amount_try": 459.0},
+                fields={"amount_gbp": 459.0},
                 external_ref="conv-1:double_charge",
             )
         )
@@ -82,7 +82,7 @@ async def test_post_department_message_forwards_fields_and_external_ref() -> Non
     import json as _json
 
     sent = _json.loads(sent_body)
-    assert sent["fields"] == {"amount_try": 459.0}
+    assert sent["fields"] == {"amount_gbp": 459.0}
     assert sent["external_ref"] == "conv-1:double_charge"
     assert sent["severity"] == "warning"
-    assert result.data.message.fields == {"amount_try": 459.0}
+    assert result.data.message.fields == {"amount_gbp": 459.0}

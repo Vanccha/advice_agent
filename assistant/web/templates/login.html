@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Müşteri Girişi — NetHız Destek Asistanı</title>
+  <title>Customer Sign-in — NetSwift Support Assistant</title>
   <link rel="stylesheet" href="/static/site.css?v={{ asset_version }}" />
   <link rel="stylesheet" href="/static/widget.css?v={{ asset_version }}" />
 </head>
 <body class="nh-login-body">
   <main class="nh-login">
     <div class="nh-login__card">
-      <a href="/" class="nh-site__logo nh-login__logo" aria-label="NetHız Telekom anasayfa">
+      <a href="/" class="nh-site__logo nh-login__logo" aria-label="NetSwift Telecom home page">
         <span class="nh-site__logo-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32" width="26" height="26" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M4 20c6-10 18-10 24 0" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
@@ -18,17 +18,17 @@
             <circle cx="16" cy="28" r="1.8" fill="currentColor"/>
           </svg>
         </span>
-        <span class="nh-site__logo-word">Net<strong>Hız</strong></span>
+        <span class="nh-site__logo-word">Net<strong>Swift</strong></span>
       </a>
 
-      <h1>Destek asistanına giriş</h1>
+      <h1>Sign in to the support assistant</h1>
       <p class="nh-login__demo-note" data-testid="demo-login-note">
-        Bu bir demo girişidir: şifre yoktur, yalnızca müşteri numaranızı yazmanız ya da
-        aşağıdaki örneklerden birini seçmeniz yeterlidir.
+        This is a demo sign-in: there is no password. Just type your customer number or
+        pick one of the examples below.
       </p>
 
       <form id="login-form" class="nh-login__form" data-testid="login-form" autocomplete="off">
-        <label for="customer_no">{{ identifier_label_tr }}</label>
+        <label for="customer_no">{{ identifier_label_en }}</label>
         <input type="text"
                id="customer_no"
                name="customer_no"
@@ -39,15 +39,15 @@
                required />
         <div id="login-error" class="nh-login__error" data-testid="login-error" role="alert" hidden></div>
         <button type="submit" class="nh-btn-cta nh-login__submit" data-testid="login-submit">
-          Devam Et
+          Continue
         </button>
       </form>
 
       <div class="nh-login__examples">
-        <span class="nh-login__examples-label">Demo için örnek müşteriler:</span>
+        <span class="nh-login__examples-label">Example customers for the demo:</span>
         <ul class="nh-login__example-list" data-testid="example-customers">
           {% for example in example_customers %}
-          <li><button type="button" class="nh-login__example-btn" data-customer-no="{{ example.customer_no }}" data-testid="example-customer">{{ example.customer_no }} <small>{{ example.note_tr }}</small></button></li>
+          <li><button type="button" class="nh-login__example-btn" data-customer-no="{{ example.customer_no }}" data-testid="example-customer">{{ example.customer_no }} <small>{{ example.note_en }}</small></button></li>
           {% endfor %}
         </ul>
       </div>

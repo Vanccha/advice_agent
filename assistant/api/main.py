@@ -8,7 +8,7 @@ place turn logic lives.
 
 Startup degrades gracefully (contracts: a missing ``OPENAI_API_KEY`` must not crash the
 container): if the database, tenant config or LLM provider cannot be built, ``/api/chat``
-still answers — with a clear Turkish error message — instead of the process failing to
+still answers — with a clear, customer-facing error message — instead of the process failing to
 come up at all.
 """
 from __future__ import annotations
@@ -48,9 +48,9 @@ ASSISTANT_DIR = Path(__file__).resolve().parent.parent  # assistant/
 WEB_DIR = ASSISTANT_DIR / "web"
 
 COOKIE_NAME = "demo_customer_no"
-DEFAULT_CUSTOMER_PATTERN = r"^NH-\d{6}$"
+DEFAULT_CUSTOMER_PATTERN = r"^NS-\d{6}$"
 
-app = FastAPI(title="NetHız destek asistanı API")
+app = FastAPI(title="Support assistant API")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
@@ -69,7 +69,7 @@ class AppState:
     freely overridable by tests, which never run startup against a live stack)."""
 
     orchestrator: Orchestrator | None = None
-    init_error_tr: str | None = None
+    init_error_en: str | None = None
     tenant_config: Any = None
     gateway: Any = None
     audit_log: AuditLog | None = None
@@ -90,14 +90,14 @@ def _startup() -> None:
         state.session_factory = get_sessionmaker()
     except Exception as exc:  # pragma: no cover - depends on live infra
         logger.warning("assistant database unavailable at startup: %s", exc)
-        state.init_error_tr = "Asistan şu anda veritabanına bağlanamıyor, lütfen daha sonra tekrar deneyin."
+        state.init_error_en = "The assistant cannot reach its database right now; please try again later."
         return
 
     try:
         tenant_config = load_tenant_config()
     except ConfigError as exc:
         logger.warning("tenant config error at startup: %s", exc)
-        state.init_error_tr = "Asistan yapılandırması okunamadı, lütfen yöneticinize bildirin."
+        state.init_error_en = "The assistant configuration could not be read; please let your administrator know."
         return
     state.tenant_config = tenant_config
     state.audit_log = AuditLog(state.session_factory)
@@ -106,9 +106,9 @@ def _startup() -> None:
         provider = get_provider(settings)
     except ProviderConfigError as exc:
         logger.warning("LLM provider unavailable at startup: %s", exc)
-        state.init_error_tr = (
-            "Asistan şu anda dil modeli sağlayıcısına bağlanamadığı için yanıt veremiyor. "
-            "Lütfen daha sonra tekrar deneyin."
+        state.init_error_en = (
+            "The assistant cannot reply right now because it cannot reach its language model "
+            "provider. Please try again later."
         )
         return
 
@@ -132,7 +132,7 @@ def _degraded_reply(conversation_id: str | None) -> dict[str, Any]:
     return {
         "conversation_id": conversation_id or "unavailable",
         "mode": "CLOSING",
-        "reply_tr": state.init_error_tr or "Asistan şu anda hizmet veremiyor, lütfen daha sonra tekrar deneyin.",
+        "reply_en": state.init_error_en or "The assistant is unavailable right now; please try again later.",
         "actions": [],
         "ticket_key": None,
         "requires_approval": False,
@@ -176,11 +176,11 @@ def index(request: Request):
 # Demo shortcuts, per tenant. A tenant with none falls back to the single documented
 # example from its own `customer_identifier`, so the page is never customer-specific in code.
 _DEMO_EXAMPLE_CUSTOMERS: dict[str, list[dict[str, str]]] = {
-    "nethiz": [
-        {"customer_no": "NH-100042", "note_tr": "aktif abonelik"},
-        {"customer_no": "NH-100017", "note_tr": "kurulum bekliyor"},
-        {"customer_no": "NH-100083", "note_tr": "ödeme beklemede"},
-        {"customer_no": "NH-100005", "note_tr": "askıya alınmış"},
+    "netswift": [
+        {"customer_no": "NS-100042", "note_en": "active subscription"},
+        {"customer_no": "NS-100017", "note_en": "awaiting installation"},
+        {"customer_no": "NS-100083", "note_en": "payment pending"},
+        {"customer_no": "NS-100005", "note_en": "suspended"},
     ],
 }
 
@@ -212,12 +212,12 @@ def login_page(request: Request):
     tenant_name = state.tenant_config.tenant_name if state.tenant_config is not None else ""
     examples = _DEMO_EXAMPLE_CUSTOMERS.get(tenant_name)
     if not examples and identifier is not None:
-        examples = [{"customer_no": identifier.example, "note_tr": "örnek"}]
+        examples = [{"customer_no": identifier.example, "note_en": "example"}]
     return templates.TemplateResponse(
         request,
         "login.html",
         {
-            "identifier_label_tr": identifier.label_tr if identifier else "Müşteri numarası",
+            "identifier_label_en": identifier.label_en if identifier else "Customer number",
             "identifier_example": identifier.example if identifier else "",
             # The HTML `pattern` attribute is implicitly anchored, so the tenant's anchors
             # must come off or the field never validates.
@@ -246,7 +246,7 @@ def api_login(body: LoginRequest):
     if not re.match(pattern, customer_no):
         raise HTTPException(
             status_code=400,
-            detail={"error": {"code": "INVALID_FORMAT", "message": "Geçersiz müşteri numarası formatı"}},
+            detail={"error": {"code": "INVALID_FORMAT", "message": "Invalid customer number format"}},
         )
 
     if state.gateway is not None:
@@ -254,7 +254,7 @@ def api_login(body: LoginRequest):
         if first_record(outcome) is None:
             raise HTTPException(
                 status_code=404,
-                detail={"error": {"code": "CUSTOMER_NOT_FOUND", "message": "Bilinmeyen müşteri numarası"}},
+                detail={"error": {"code": "CUSTOMER_NOT_FOUND", "message": "Unknown customer number"}},
             )
 
     response = JSONResponse({"status": "ok", "customer_no": customer_no})
@@ -284,7 +284,7 @@ async def api_chat_stream(request: Request, conversation_id: str | None = None, 
 
     async def event_generator():
         if state.orchestrator is None:
-            yield {"event": "error", "data": state.init_error_tr or "unavailable"}
+            yield {"event": "error", "data": state.init_error_en or "unavailable"}
             return
         try:
             result = await run_in_threadpool(
@@ -296,7 +296,7 @@ async def api_chat_stream(request: Request, conversation_id: str | None = None, 
             yield {"event": "error", "data": str(exc)}
             return
 
-        for word in result.reply_tr.split(" "):
+        for word in result.reply_en.split(" "):
             if word:
                 yield {"event": "token", "data": word + " "}
         yield {"event": "final", "data": json.dumps(result.model_dump(mode="json"), ensure_ascii=False)}

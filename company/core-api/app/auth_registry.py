@@ -22,6 +22,6 @@ PARTNER_SCOPES = {
 def get_registry() -> ApiKeyRegistry:
     settings = get_settings()
     registry = ApiKeyRegistry()
-    registry.register(settings.core_api_key_crm, "nethiz-crm", CRM_SCOPES)
+    registry.register(settings.core_api_key_crm, "netswift-crm", CRM_SCOPES)
     registry.register(settings.core_api_key_partner, "partner-integration", PARTNER_SCOPES)
     return registry

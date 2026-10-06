@@ -14,13 +14,13 @@ from chaos.settings import ChaosSettings, get_settings
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Failure-injection CLI for the NetHiz company stack. "
-    "Usage: python -m chaos.cli <scenario|reset|status> [--customer NH-1000xx] "
-    "[--region IST-KAD] [--dry-run] [--json]",
+    help="Failure-injection CLI for the NetSwift company stack. "
+    "Usage: python -m chaos.cli <scenario|reset|status> [--customer NS-1000xx] "
+    "[--region LDN-CAM] [--dry-run] [--json]",
 )
 
-CUSTOMER_OPTION = typer.Option(None, "--customer", help="Target customer_no, e.g. NH-100042.")
-REGION_OPTION = typer.Option(None, "--region", help="Target region code, e.g. IST-KAD.")
+CUSTOMER_OPTION = typer.Option(None, "--customer", help="Target customer_no, e.g. NS-100042.")
+REGION_OPTION = typer.Option(None, "--region", help="Target region code, e.g. LDN-CAM.")
 DRY_RUN_OPTION = typer.Option(False, "--dry-run", help="Show what would change without writing anything.")
 JSON_OPTION = typer.Option(False, "--json", help="Machine-readable JSON output.")
 
@@ -247,7 +247,7 @@ def cmd_double_charge(
         outcome = sc.ScenarioOutcome(
             scenario="double_charge", dry_run=True, picked=candidate,
             changes=[f"[DRY RUN] would create a second succeeded charge of "
-                     f"{candidate['amount_try']} TRY for {candidate['customer_no']}, ~4 minutes "
+                     f"{candidate['amount_gbp']} GBP for {candidate['customer_no']}, ~4 minutes "
                      "after the original"],
             expected_behavior="(dry run -- nothing was changed)",
         )

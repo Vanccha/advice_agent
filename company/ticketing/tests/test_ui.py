@@ -6,8 +6,8 @@ def _create_ticket(client, auth_headers, ref: str) -> dict:
         "department": "FIELD_INSTALL",
         "issue_type": "missed_installation",
         "priority": "NORMAL",
-        "subject": "Kaçırılan kurulum randevusu",
-        "body": "Müşteri evde değildi.",
+        "subject": "Missed installation appointment",
+        "body": "The customer was not at home.",
         "source": "web",
         "external_ref": ref,
     }
@@ -16,28 +16,28 @@ def _create_ticket(client, auth_headers, ref: str) -> dict:
     return resp.json()
 
 
-def test_agent_list_page_renders_with_turkish_labels(client, auth_headers) -> None:
+def test_agent_list_page_renders_with_labels(client, auth_headers) -> None:
     ticket = _create_ticket(client, auth_headers, "ui-list-test")
 
     resp = client.get("/agent")
     assert resp.status_code == 200
     html = resp.text
     assert ticket["ticket_key"] in html
-    assert "Talepler" in html
-    assert "Saha Kurulum Ekibi" in html
-    assert "Departman" in html
+    assert "Tickets" in html
+    assert "Field Installation Team" in html
+    assert "Department" in html
 
 
-def test_agent_detail_page_renders_with_turkish_labels(client, auth_headers) -> None:
+def test_agent_detail_page_renders_with_labels(client, auth_headers) -> None:
     ticket = _create_ticket(client, auth_headers, "ui-detail-test")
 
     resp = client.get(f"/agent/tickets/{ticket['ticket_key']}")
     assert resp.status_code == 200
     html = resp.text
     assert ticket["ticket_key"] in html
-    assert "Talep Eden" in html
-    assert "Durum Geçmişi" in html
-    assert "Yorumlar" in html
+    assert "Requester" in html
+    assert "Status History" in html
+    assert "Comments" in html
 
 
 def test_agent_list_filters_by_department(client, auth_headers) -> None:

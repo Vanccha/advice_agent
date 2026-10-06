@@ -28,8 +28,8 @@ def _ctx(tenant_config, audit_log, provider, conversation_id: str = "conv-decisi
         action_executor=None,
         ticket_service=None,
         provider=provider,
-        customer_no="NH-100001",
-        masked_customer_ref="NH-100001",
+        customer_no="NS-100001",
+        masked_customer_ref="NS-100001",
         history=[],
     )
 
@@ -40,7 +40,7 @@ def _diagnosis(root_cause: str) -> Diagnosis:
         scope=DiagnosisScope.CUSTOMER_SPECIFIC,
         confidence=0.9,
         evidence={"queried_sources": [], "subscription_id": 42},
-        affected_customers=["NH-100001"],
+        affected_customers=["NS-100001"],
     )
 
 

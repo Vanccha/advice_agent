@@ -1,7 +1,7 @@
 # Authority engine. The model NEVER decides what it is allowed to do: every action is
 # checked here first, and an unknown action name is denied by default.
 version: 1
-tenant: nethiz
+tenant: netswift
 
 decision:
   min_confidence: 0.6          # below this → hand over instead of guessing
@@ -18,7 +18,7 @@ actions:
   retry_provisioning_job:
     allowed: true
     requires_confirmation: false
-    description_tr: "Takılı kalan provizyon işini yeniden başlatır."
+    description_en: "Restarts a stuck provisioning job."
     conditions:
       - {field: job.status, in: [stuck, failed]}
       - {field: job.attempt_count, lt: 3}
@@ -29,7 +29,7 @@ actions:
   resend_activation_notification:
     allowed: true
     requires_confirmation: false
-    description_tr: "Aktivasyon SMS/e-postasını yeniden gönderir."
+    description_en: "Resends the activation SMS/e-mail."
     rate_limit:
       per_conversation: 2
       per_customer_per_day: 5
@@ -37,7 +37,7 @@ actions:
   enqueue_provisioning_job:
     allowed: true
     requires_confirmation: false
-    description_tr: "Ödemesi alınmış ama provizyonu başlamamış abonelik için işi kuyruğa alır."
+    description_en: "Queues provisioning for a subscription that is paid for but never started provisioning."
     conditions:
       - {field: subscription.status, in: [payment_received]}
       - {field: payment.status, in: [succeeded]}
@@ -45,8 +45,8 @@ actions:
   apply_outage_credit:
     allowed: true
     requires_confirmation: true          # money leaves the company → explicit consent
-    description_tr: "Kesinti için tek seferlik telafi tanımlar."
-    max_amount_try: 50
+    description_en: "Applies a one-off compensation credit for an outage."
+    max_amount_gbp: 5
     conditions:
       - {field: incident.exists, eq: true}
       - {field: credit.existing_count_30d, lt: 1}
@@ -58,36 +58,36 @@ actions:
     allowed: false
     escalate_to: BILLING
     reason_code: refund_not_permitted
-    reason_tr: "İade işlemleri Faturalama ekibinin onayını gerektirir."
+    reason_en: "Refunds need approval from the Billing team."
 
   change_package:
     allowed: false
     escalate_to: SUBSCRIPTION_OPS
     reason_code: plan_change_not_permitted
-    reason_tr: "Paket değişikliği cayma bedeli doğurabileceği için Abonelik İşlemleri tarafından yapılır."
+    reason_en: "Package changes can incur an early termination fee, so Subscription Operations handles them."
 
   reschedule_installation:
     allowed: false
     escalate_to: FIELD_INSTALL
     reason_code: field_scheduling_not_permitted
-    reason_tr: "Kurulum randevuları Saha Kurulum Ekibi tarafından planlanır."
+    reason_en: "Installation appointments are scheduled by the Field Installation Team."
 
   repair_infrastructure:
     allowed: false
     escalate_to: TECHNICAL_INFRA
     reason_code: infrastructure_not_permitted
-    reason_tr: "Altyapı onarımı saha ve şebeke ekiplerinin işidir."
+    reason_en: "Infrastructure repair is a job for the field and network teams."
 
   cancel_subscription:
     allowed: false
     escalate_to: SUBSCRIPTION_OPS
     reason_code: cancellation_not_permitted
-    reason_tr: "Abonelik iptali ve cayma bedeli hesabı Abonelik İşlemleri tarafından yapılır."
+    reason_en: "Cancellations and early termination fees are handled by Subscription Operations."
 
   send_department_message:
     allowed: true
     requires_confirmation: false
-    description_tr: "İlgili departman kanalına bilgilendirme mesajı bırakır."
+    description_en: "Posts an informational message to the relevant department channel."
 
 pii:
   mask_before_model: [national_id, phone, email, address, iban, card_number, full_name]

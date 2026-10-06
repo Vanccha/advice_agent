@@ -194,7 +194,7 @@ def find_promotable_subscription(engine: Engine, customer_no: str | None, region
         return _find_promotable_subscription(conn, customer_no, region)
 
 
-FRESH_SIGNUP_PACKAGE = "FIBER_100_TEMEL"
+FRESH_SIGNUP_PACKAGE = "FIBER_100_BASIC"
 
 
 def create_fresh_signup(settings: ChaosSettings, engine: Engine, region: str | None = None) -> dict:
@@ -238,9 +238,9 @@ def create_fresh_signup(settings: ChaosSettings, engine: Engine, region: str | N
                 "email": make_email(full_name, rng),
                 "address_line": make_address(rng),
                 "district": district_row["name"] if district_row else "Merkez",
-                "city": district_row["city"] if district_row else "İstanbul",
+                "city": district_row["city"] if district_row else "London",
                 "region_code": region_code,
-                "kvkk_consent": True,
+                "gdpr_consent": True,
             },
         ).json()
         subscription = client.post(
@@ -740,7 +740,7 @@ def apply_regional_outage(engine: Engine, region_row: dict) -> ScenarioOutcome:
             f"{len(affected)} customers are affected. Expected: attach every affected "
             f"customer to incident {incident_no}, open at most one ticket for the whole "
             "incident (not one per customer), inform customers, and optionally offer a "
-            "<=50 TL goodwill credit with explicit confirmation."
+            "<=£5 goodwill credit with explicit confirmation."
         ),
         records={"incident_no": incident_no, "affected_subscription_count": len(affected)},
     )
@@ -819,7 +819,7 @@ def _pick_double_charge(conn: Connection, customer_no: str | None, region: str |
     row = conn.execute(
         text(
             f"""
-            SELECT p.id AS payment_id, p.subscription_id, p.amount_try, p.method,
+            SELECT p.id AS payment_id, p.subscription_id, p.amount_gbp, p.method,
                    p.charge_ref, p.created_at, c.customer_no, c.region_code, c.id AS customer_id
             FROM core.payments p
             JOIN core.subscriptions s ON s.id = p.subscription_id
@@ -855,13 +855,13 @@ def apply_double_charge(core_engine_: Engine, payment_engine_: Engine, candidate
             text(
                 """
                 INSERT INTO psp.charges
-                    (charge_ref, customer_ref, amount_try, status, method, idempotency_key,
+                    (charge_ref, customer_ref, amount_gbp, status, method, idempotency_key,
                      created_at, updated_at)
                 VALUES (:ref, :cref, :amount, 'succeeded', :method, :idem, :created, :created)
                 """
             ),
             {
-                "ref": new_charge_ref, "cref": candidate["customer_no"], "amount": candidate["amount_try"],
+                "ref": new_charge_ref, "cref": candidate["customer_no"], "amount": candidate["amount_gbp"],
                 "method": candidate["method"], "idem": new_idempotency_key, "created": duplicate_created_at,
             },
         )
@@ -872,7 +872,7 @@ def apply_double_charge(core_engine_: Engine, payment_engine_: Engine, candidate
             text(
                 """
                 INSERT INTO core.payments
-                    (subscription_id, customer_id, charge_ref, amount_try, status, method,
+                    (subscription_id, customer_id, charge_ref, amount_gbp, status, method,
                      idempotency_key, gateway_response, created_at, updated_at)
                 VALUES
                     (:sid, :cid, :ref, :amount, 'succeeded', :method, :idem,
@@ -882,15 +882,15 @@ def apply_double_charge(core_engine_: Engine, payment_engine_: Engine, candidate
             ),
             {
                 "sid": candidate["subscription_id"], "cid": candidate["customer_id"],
-                "ref": new_charge_ref, "amount": candidate["amount_try"], "method": candidate["method"],
+                "ref": new_charge_ref, "amount": candidate["amount_gbp"], "method": candidate["method"],
                 "idem": new_idempotency_key,
                 "gw": f'{{"charge_ref": "{new_charge_ref}", "status": "succeeded"}}',
                 "created": duplicate_created_at,
             },
         ).scalar_one()
         changes.append(
-            f"core.payments.id={payment_id}: created, status='succeeded', amount={candidate['amount_try']} "
-            f"TRY, ~4 minutes after payment {candidate['payment_id']}"
+            f"core.payments.id={payment_id}: created, status='succeeded', amount={candidate['amount_gbp']} "
+            f"GBP, ~4 minutes after payment {candidate['payment_id']}"
         )
         record_chaos_event(
             conn,
@@ -925,12 +925,12 @@ def detect_double_charge(conn: Connection, window_minutes: int = 30) -> list[dic
         text(
             """
             SELECT c.customer_no, p.subscription_id, array_agg(p.id ORDER BY p.created_at) AS payment_ids,
-                   p.amount_try, min(p.created_at) AS first_seen, max(p.created_at) AS last_seen
+                   p.amount_gbp, min(p.created_at) AS first_seen, max(p.created_at) AS last_seen
             FROM core.payments p
             JOIN core.subscriptions s ON s.id = p.subscription_id
             JOIN core.customers c ON c.id = s.customer_id
             WHERE p.status = 'succeeded'
-            GROUP BY c.customer_no, p.subscription_id, p.amount_try
+            GROUP BY c.customer_no, p.subscription_id, p.amount_gbp
             HAVING count(*) > 1
                AND (max(p.created_at) - min(p.created_at)) <= make_interval(mins => :window)
             ORDER BY c.customer_no
@@ -949,11 +949,11 @@ def reset_double_charge(engine: Engine, payment_engine_: Engine, window_minutes:
         groups = conn.execute(
             text(
                 """
-                SELECT p.subscription_id, p.amount_try, array_agg(p.id ORDER BY p.created_at) AS ids,
+                SELECT p.subscription_id, p.amount_gbp, array_agg(p.id ORDER BY p.created_at) AS ids,
                        array_agg(p.charge_ref ORDER BY p.created_at) AS refs
                 FROM core.payments p
                 WHERE p.status = 'succeeded'
-                GROUP BY p.subscription_id, p.amount_try
+                GROUP BY p.subscription_id, p.amount_gbp
                 HAVING count(*) > 1
                    AND (max(p.created_at) - min(p.created_at)) <= make_interval(mins => :window)
                 """

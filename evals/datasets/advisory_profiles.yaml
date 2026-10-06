@@ -1,4 +1,4 @@
-# Advisory-mode evaluations: ten customer profiles, the Turkish conversation that produces
+# Advisory-mode evaluations: ten customer profiles, the conversation that produces
 # them, and the package the deterministic scoring engine must recommend.
 #
 # `expected_best` is the engine's own answer, verified by running it (see evals/README.md) —
@@ -10,53 +10,53 @@ version: 1
 
 profiles:
   - id: student_tight_budget
-    summary_tr: "Öğrenci, tek kişi, bütçesi kısıtlı"
-    conversation_tr:
-      - "Merhaba, öğrenciyim, eve internet almak istiyorum."
-      - "Tek başıma yaşıyorum, telefon ve laptop kullanıyorum."
-      - "Aylık 300 lirayı geçmesin."
-      - "Taahhüt olabilir, sorun değil."
+    summary_en: "Student, lives alone, tight budget"
+    conversation_en:
+      - "Hi, I am a student and I would like to get broadband at home."
+      - "I live on my own and use a phone and a laptop."
+      - "No more than £30 a month."
+      - "A contract is fine, I do not mind."
     profile:
       usage: [student]
       household_size: 1
       device_count: 2
-      budget_try: 300
+      budget_gbp: 30
       commitment_preference: any
     expect:
-      expected_best: FIBER_50_OGRENCI
-      must_not_recommend: [FIBER_1000_PREMIUM, FIBER_500_OYUNCU, FIBER_400_HOMEOFFICE]
-      max_monthly_price_try: 345
+      expected_best: FIBER_50_STUDENT
+      must_not_recommend: [FIBER_1000_PREMIUM, FIBER_500_GAMER, FIBER_400_HOMEOFFICE]
+      max_monthly_price_gbp: 34.5
 
   - id: family_of_four_streaming
-    summary_tr: "Dört kişilik aile, akşamları dizi/film izliyor"
-    conversation_tr:
-      - "Evde 4 kişiyiz, akşamları hep dizi izliyoruz."
-      - "Telefonlar, iki televizyon, bir de tablet var. Yaklaşık 8 cihaz."
-      - "Bütçem 500 lira civarı."
-      - "Taahhüt verebilirim."
+    summary_en: "Family of four, streams shows every evening"
+    conversation_en:
+      - "There are 4 of us and we stream shows every evening."
+      - "Phones, two TVs and a tablet. About 8 devices."
+      - "My budget is around £50."
+      - "I am happy to sign a 24 month contract."
     profile:
       usage: [family, streaming]
       household_size: 4
       device_count: 8
-      budget_try: 500
+      budget_gbp: 50
       commitment_preference: "24"
     expect:
-      expected_best: FIBER_200_AILE
-      must_not_recommend: [FIBER_50_OGRENCI]
+      expected_best: FIBER_200_FAMILY
+      must_not_recommend: [FIBER_50_STUDENT]
       min_down_mbps: 150
 
   - id: home_office_static_ip
-    summary_tr: "Evden çalışan, sabit IP gerekiyor"
-    conversation_tr:
-      - "Evden çalışıyorum, şirket VPN'i için sabit IP istiyorlar."
-      - "Evde 2 kişiyiz ama 12 kadar cihaz bağlı."
-      - "Bütçe önemli değil, iş kesintiye gelmez."
-      - "24 ay taahhüt olabilir."
+    summary_en: "Works from home, needs a static IP"
+    conversation_en:
+      - "I work from home and my company wants a static IP for the VPN."
+      - "There are 2 of us but about 12 devices connected."
+      - "Budget does not matter, I cannot afford downtime. I would rather not say."
+      - "A 24 month contract is fine."
     profile:
       usage: [home_office]
       household_size: 2
       device_count: 12
-      budget_try: null
+      budget_gbp: null
       commitment_preference: "24"
       needs_static_ip: true
     expect:
@@ -64,124 +64,124 @@ profiles:
       must_have_static_ip: true
 
   - id: gamer_low_latency
-    summary_tr: "Oyuncu, gecikme hassasiyeti yüksek"
-    conversation_tr:
-      - "Online oyun oynuyorum, ping çok önemli."
-      - "Evde 3 kişiyiz, 10 cihaz var."
-      - "Aylık 800 liraya kadar verebilirim."
-      - "Uzun taahhüt istemiyorum, 12 ay olur."
+    summary_en: "Gamer, very sensitive to latency"
+    conversation_en:
+      - "I play online games and ping really matters."
+      - "There are 3 of us, with 10 devices."
+      - "I can spend up to £80 a month."
+      - "I do not want a long contract, 12 months is fine."
     profile:
       usage: [gaming]
       household_size: 3
       device_count: 10
-      budget_try: 800
+      budget_gbp: 80
       commitment_preference: "12"
     expect:
-      expected_best: FIBER_500_OYUNCU
-      must_not_recommend: [FIBER_50_OGRENCI, FIBER_100_TEMEL]
+      expected_best: FIBER_500_GAMER
+      must_not_recommend: [FIBER_50_STUDENT, FIBER_100_BASIC]
 
   - id: no_commitment_seeker
-    summary_tr: "Taahhüt istemeyen, kısa süre kalacak kiracı"
-    conversation_tr:
-      - "Altı ay sonra taşınacağım, taahhüt istemiyorum."
-      - "Evde 2 kişiyiz, 5 cihaz."
-      - "Fiyat biraz yüksek olabilir, yeter ki bağlı kalmayayım."
+    summary_en: "Short-term tenant who does not want a contract"
+    conversation_en:
+      - "I am moving out in six months, so I do not want a contract."
+      - "There are 2 of us, 5 devices."
+      - "The price can be a bit higher as long as I am not tied in."
     profile:
       usage: [basic]
       household_size: 2
       device_count: 5
-      budget_try: null
+      budget_gbp: null
       commitment_preference: none
     expect:
-      expected_best: FIBER_200_ESNEK
+      expected_best: FIBER_200_FLEX
       must_have_no_commitment: true
 
   - id: elderly_basic_use
-    summary_tr: "Yalnız yaşayan, çok basit kullanım"
-    conversation_tr:
-      - "Sadece haberleri okuyorum, bir de görüntülü konuşuyorum torunlarımla."
-      - "Tek başıma yaşıyorum, bir telefon bir de tablet."
-      - "Mümkün olan en ucuz olsun."
+    summary_en: "Lives alone, very basic use"
+    conversation_en:
+      - "I just read the news and video call my grandchildren."
+      - "I live on my own, with a phone and a tablet."
+      - "As cheap as possible, please."
     profile:
       usage: [basic]
       household_size: 1
       device_count: 2
-      budget_try: 300
+      budget_gbp: 30
       commitment_preference: any
     expect:
-      expected_best: FIBER_50_OGRENCI
-      max_monthly_price_try: 350
+      expected_best: FIBER_50_STUDENT
+      max_monthly_price_gbp: 35
 
   - id: crowded_household
-    summary_tr: "Kalabalık ev, çok cihaz, karışık kullanım"
-    conversation_tr:
-      - "Evde 6 kişiyiz, herkesin telefonu var, iki de akıllı TV."
-      - "Yaklaşık 20 cihaz bağlanıyor."
-      - "Bütçe 1000 liraya kadar esnek."
-      - "Taahhüt fark etmez."
+    summary_en: "Busy household, many devices, mixed use"
+    conversation_en:
+      - "There are 6 of us at home, everyone has a phone, plus two smart TVs."
+      - "About 20 devices connect."
+      - "The budget is flexible, up to £100."
+      - "I do not mind about the contract."
     profile:
       usage: [family, streaming]
       household_size: 6
       device_count: 20
-      budget_try: 1000
+      budget_gbp: 100
       commitment_preference: any
     expect:
       expected_best: FIBER_1000_PREMIUM
       min_down_mbps: 400
 
   - id: tv_bundle_wanted
-    summary_tr: "TV paketi dahil olsun isteyen aile"
-    conversation_tr:
-      - "İnternetle birlikte TV paketi de olsun istiyoruz."
-      - "4 kişilik aileyiz, 9 cihaz var."
-      - "Aylık 600 lira civarı uygun."
-      - "Taahhüt verebiliriz."
+    summary_en: "Family who want a TV package included"
+    conversation_en:
+      - "We would like a TV package along with the broadband."
+      - "We are a family of 4, with 9 devices."
+      - "Around £60 a month works for us."
+      - "We can sign a 24 month contract."
     profile:
       usage: [family]
       household_size: 4
       device_count: 9
-      budget_try: 600
+      budget_gbp: 60
       commitment_preference: "24"
       needs_tv: true
     expect:
-      expected_best: FIBER_200_AILE
+      expected_best: FIBER_200_FAMILY
       must_have_tv: true
 
   - id: small_business_from_home
-    summary_tr: "Evden küçük işletme yürüten, kesintiye tahammülü yok"
-    conversation_tr:
-      - "Evden küçük bir e-ticaret işi yürütüyorum."
-      - "Sürekli bağlantı lazım, 15 cihaz var, kamera sistemi de dahil."
-      - "Aylık 700 lira ayırabilirim."
-      - "24 ay taahhüt olur."
+    summary_en: "Runs a small business from home, cannot tolerate downtime"
+    conversation_en:
+      - "I run a small online shop from my home office."
+      - "I need a constant connection; there are 15 devices, including a camera system."
+      - "I can set aside £70 a month."
+      - "A 24 month contract is fine."
     profile:
       usage: [home_office]
       household_size: 3
       device_count: 15
-      budget_try: 700
+      budget_gbp: 70
       commitment_preference: "24"
     expect:
       expected_best: FIBER_400_HOMEOFFICE
       min_down_mbps: 300
 
   - id: budget_conflict
-    summary_tr: "İhtiyacı bütçesinin üstünde — asistan dürüstçe en yakınını önermeli"
-    conversation_tr:
-      - "Evde 5 kişiyiz, hepsi aynı anda dizi izliyor, bir de oyun oynanıyor."
-      - "18 cihaz var."
-      - "Ama aylık en fazla 350 lira verebilirim."
-      - "Taahhüt olabilir."
+    summary_en: "Needs exceed the budget — the assistant must honestly offer the closest fit"
+    conversation_en:
+      - "There are 5 of us, all streaming at the same time, and there is gaming too."
+      - "18 devices."
+      - "But I can only pay £35 a month at most."
+      - "A contract is fine."
     profile:
       usage: [family, gaming, streaming]
       household_size: 5
       device_count: 18
-      budget_try: 350
+      budget_gbp: 35
       commitment_preference: any
     expect:
-      expected_best: FIBER_100_TEMEL
+      expected_best: FIBER_100_BASIC
       # The budget filter must win over the speed need, and the reply must be honest
       # about the trade-off rather than quietly recommending something unaffordable.
-      max_monthly_price_try: 403
+      max_monthly_price_gbp: 40.3
       reply_should_acknowledge_tradeoff: true
 
 # Properties that must hold for EVERY profile above.

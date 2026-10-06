@@ -76,13 +76,13 @@ def build_structured_ticket(
     department: Department | str,
     issue_type: IssueType | str,
     priority: Priority | str,
-    subject_tr: str,
-    body_tr: str,
+    subject_en: str,
+    body_en: str,
     requester_customer_no: str,
     requester_name: str,
     requester_contact: str,
-    suggested_next_step_tr: str,
-    urgency_reason_tr: str,
+    suggested_next_step_en: str,
+    urgency_reason_en: str,
     evidence_record_ids: dict[str, Any] | None = None,
     evidence_error_codes: list[str] | None = None,
     evidence_observations: list[str] | None = None,
@@ -93,17 +93,17 @@ def build_structured_ticket(
     source: Literal["web", "phone", "api", "monitoring"] = "api",
     allow_unmasked: frozenset[str] | set[str] | None = None,
 ) -> StructuredTicket:
-    """Build one `StructuredTicket`, masked at construction time — a ticket is a KVKK
+    """Build one `StructuredTicket`, masked at construction time — a ticket is a UK GDPR
     boundary exactly like a model call or a trace (contracts §4.7). Raw PII in
     `requester_name`/`requester_contact`, or incidentally present in any free-text field
-    (`subject_tr`, `body_tr`, `evidence_observations`, `attempted_steps[].result`,
-    `suggested_next_step_tr`, `urgency_reason_tr`), never survives into the returned
+    (`subject_en`, `body_en`, `evidence_observations`, `attempted_steps[].result`,
+    `suggested_next_step_en`, `urgency_reason_en`), never survives into the returned
     `StructuredTicket`. `customer_no`/`subscription_id`/`ticket_key`/`region_code`/
     `package_code` (`allow_unmasked`, normally the tenant's
     `policy.yaml: pii.allow_unmasked`) survive intact — a masked customer number would be
     useless to the receiving department.
 
-    `body_tr` must be a human-readable Turkish narrative written for the receiving
+    `body_en` must be a human-readable plain-English narrative written for the receiving
     department: what was checked, what was found, what was tried (and why the assistant
     could not finish it, including any policy-blocked step) — so the department never has
     to ask the customer the same questions again.
@@ -123,8 +123,8 @@ def build_structured_ticket(
         "department": Department(department).value,
         "issue_type": issue_type_enum.value,
         "priority": Priority(priority).value,
-        "subject": subject_tr,
-        "body": body_tr,
+        "subject": subject_en,
+        "body": body_en,
         "source": source,
         "external_ref": build_external_ref(conversation_id, issue_type_enum),
         "incident_ref": incident_ref,
@@ -141,8 +141,8 @@ def build_structured_ticket(
         },
         "attempted_steps": raw_steps,
         "affected_customers": affected_customers or [requester_customer_no],
-        "suggested_next_step": suggested_next_step_tr,
-        "urgency_reason": urgency_reason_tr,
+        "suggested_next_step": suggested_next_step_en,
+        "urgency_reason": urgency_reason_en,
     }
 
     masked_payload = mask_ticket_payload(

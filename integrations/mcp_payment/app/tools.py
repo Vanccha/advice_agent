@@ -29,7 +29,7 @@ SOURCE_DIAG = "diag_db"
 SOURCE_PAYMENT = "payment_api"
 
 _PAYMENT_STATUS_SQL = """
-    SELECT customer_no, subscription_id, payment_id, charge_ref, amount_try,
+    SELECT customer_no, subscription_id, payment_id, charge_ref, amount_gbp,
            status, method, failure_code, failure_message, created_at, updated_at
     FROM diag.payment_status
     WHERE (CAST(:customer_no AS text) IS NULL OR customer_no = CAST(:customer_no AS text))

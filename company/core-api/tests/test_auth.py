@@ -25,7 +25,7 @@ def test_partner_account_cannot_refund(client, crm_headers, partner_headers):
     # Partner lacks billing:refund -> must be denied even for a well-formed request.
     resp = client.post(
         "/v1/refunds",
-        json={"payment_id": 1, "amount_try": 10, "reason": "test"},
+        json={"payment_id": 1, "amount_gbp": 10, "reason": "test"},
         headers=partner_headers,
     )
     assert resp.status_code == 403

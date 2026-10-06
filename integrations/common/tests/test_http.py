@@ -36,7 +36,7 @@ async def test_company_error_envelope_preserves_code_and_details() -> None:
                     },
                 )
             )
-            result = await client.post("/v1/refunds", "core_api", json={"payment_id": 1, "amount_try": 1, "reason": "x"})
+            result = await client.post("/v1/refunds", "core_api", json={"payment_id": 1, "amount_gbp": 1, "reason": "x"})
         assert result.ok is False
         assert result.error.code == "SCOPE_DENIED"
         assert result.error.details["required_scope"] == "billing:refund"

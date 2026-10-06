@@ -16,7 +16,7 @@ PII_COLUMNS = {"national_id", "address_line", "card_number", "iban", "card_token
 WRITE_ATTEMPTS = [
     ("update core.subscriptions set status = 'active' where id = 1", "update a core table"),
     (
-        "insert into core.credits (subscription_id, amount_try, reason, created_by) "
+        "insert into core.credits (subscription_id, amount_gbp, reason, created_by) "
         "values (1, 10, 'x', 'y')",
         "insert into a core table",
     ),

@@ -10,14 +10,14 @@ class ChaosSettings(CompanySettings):
 
     service_name: str = "chaos"
 
-    # nethiz_core is the base CompanySettings default already.
-    payment_db_name: str = "nethiz_payment"
+    # netswift_core is the base CompanySettings default already.
+    payment_db_name: str = "netswift_payment"
 
     core_api_base_url: str = "http://core-api:8000"
-    core_api_key_crm: str = "nethiz_crm_key_change_me"
+    core_api_key_crm: str = "netswift_crm_key_change_me"
 
     payment_api_base_url: str = "http://payment-gateway:8000"
-    psp_api_key: str = "nethiz_psp_key_change_me"
+    psp_api_key: str = "netswift_psp_key_change_me"
 
     # Default failure rate the PSP control flags are restored to on `reset`,
     # i.e. the same env var the payment-gateway-mock itself seeds from.

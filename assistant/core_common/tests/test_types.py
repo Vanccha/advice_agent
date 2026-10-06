@@ -46,9 +46,9 @@ def test_advisory_profile_defaults_and_mutation():
 
 def test_package_offer_is_frozen():
     offer = PackageOffer(
-        package_code="FIBER_50_OGRENCI", name="Öğrenci Fiber 50",
+        package_code="FIBER_50_STUDENT", name="Student Fibre 50",
         down_mbps=50, up_mbps=10, commitment_months=12,
-        monthly_price_try=269.0, score=0.8, reasons=["x"], is_best=True,
+        monthly_price_gbp=26.90, score=0.8, reasons=["x"], is_best=True,
     )
     try:
         offer.score = 0.1

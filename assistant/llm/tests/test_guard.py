@@ -34,7 +34,7 @@ class _RecordingProvider:
 def test_complete_blocks_a_raw_phone_number_and_never_calls_the_inner_provider():
     inner = _RecordingProvider()
     guarded = MaskingProvider(inner)
-    messages = [ChatMessage(role="user", content="Beni 0532 111 22 31 numarasından arayın")]
+    messages = [ChatMessage(role="user", content="Please call me on 07700 900 131")]
     with pytest.raises(PIILeakError):
         guarded.complete(system="sys", messages=messages)
     assert inner.called is False
@@ -43,7 +43,7 @@ def test_complete_blocks_a_raw_phone_number_and_never_calls_the_inner_provider()
 def test_complete_blocks_a_raw_national_id():
     inner = _RecordingProvider()
     guarded = MaskingProvider(inner)
-    messages = [ChatMessage(role="user", content="TC kimlik no: 12345678901")]
+    messages = [ChatMessage(role="user", content="NI number QQ123456C")]
     with pytest.raises(PIILeakError):
         guarded.complete(system="sys", messages=messages)
     assert inner.called is False
@@ -52,7 +52,7 @@ def test_complete_blocks_a_raw_national_id():
 def test_structured_also_blocks_raw_pii_in_the_system_prompt():
     inner = _RecordingProvider()
     guarded = MaskingProvider(inner)
-    system = "Customer phone is 0532 111 22 31, use it to verify identity."
+    system = "Customer phone is 07700 900 131, use it to verify identity."
     with pytest.raises(PIILeakError):
         guarded.structured(system=system, messages=[ChatMessage(role="user", content="hi")], schema=_Echo)
     assert inner.called is False
@@ -61,7 +61,7 @@ def test_structured_also_blocks_raw_pii_in_the_system_prompt():
 def test_clean_text_passes_through_to_the_inner_provider():
     inner = _RecordingProvider()
     guarded = MaskingProvider(inner)
-    reply = guarded.complete(system="sys", messages=[ChatMessage(role="user", content="merhaba")])
+    reply = guarded.complete(system="sys", messages=[ChatMessage(role="user", content="hello")])
     assert reply == "ok"
     assert inner.called is True
 

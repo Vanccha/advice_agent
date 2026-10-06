@@ -1,1 +1,1 @@
-"""NetHız core-api: subscriptions, payments, provisioning, incidents."""
+"""NetSwift core-api: subscriptions, payments, provisioning, incidents."""

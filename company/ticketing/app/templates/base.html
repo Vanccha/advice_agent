@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{% block title %}NetHız Destek Masası{% endblock %}</title>
+    <title>{% block title %}NetSwift Service Desk{% endblock %}</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
     <div class="layout">
         <aside class="sidebar">
-            <div class="brand">NetHız Destek Masası</div>
+            <div class="brand">NetSwift Service Desk</div>
             <nav>
-                <a class="nav-link {% if not department %}active{% endif %}" href="/agent">Tüm Departmanlar</a>
+                <a class="nav-link {% if not department %}active{% endif %}" href="/agent">All Departments</a>
                 <ul class="dept-list">
                     {% for dept in sidebar %}
                     <li>

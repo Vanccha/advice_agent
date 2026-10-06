@@ -1,1 +1,1 @@
-"""Notification hub: Teams/Slack stand-in for NetHız Telekom."""
+"""Notification hub: Teams/Slack stand-in for NetSwift Telecom."""

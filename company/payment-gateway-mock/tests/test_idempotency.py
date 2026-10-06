@@ -9,9 +9,9 @@ def test_same_idempotency_key_returns_same_charge(client, auth_headers):
     )
 
     body = {
-        "amount_try": 459.0,
-        "currency": "TRY",
-        "customer_ref": "NH-100042",
+        "amount_gbp": 459.0,
+        "currency": "GBP",
+        "customer_ref": "NS-100042",
         "method": "card",
         "card_token": "tok_test_1",
         "idempotency_key": "idem-key-1",
@@ -27,7 +27,7 @@ def test_same_idempotency_key_returns_same_charge(client, auth_headers):
     assert second.json()["charge_ref"] == first_ref
 
     listing = client.get(
-        "/psp/v1/charges", params={"customer_ref": "NH-100042"}, headers=auth_headers
+        "/psp/v1/charges", params={"customer_ref": "NS-100042"}, headers=auth_headers
     )
     matches = [c for c in listing.json()["items"] if c["idempotency_key"] == "idem-key-1"]
     assert len(matches) == 1
@@ -40,9 +40,9 @@ def test_different_idempotency_keys_create_different_charges(client, auth_header
         headers=auth_headers,
     )
     body = {
-        "amount_try": 100.0,
-        "currency": "TRY",
-        "customer_ref": "NH-100043",
+        "amount_gbp": 100.0,
+        "currency": "GBP",
+        "customer_ref": "NS-100043",
         "method": "card",
         "card_token": "tok_test_2",
         "idempotency_key": "idem-a",

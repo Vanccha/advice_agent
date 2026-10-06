@@ -2,7 +2,7 @@
 
 > Every service and adapter in this repository is built against this document.
 > If an implementation needs to deviate, this document must be updated **first**.
-> Code, identifiers and comments are English. Only end-user-facing strings are Turkish.
+> Everything is English: code, identifiers, comments and end-user-facing strings (British English).
 
 Version: 1.0 · Owner: orchestrator
 
@@ -14,7 +14,7 @@ Version: 1.0 · Owner: orchestrator
   idempotent SQL in `company/db-init/` + `app/bootstrap.py` per service (keeps compose single-command).
 - All services expose: `GET /health` → `{"status":"ok","service":"<name>","version":"<x>"}`,
   `GET /metrics` (Prometheus, via `prometheus_client`), `GET /openapi.json` (FastAPI default).
-- Timestamps: UTC, ISO-8601 with `Z`. Money: `numeric(12,2)`, currency always `TRY`.
+- Timestamps: UTC, ISO-8601 with `Z`. Money: `numeric(12,2)`, currency always `GBP`.
 - IDs: integer surrogate PKs + human-readable business keys (`customer_no`, `TKT-...`, `INC-...`).
 - Error envelope (all company services):
   ```json
@@ -45,7 +45,7 @@ Two PostgreSQL 16 containers. They never share data.
 
 | Container | Port (host) | Databases | Owner role |
 |---|---|---|---|
-| `company-db` | 55432 | `nethiz_core`, `nethiz_payment`, `nethiz_ticketing`, `nethiz_notify` | `nethiz` |
+| `company-db` | 55432 | `netswift_core`, `netswift_payment`, `netswift_ticketing`, `netswift_notify` | `netswift` |
 | `assistant-db` | 55433 | `assistant_state` | `assistant` |
 
 `company/db-init/01-databases.sql` creates the four databases and the diagnostic role:
@@ -62,29 +62,29 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA diag GRANT SELECT ON TABLES TO readonly_diag;
 `readonly_diag` has **no** rights on schema `core` (base tables) and **no** INSERT/UPDATE/DELETE
 anywhere. `tests/integration/test_readonly_role.py` proves both.
 
-### 1.1 `nethiz_core` — schema `core`
+### 1.1 `netswift_core` — schema `core`
 
 ```
 regions(code PK text, name text, city text, olt_node_count int)
 
 packages(id PK, code text uniq, name text, down_mbps int, up_mbps int,
-         commitment_months int, monthly_price_try numeric(12,2), setup_fee_try numeric(12,2),
+         commitment_months int, monthly_price_gbp numeric(12,2), setup_fee_gbp numeric(12,2),
          target_profile text, max_devices int, static_ip bool, tv_included bool,
          gaming_optimized bool, description text, is_active bool default true)
    target_profile ∈ {student, family, home_office, gamer, basic, premium, small_business}
 
-customers(id PK, customer_no text uniq, full_name text, national_id char(11),
+customers(id PK, customer_no text uniq, full_name text, national_id char(9),
           phone text, email text, address_line text, district text, city text,
-          region_code text FK regions.code, kvkk_consent_at timestamptz,
+          region_code text FK regions.code, gdpr_consent_at timestamptz,
           created_at timestamptz default now())
-   customer_no format: NH-100001.. (sequential from 100001)
-   national_id: 11 digits, FAKE — generated so that it always FAILS the real TC checksum
-                (see §6.1); must never resemble a valid identity number.
-   phone format: +905XXXXXXXXX (operator prefix from {530,532,535,541,544,551,555})
+   customer_no format: NS-100001.. (sequential from 100001)
+   national_id: UK National Insurance number shape (AA999999A), FAKE — generated with a
+                prefix HMRC never allocates (see §6.1); must never be a valid NI number.
+   phone format: +447700900XXX (Ofcom's drama range, never assigned to a real line)
 
 subscriptions(id PK, customer_id FK, package_id FK, status text,
               contract_start_date date, contract_end_date date,
-              monthly_price_try numeric(12,2), early_termination_fee_try numeric(12,2),
+              monthly_price_gbp numeric(12,2), early_termination_fee_gbp numeric(12,2),
               created_at, updated_at, activated_at, suspended_at,
               cancellation_reason text)
    status ∈ {registered, awaiting_payment, payment_received, provisioning,
@@ -95,17 +95,17 @@ subscription_events(id PK, subscription_id FK, event_type text, from_status text
    actor ∈ {system, csr, api_client, job, chaos}
 
 payments(id PK, subscription_id FK, customer_id FK, charge_ref text,
-         amount_try numeric(12,2), status text, method text, idempotency_key text uniq,
+         amount_gbp numeric(12,2), status text, method text, idempotency_key text uniq,
          failure_code text, failure_message text, gateway_response jsonb,
          created_at, updated_at)
    status ∈ {pending, succeeded, failed, refunded, partially_refunded}
    method ∈ {card, eft}
 
-refunds(id PK, payment_id FK, amount_try numeric(12,2), status text, reason text,
+refunds(id PK, payment_id FK, amount_gbp numeric(12,2), status text, reason text,
         refund_ref text, created_by text, created_at)
    status ∈ {requested, completed, failed}
 
-credits(id PK, subscription_id FK, amount_try numeric(12,2), reason text,
+credits(id PK, subscription_id FK, amount_gbp numeric(12,2), reason text,
         created_by text, idempotency_key text uniq, created_at)
    "goodwill / outage compensation" — one-time. created_by holds the service account name.
 
@@ -148,21 +148,21 @@ service_accounts(id PK, name text uniq, api_key_hash text, scopes text[],
 ```
 
 #### Seed data (core-api `app/seed.py`, idempotent)
-- 12 regions (IST-KAD, IST-BES, IST-BAG, ANK-CAN, ANK-KEC, IZM-KAR, IZM-BOR, BUR-NIL,
-  ANT-MUR, ADA-SEY, KON-SEL, TRA-ORT) with Turkish city/district names.
-- **7 packages** (all prices TRY/month):
+- 12 regions (LDN-CAM, LDN-HAC, LDN-CRO, MAN-DID, MAN-CHO, BHM-EDG, BHM-MOS, LDS-HEA,
+  BRS-CLI, LIV-ANF, GLA-PAR, EDI-LEI) with UK city/district names.
+- **7 packages** (all prices GBP/month):
 
 | code | name | down/up | commit | price | setup | profile | devices | extras |
 |---|---|---|---|---|---|---|---|---|
-| `FIBER_50_OGRENCI` | Öğrenci Fiber 50 | 50/10 | 12 | 269.00 | 0 | student | 8 | – |
-| `FIBER_100_TEMEL` | Temel Fiber 100 | 100/20 | 24 | 349.00 | 0 | basic | 12 | – |
-| `FIBER_200_AILE` | Aile Fiber 200 | 200/40 | 24 | 459.00 | 0 | family | 20 | tv_included |
-| `FIBER_400_HOMEOFFICE` | Home Office Fiber 400 | 400/80 | 24 | 629.00 | 199 | home_office | 30 | static_ip |
-| `FIBER_500_OYUNCU` | Oyuncu Fiber 500 | 500/100 | 12 | 749.00 | 199 | gamer | 25 | gaming_optimized |
-| `FIBER_1000_PREMIUM` | Premium Fiber 1000 | 1000/200 | 24 | 999.00 | 299 | premium | 50 | tv_included, static_ip, gaming_optimized |
-| `FIBER_200_ESNEK` | Esnek Fiber 200 (taahhütsüz) | 200/40 | 0 | 589.00 | 299 | basic | 20 | no commitment |
+| `FIBER_50_STUDENT` | Student Fibre 50 | 50/10 | 12 | 26.90 | 0 | student | 8 | – |
+| `FIBER_100_BASIC` | Basic Fibre 100 | 100/20 | 24 | 34.90 | 0 | basic | 12 | – |
+| `FIBER_200_FAMILY` | Family Fibre 200 | 200/40 | 24 | 45.90 | 0 | family | 20 | tv_included |
+| `FIBER_400_HOMEOFFICE` | Home Office Fibre 400 | 400/80 | 24 | 62.90 | 19.90 | home_office | 30 | static_ip |
+| `FIBER_500_GAMER` | Gamer Fibre 500 | 500/100 | 12 | 74.90 | 19.90 | gamer | 25 | gaming_optimized |
+| `FIBER_1000_PREMIUM` | Premium Fibre 1000 | 1000/200 | 24 | 99.90 | 29.90 | premium | 50 | tv_included, static_ip, gaming_optimized |
+| `FIBER_200_FLEX` | Flex Fibre 200 (no contract) | 200/40 | 0 | 58.90 | 29.90 | basic | 20 | no commitment |
 
-- **200 customers** with Turkish names, spread over the 12 regions, each with exactly one
+- **200 customers** with UK names, spread over the 12 regions, each with exactly one
   subscription; status distribution: ~150 `active`, 15 `provisioning`, 10 `installation_scheduled`,
   10 `payment_received`, 8 `awaiting_payment`, 5 `suspended`, 2 `cancelled`.
   Active ones have a succeeded payment, an `online` modem, a `completed` appointment and
@@ -181,9 +181,9 @@ National IDs, full addresses and card data are **not** exposed by any view.
 diag.customer_overview(customer_no, full_name, phone, email, district, city, region_code,
                        created_at, subscription_count)
 diag.subscription_status(customer_no, subscription_id, package_code, package_name,
-                         status, monthly_price_try, contract_start_date, contract_end_date,
+                         status, monthly_price_gbp, contract_start_date, contract_end_date,
                          activated_at, updated_at, region_code)
-diag.payment_status(customer_no, subscription_id, payment_id, charge_ref, amount_try,
+diag.payment_status(customer_no, subscription_id, payment_id, charge_ref, amount_gbp,
                     status, method, failure_code, failure_message, created_at, updated_at)
 diag.provisioning_status(customer_no, subscription_id, job_id, status, attempt_count,
                          max_attempts, olt_node, vlan_id, last_error_code,
@@ -206,20 +206,20 @@ diag.region_health(region_code, total_subscriptions, active_subscriptions,
                    stuck_provisioning_jobs, failed_payments_24h, open_incidents)
 ```
 
-### 1.2 `nethiz_payment` — schema `psp`
+### 1.2 `netswift_payment` — schema `psp`
 ```
-charges(id PK, charge_ref text uniq, customer_ref text, amount_try numeric(12,2),
+charges(id PK, charge_ref text uniq, customer_ref text, amount_gbp numeric(12,2),
         status text, method text, card_last4 char(4), idempotency_key text uniq,
         failure_code text, failure_message text, created_at, updated_at)
    status ∈ {pending, succeeded, failed, refunded, partially_refunded}
    failure_code ∈ {INSUFFICIENT_FUNDS, CARD_DECLINED, DO_NOT_HONOR, TIMEOUT, GATEWAY_ERROR}
-refunds(id PK, refund_ref text uniq, charge_id FK, amount_try, status, reason, created_at)
+refunds(id PK, refund_ref text uniq, charge_id FK, amount_gbp, status, reason, created_at)
 webhook_deliveries(id PK, charge_id FK, target_url text, event text, attempt int,
                    response_status int, error text, created_at)
 control_flags(key text PK, value jsonb, updated_at)   -- failure_rate, outage, latency_ms
 ```
 
-### 1.3 `nethiz_ticketing` — schema `tkt`
+### 1.3 `netswift_ticketing` — schema `tkt`
 ```
 tickets(id PK, ticket_key text uniq, department text, status text, priority text,
         issue_type text, subject text, body text,
@@ -248,11 +248,11 @@ webhook_deliveries(id PK, subscription_id FK, ticket_id FK, event text, payload 
                    attempt int, response_status int, error text, created_at)
 departments(code PK, display_name text, email text, channel_slug text)
 ```
-Department display names (Turkish, UI only):
-`TECHNICAL_INFRA`=Teknik Altyapı → channel `teknik-altyapi`;
-`BILLING`=Faturalama → `faturalama`;
-`SUBSCRIPTION_OPS`=Abonelik İşlemleri → `abonelik-islemleri`;
-`FIELD_INSTALL`=Saha Kurulum Ekibi → `saha-kurulum`.
+Department display names (UI only):
+`TECHNICAL_INFRA`=Technical Infrastructure → channel `technical-infra`;
+`BILLING`=Billing → `billing`;
+`SUBSCRIPTION_OPS`=Subscription Operations → `subscription-ops`;
+`FIELD_INSTALL`=Field Installation Team → `field-install`.
 
 Allowed status transitions:
 `NEW→{TRIAGE,IN_PROGRESS,REJECTED}`, `TRIAGE→{IN_PROGRESS,WAITING_CUSTOMER,REJECTED}`,
@@ -261,7 +261,7 @@ Allowed status transitions:
 
 SLA: URGENT 2h, HIGH 8h, NORMAL 24h, LOW 72h from creation.
 
-### 1.4 `nethiz_notify` — schema `notify`
+### 1.4 `netswift_notify` — schema `notify`
 ```
 channels(slug PK, display_name text, description text)
 messages(id PK, channel_slug FK, title text, text text, severity text, source text,
@@ -288,7 +288,7 @@ action_records(id PK, conversation_id text, action_name text, params jsonb,
 ticket_links(id PK, conversation_id text, ticket_key text, department text,
              last_known_status text, notified_status text, created_at, updated_at)
 pending_approvals(id PK, conversation_id text, action_name text, params jsonb,
-                  prompt_tr text, status text, created_at, resolved_at)
+                  prompt_en text, status text, created_at, resolved_at)
    status ∈ {pending, granted, denied, expired}
 alert_events(id PK, alert_fingerprint text, alertname text, severity text, status text,
              labels jsonb, annotations jsonb, received_at, handled bool, handling_note text)
@@ -305,7 +305,7 @@ Header `X-API-Key: <plain key>`; stored as `sha256(key)`. Core-api service accou
 
 | name | key env var | scopes |
 |---|---|---|
-| `nethiz-crm` | `CORE_API_KEY_CRM` | `customers:*`, `subscriptions:*`, `payments:*`, `billing:refund`, `provisioning:*`, `incidents:*`, `appointments:*`, `notifications:send`, `credits:write` |
+| `netswift-crm` | `CORE_API_KEY_CRM` | `customers:*`, `subscriptions:*`, `payments:*`, `billing:refund`, `provisioning:*`, `incidents:*`, `appointments:*`, `notifications:send`, `credits:write` |
 | `partner-integration` | `CORE_API_KEY_PARTNER` | `customers:read`, `subscriptions:read`, `payments:read`, `provisioning:read`, `provisioning:retry`, `incidents:read`, `appointments:read`, `notifications:resend`, `credits:write`, `tickets:write` |
 
 The integration layer uses **`partner-integration`** only. It deliberately lacks
@@ -321,18 +321,18 @@ Missing key → 401 `MISSING_API_KEY`; unknown/inactive → 401 `INVALID_API_KEY
 | GET | `/v1/regions` | `incidents:read` | |
 | GET | `/v1/packages` `?profile=&max_price=&is_active=` | – | public catalogue |
 | GET | `/v1/packages/{code}` | – | |
-| POST | `/v1/customers` | `customers:write` | body: full_name, national_id, phone, email, address_line, district, city, region_code, kvkk_consent → 201 customer |
+| POST | `/v1/customers` | `customers:write` | body: full_name, national_id, phone, email, address_line, district, city, region_code, gdpr_consent → 201 customer |
 | GET | `/v1/customers` `?customer_no=&phone=&email=&region_code=` | `customers:read` | |
 | GET | `/v1/customers/{customer_no}` | `customers:read` | includes subscriptions summary |
 | POST | `/v1/subscriptions` | `subscriptions:write` | body: customer_no, package_code → status `registered` |
 | GET | `/v1/subscriptions/{id}` | `subscriptions:read` | full detail incl. latest payment/job/appointment |
 | GET | `/v1/subscriptions` `?customer_no=&status=&region_code=` | `subscriptions:read` | |
-| POST | `/v1/subscriptions/{id}/payments` | `payments:write` | body: amount_try?, method, card_token?, idempotency_key → calls PSP, creates `payments` row. If the PSP is unreachable the `pending` row is committed before the 503 propagates, so retrying the same key returns that row instead of charging twice. |
+| POST | `/v1/subscriptions/{id}/payments` | `payments:write` | body: amount_gbp?, method, card_token?, idempotency_key → calls PSP, creates `payments` row. If the PSP is unreachable the `pending` row is committed before the 503 propagates, so retrying the same key returns that row instead of charging twice. |
 | GET | `/v1/subscriptions/{id}/payments` | `payments:read` | |
 | POST | `/v1/subscriptions/{id}/transitions` | `subscriptions:write` | body: to_status, reason → 409 on illegal transition |
 | POST | `/v1/subscriptions/{id}/cancel` | `subscriptions:write` | |
-| POST | `/v1/refunds` | `billing:refund` | body: payment_id, amount_try, reason → PSP refund |
-| POST | `/v1/credits` | `credits:write` | body: subscription_id, amount_try, reason, idempotency_key. **Server-side cap:** `CREDIT_MAX_PER_REQUEST_TRY` (default 250) → 400 `CREDIT_LIMIT_EXCEEDED` |
+| POST | `/v1/refunds` | `billing:refund` | body: payment_id, amount_gbp, reason → PSP refund |
+| POST | `/v1/credits` | `credits:write` | body: subscription_id, amount_gbp, reason, idempotency_key. **Server-side cap:** `CREDIT_MAX_PER_REQUEST_GBP` (default 25) → 400 `CREDIT_LIMIT_EXCEEDED` |
 | GET | `/v1/provisioning-jobs` `?subscription_id=&status=` | `provisioning:read` | |
 | POST | `/v1/subscriptions/{id}/provisioning-jobs` | `provisioning:retry` | Queues provisioning for a subscription stranded at `payment_received` with no job (chaos scenario b). 409 `PROVISIONING_JOB_ALREADY_ACTIVE` when one is queued/running/succeeded, 409 `ILLEGAL_TRANSITION` from any other subscription status. |
 | POST | `/v1/provisioning-jobs/{id}/retry` | `provisioning:retry` | queued again, attempt_count+1; 409 if status ∈ {queued,running,succeeded} |
@@ -367,17 +367,17 @@ Loop every `WORKER_INTERVAL_SECONDS` (default 5):
    (chaos scenario a). Marker lives in `provisioning_jobs.last_error_message = 'CHAOS_HOLD'`
    + `status='running'` with a frozen heartbeat — no assistant-specific column.
 
-Metrics: `nethiz_provisioning_jobs_total{status}`, `nethiz_provisioning_jobs_stuck`,
-`nethiz_provisioning_job_duration_seconds`, `nethiz_worker_sweeps_total`.
+Metrics: `netswift_provisioning_jobs_total{status}`, `netswift_provisioning_jobs_stuck`,
+`netswift_provisioning_job_duration_seconds`, `netswift_worker_sweeps_total`.
 
 ### 2.4 payment-gateway-mock (`http://payment-gateway:8000`, host `:8002`)
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/psp/v1/charges` | body: amount_try, currency, customer_ref, method, card_token?, idempotency_key, callback_url? → 201 `{charge_ref,status,failure_code?}`. Same idempotency_key returns the original charge (200). |
+| POST | `/psp/v1/charges` | body: amount_gbp, currency, customer_ref, method, card_token?, idempotency_key, callback_url? → 201 `{charge_ref,status,failure_code?}`. Same idempotency_key returns the original charge (200). |
 | GET | `/psp/v1/charges/{charge_ref}` | |
 | GET | `/psp/v1/charges?customer_ref=&status=` | |
-| POST | `/psp/v1/charges/{charge_ref}/refunds` | body: amount_try, reason → 201; 409 `ALREADY_REFUNDED`, 422 `REFUND_EXCEEDS_CHARGE` |
+| POST | `/psp/v1/charges/{charge_ref}/refunds` | body: amount_gbp, reason → 201; 409 `ALREADY_REFUNDED`, 422 `REFUND_EXCEEDS_CHARGE` |
 | GET | `/psp/v1/control` / POST | `{failure_rate: 0.1, outage: false, latency_ms: 0, force_failure_code: null}` (used by chaos; auth: `X-API-Key`) |
 
 When `outage=true`: every endpoint except `/health` and `/psp/v1/control` returns
@@ -402,8 +402,8 @@ Outgoing webhook (`event: ticket.status_changed` | `ticket.commented` | `ticket.
 ```json
 {"event":"ticket.status_changed","ticket_key":"TKT-2026-00014","department":"BILLING",
  "old_status":"NEW","new_status":"IN_PROGRESS","priority":"HIGH","assignee":"ayse.kaya",
- "external_ref":"conv-9f2c:double_charge","requester_customer_no":"NH-100042",
- "comment":"İade talebi muhasebeye iletildi.","occurred_at":"2026-10-05T12:00:00Z"}
+ "external_ref":"conv-9f2c:double_charge","requester_customer_no":"NS-100042",
+ "comment":"Refund request passed to accounts.","occurred_at":"2026-10-05T12:00:00Z"}
 ```
 Signed with `X-Webhook-Signature: sha256=<hmac(secret, body)>`. Delivery attempts: 3, 2 s apart.
 Metrics: `tkt_tickets_total{department,status}`, `tkt_open_tickets{department}`,
@@ -416,11 +416,11 @@ Metrics: `tkt_tickets_total{department,status}`, `tkt_open_tickets{department}`,
 | POST | `/api/v1/channels/{slug}/messages` | body: title, text, severity, source, fields{}, external_ref |
 | GET | `/api/v1/channels/{slug}/messages?limit=` | |
 | GET | `/api/v1/channels` | |
-| POST | `/api/v1/alertmanager` | Alertmanager receiver → fans alerts into channels by label `department` (default `operasyon-genel`) |
+| POST | `/api/v1/alertmanager` | Alertmanager receiver → fans alerts into channels by label `department` (default `ops-general`) |
 | GET | `/` , `/c/{slug}` | Jinja UI, auto-refresh every 5 s |
 
-Channels seeded: `teknik-altyapi`, `faturalama`, `abonelik-islemleri`, `saha-kurulum`,
-`operasyon-genel`.
+Channels seeded: `technical-infra`, `billing`, `subscription-ops`, `field-install`,
+`ops-general`.
 
 ### 2.7 monitoring
 `company/monitoring/prometheus.yml` scrapes core-api, provisioning-worker, payment-gateway,
@@ -432,13 +432,13 @@ Rules (`company/monitoring/rules.yml`), all with `labels: {severity, department}
 |---|---|---|---|
 | `PaymentGatewayDown` | `up{job="payment-gateway"} == 0 or psp_outage == 1` | 1m | TECHNICAL_INFRA |
 | `CoreApiDown` | `up{job="core-api"} == 0` | 1m | TECHNICAL_INFRA |
-| `StuckProvisioningJobs` | `nethiz_provisioning_jobs_stuck > 0` | 2m | SUBSCRIPTION_OPS |
+| `StuckProvisioningJobs` | `netswift_provisioning_jobs_stuck > 0` | 2m | SUBSCRIPTION_OPS |
 | `HighPaymentFailureRate` | `rate(psp_charges_total{status="failed"}[5m]) / clamp_min(rate(psp_charges_total[5m]),0.001) > 0.5` | 3m | BILLING |
-| `RegionalOutageDetected` | `nethiz_open_incidents{severity="critical"} > 0` | 1m | TECHNICAL_INFRA |
-| `MissedInstallations` | `nethiz_missed_appointments_24h > 0` | 5m | FIELD_INSTALL |
+| `RegionalOutageDetected` | `netswift_open_incidents{severity="critical"} > 0` | 1m | TECHNICAL_INFRA |
+| `MissedInstallations` | `netswift_missed_appointments_24h > 0` | 5m | FIELD_INSTALL |
 
 Alertmanager (`alertmanager.yml`) has two receivers for every alert (`continue: true`):
-1. `nethiz-channels` → `http://notification-hub:8000/api/v1/alertmanager`
+1. `netswift-channels` → `http://notification-hub:8000/api/v1/alertmanager`
 2. `integration-webhook` → `${ALERT_INTEGRATION_WEBHOOK_URL}`
    (compose default: `http://mcp-monitoring:8000/webhooks/alertmanager`)
 
@@ -459,7 +459,7 @@ Rules:
 - **Writes/actions** → company REST POST/PATCH only. `integrations/common/readonly_db.py`
   opens the session with `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY` and rejects
   any statement not starting with `SELECT`/`WITH`.
-- Every tool: snake_case name, 1-line Turkish-free English description, Pydantic input and
+- Every tool: snake_case name, 1-line English description, Pydantic input and
   output models, and a `ToolResult` envelope `{ok, data, error, source}` where
   `source ∈ {diag_db, core_api, payment_api, ticketing_api, monitoring_api, notification_api}`.
 
@@ -477,7 +477,7 @@ Normalized alert payload forwarded to the assistant:
 ```json
 {"alertname":"PaymentGatewayDown","status":"firing","severity":"critical",
  "department":"TECHNICAL_INFRA","fingerprint":"ab12...","summary":"...","description":"...",
- "labels":{...},"starts_at":"2026-10-05T12:00:00Z","source":"nethiz-alertmanager"}
+ "labels":{...},"starts_at":"2026-10-05T12:00:00Z","source":"netswift-alertmanager"}
 ```
 
 ---
@@ -490,17 +490,17 @@ Normalized alert payload forwarded to the assistant:
   "department": "BILLING",
   "issue_type": "double_charge",
   "priority": "HIGH",
-  "subject": "Çift tahsilat — NH-100042 (2 x 459,00 TRY)",
-  "body": "<Turkish narrative for the human agent>",
+  "subject": "Double charge — NS-100042 (2 x £45.90)",
+  "body": "<plain-English narrative for the human agent>",
   "source": "api",
   "external_ref": "conv-9f2c1a:double_charge",
   "incident_ref": null,
-  "requester": {"customer_no": "NH-100042", "name": "A** K***",
-                "contact": "+90 5** *** ** 31"},
+  "requester": {"customer_no": "NS-100042", "name": "A** K***",
+                "contact": "+44 7*** *** *31"},
   "evidence": {
     "record_ids": {"subscription_id": 42, "payment_ids": [88, 89]},
     "error_codes": [],
-    "observations": ["İki ödeme aynı gün, aynı tutar, 4 dakika arayla succeeded."],
+    "observations": ["Two payments on the same day, same amount, 4 minutes apart, both succeeded."],
     "queried_sources": ["diag.payment_status", "payment_api:list_customer_charges"]
   },
   "attempted_steps": [
@@ -508,9 +508,9 @@ Normalized alert payload forwarded to the assistant:
     {"step": "policy_check:issue_refund", "result": "denied: refund_not_permitted",
      "outcome": "blocked"}
   ],
-  "affected_customers": ["NH-100042"],
-  "suggested_next_step": "88 numaralı ödemenin iadesi (459,00 TRY) onaylanmalı.",
-  "urgency_reason": "Müşteriden iki kez tahsilat alındı, yasal süre içinde iade gerekiyor."
+  "affected_customers": ["NS-100042"],
+  "suggested_next_step": "Approve the refund of payment 88 (£45.90).",
+  "urgency_reason": "The customer was charged twice; a refund is due within the statutory period."
 }
 ```
 `issue_type` ∈ {`stuck_provisioning`, `paid_not_active`, `regional_outage`, `double_charge`,
@@ -523,7 +523,7 @@ Normalized alert payload forwarded to the assistant:
 |---|---|---|
 | GET | `/` | demo page: fake login by `customer_no` + embedded chat widget |
 | POST | `/api/login` | body: `{customer_no}` → session cookie (demo only, no password) |
-| POST | `/api/chat` | body: `{conversation_id?, message, customer_no?}` → `{conversation_id, mode, reply_tr, actions[], ticket_key?, requires_approval?, approval_id?}`. Each `actions[]` entry is self-describing: `{label_tr, action_name, executed, policy_allowed, awaiting_confirmation?, escalated_to?, ticket_key?}` — a Turkish label for the widget plus what was actually attempted and whether policy permitted it. |
+| POST | `/api/chat` | body: `{conversation_id?, message, customer_no?}` → `{conversation_id, mode, reply_en, actions[], ticket_key?, requires_approval?, approval_id?}`. Each `actions[]` entry is self-describing: `{label_en, action_name, executed, policy_allowed, awaiting_confirmation?, escalated_to?, ticket_key?}` — a customer-facing label for the widget plus what was actually attempted and whether policy permitted it. |
 | GET | `/api/chat/stream?conversation_id=&message=` | SSE stream of the same turn. Event framing: `event: token` (plain-text chunk, appended by the client), `event: final` (JSON, identical body to `POST /api/chat`), `event: error` (any payload; the client falls back to `POST /api/chat`). |
 | POST | `/api/approvals/{approval_id}` | `{decision: "granted"\|"denied"}` |
 | GET | `/api/conversations/{conversation_id}/audit` | audit trail for the demo |
@@ -555,7 +555,7 @@ plus `AWAITING_APPROVAL` and `ESCALATED`. Transitions are table-driven; no free-
 - `ADVISORY`: asks 3–5 questions (usage purpose, household size, device count, budget,
   commitment preference, gaming/streaming/work-from-home needs) → fills
   `AdvisoryProfile` → **deterministic** `recommend_packages(profile, packages)` → LLM only
-  verbalizes the result in Turkish. The LLM may not invent or reorder packages.
+  verbalizes the result for the customer. The LLM may not invent or reorder packages.
 - `DIAGNOSTIC`: fixed checklist — customer record → subscription status → payment status →
   provisioning status → installation status → regional incidents → service health.
   Produces a `Diagnosis` with `root_cause`, `scope ∈ {customer_specific, regional_incident,
@@ -567,13 +567,13 @@ plus `AWAITING_APPROVAL` and `ESCALATED`. Transitions are table-driven; no free-
 Pure function, no LLM. Input `AdvisoryProfile`:
 ```
 usage: list[student|family|home_office|gaming|streaming|basic]
-household_size: int ; device_count: int ; budget_try: float|None
+household_size: int ; device_count: int ; budget_gbp: float|None
 commitment_preference: none|12|24|any ; needs_static_ip: bool ; needs_tv: bool
 ```
-Score per package = weighted sum (weights in `config/tenants/nethiz/routing.yaml`):
+Score per package = weighted sum (weights in `config/tenants/netswift/routing.yaml`):
 speed adequacy (device_count × 25 Mbps target, 35 %), budget fit (25 %, hard filter when
-`budget_try` exceeded by > 15 %), profile match (20 %), commitment match (10 %),
-extras match (10 %). Returns top-3 with `score`, `reasons[]` (Turkish reason codes resolved
+`budget_gbp` exceeded by > 15 %), profile match (20 %), commitment match (10 %),
+extras match (10 %). Returns top-3 with `score`, `reasons[]` (customer-facing reason codes resolved
 from a table, not generated), `is_best`. Ties broken by lower price, then shorter commitment.
 
 ### 4.5 `DecisionService` (`assistant/decision/base.py`)
@@ -591,10 +591,10 @@ Implementations: `llm_structured` (default), `typesafe_jev` (stub raising
 If `confidence < decision.min_confidence` (policy file, default 0.6) → escalate to the
 department chosen by the fallback table in `routing.yaml`, never silently guess.
 
-### 4.6 Policy engine (`assistant/policy/engine.py` + `config/tenants/nethiz/policy.yaml`)
+### 4.6 Policy engine (`assistant/policy/engine.py` + `config/tenants/netswift/policy.yaml`)
 ```yaml
 version: 1
-tenant: nethiz
+tenant: netswift
 decision:
   min_confidence: 0.6
 limits:
@@ -613,7 +613,7 @@ actions:
   apply_outage_credit:
     allowed: true
     requires_confirmation: true          # irreversible → explicit user consent
-    max_amount_try: 50
+    max_amount_gbp: 5
     conditions: [{field: incident.status, in: [open, monitoring, resolved]},
                  {field: credit.existing_count_30d, lt: 1}]
   reschedule_installation:
@@ -636,14 +636,15 @@ pii:
   allow_unmasked: [customer_no, subscription_id, ticket_key, region_code]
 ```
 API: `engine.check(action_name, context) -> PolicyDecision{allowed, requires_confirmation,
-reason_code, reason_tr, escalate_to, limit_applied}`. The model never decides authority:
+reason_code, reason_en, escalate_to, limit_applied}`. The model never decides authority:
 `ActionExecutor.execute()` calls `check()` first and raises `PolicyDenied` otherwise —
 unknown action names default to **deny**. Every check is written to the audit log.
 
 ### 4.7 Masking (`assistant/privacy/masking.py`)
 `mask_text(text) -> (masked_text, mapping)` and `mask_payload(dict)`.
-Rules: TR national id (11 digits) → `***********`; phone (`+90`/`0` + 10 digits) →
-`+90 5** *** ** 31` (last two digits kept); email → `a***@d***.com`; IBAN → `TR** **** ...`;
+Rules: UK National Insurance number (`AA999999A`, optionally spaced) → `*********`; UK mobile
+(`+44 7`/`07` + 9 digits) → `+44 7*** *** *31` (last two digits kept); email → `a***@d***.com`;
+IBAN (`GB…`) → `GB** **** ...`;
 card (13–19 digits, Luhn) → `**** **** **** 1234`; full name → initials (`A** K***`);
 address → `<district>, <city>` only. Masking is applied at the **boundary**: everything that
 leaves for the model provider, and everything that goes to Langfuse/OTel traces, is masked.
@@ -669,7 +670,7 @@ Fallback sink when disabled: JSONL at `/app/var/traces/`.
 
 ## 5. Chaos scenarios (`company/chaos`, `make chaos SCENARIO=...`)
 
-CLI `python -m chaos.cli <scenario> [--customer NH-1000xx] [--region IST-KAD]`,
+CLI `python -m chaos.cli <scenario> [--customer NS-1000xx] [--region LDN-CAM]`,
 plus `python -m chaos.cli reset` and `python -m chaos.cli status`.
 It only uses the company's own write API/DB (actor `chaos`), never assistant code.
 
@@ -677,10 +678,10 @@ It only uses the company's own write API/DB (actor `chaos`), never assistant cod
 |---|---|---|---|
 | a | `stuck_provisioning` | picks/creates a `provisioning` subscription, sets its job `running` with `heartbeat_at = now()-30m`, `last_error_message='CHAOS_HOLD'` | diagnose stuck job → `retry_provisioning_job` (allowed) → no ticket |
 | b | `paid_not_active` | payment `succeeded` but subscription left at `payment_received`, provisioning job missing | small fix allowed (enqueue/retry provisioning + resend notification); if a refund is wanted → BILLING ticket |
-| c | `regional_outage` | opens `INC-2026-0xx` (critical) for a region, links every active subscription there, marks modems `offline` | all users in region → one existing incident; **no new per-customer ticket**, attach to incident, inform + optional ≤50 TL credit with confirmation |
+| c | `regional_outage` | opens `INC-2026-0xx` (critical) for a region, links every active subscription there, marks modems `offline` | all users in region → one existing incident; **no new per-customer ticket**, attach to incident, inform + optional ≤£5 credit with confirmation |
 | d | `double_charge` | creates a second `succeeded` charge + `payments` row, same amount, 4 min apart | detect duplicate → refund NOT permitted → BILLING ticket with both payment ids |
 | e | `missed_installation` | sets yesterday's appointment to `missed`, subscription stays `installation_scheduled` | FIELD_INSTALL ticket with appointment id + team code; no self-reschedule |
-| f | `payment_down` | `POST /psp/v1/control {outage:true}` | Prometheus `PaymentGatewayDown` → Alertmanager → assistant proactive diagnosis + TECHNICAL_INFRA ticket + department channel message; user told "ödeme sistemi geçici olarak kullanılamıyor" |
+| f | `payment_down` | `POST /psp/v1/control {outage:true}` | Prometheus `PaymentGatewayDown` → Alertmanager → assistant proactive diagnosis + TECHNICAL_INFRA ticket + department channel message; user told "the payment system is temporarily unavailable" |
 
 `reset` restores: clears chaos incidents, deletes chaos-created charges/payments/credits,
 restores appointment/job/modem/subscription statuses, sets PSP control back to defaults.
@@ -691,16 +692,17 @@ restores appointment/job/modem/subscription statuses, sets PSP control back to d
 ## 6. Fake data rules
 
 ### 6.1 National id (`national_id`)
-11 digits, first digit non-zero, generated so the real checksum **fails**
-(`company/shared/fake_identity.py: make_invalid_national_id(rng)` — compute valid check digits
-then increment the 11th digit by 1 mod 10). A unit test asserts every seeded value fails the
-official checksum. Rationale: realistic format, impossible to be a real person's number.
+UK National Insurance number shape — two prefix letters, six digits, suffix `A`–`D` — with a
+prefix HMRC never allocates (`BG`, `GB`, `KN`, `NK`, `NT`, `TN`, `ZZ`;
+`company/shared/fake_identity.py: make_invalid_national_id(rng)`). A unit test asserts every
+seeded value fails `national_id_is_valid`. Rationale: realistic format, impossible to be a real
+person's number.
 
 ### 6.2 Other
-Phones: `+90` + prefix from the reserved-looking set above + 7 digits — never dialable patterns
-used by real campaigns. Cards: only `card_token` strings (`tok_test_<n>`) and `card_last4`;
-no PAN is ever stored. Emails: `<name>.<surname>@ornek-eposta.test` (`.test` TLD is reserved).
-Addresses: real district/city names + fictional street names, no building numbers.
+Phones: `+447700900` + 3 digits — Ofcom's range reserved for TV/radio drama, never assigned to
+a real line. Cards: only `card_token` strings (`tok_test_<n>`) and `card_last4`;
+no PAN is ever stored. Emails: `<name>.<surname>@example-mail.test` (`.test` TLD is reserved).
+Addresses: real UK district/city names + fictional street names.
 
 ---
 
@@ -724,12 +726,12 @@ database use the `*_test` databases created by the fixtures in `tests/conftest.p
 
 ## 8. Environment variables (see `.env.example` for the full list)
 
-Shared: `COMPOSE_PROJECT_NAME`, `TZ=Europe/Istanbul`, `LOG_LEVEL`.
+Shared: `COMPOSE_PROJECT_NAME`, `TZ=Europe/London`, `LOG_LEVEL`.
 Company: `COMPANY_DB_*`, `CORE_API_KEY_CRM`, `CORE_API_KEY_PARTNER`, `PSP_API_KEY`,
 `TICKETING_API_KEY`, `NOTIFY_API_KEY`, `WEBHOOK_SECRET`, `READONLY_DIAG_PASSWORD`,
-`PROVISION_SUCCESS_RATE`, `PSP_FAILURE_RATE`, `CREDIT_MAX_PER_REQUEST_TRY`,
+`PROVISION_SUCCESS_RATE`, `PSP_FAILURE_RATE`, `CREDIT_MAX_PER_REQUEST_GBP`,
 `RESEND_COOLDOWN_SECONDS`, `ALERT_INTEGRATION_WEBHOOK_URL`.
-Assistant: `ASSISTANT_DB_*`, `TENANT=nethiz`, `LLM_PROVIDER=openai_agents`,
+Assistant: `ASSISTANT_DB_*`, `TENANT=netswift`, `LLM_PROVIDER=openai_agents`,
 `LLM_MODEL=gpt-4.1-mini`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`,
 `DECISION_SERVICE=llm_structured`, `DECISION_MIN_CONFIDENCE`, `MAX_TOOL_CALLS_PER_TURN`,
 `MCP_*_URL`, `COMPANY_API_KEY` (= partner key), `DIAG_DATABASE_URL`,

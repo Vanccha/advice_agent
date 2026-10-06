@@ -6,12 +6,12 @@ from fastapi import APIRouter, FastAPI, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 REQUESTS = Counter(
-    "nethiz_http_requests_total",
-    "HTTP requests handled by a NetHiz service.",
+    "netswift_http_requests_total",
+    "HTTP requests handled by a NetSwift service.",
     ["service", "method", "path", "status"],
 )
 LATENCY = Histogram(
-    "nethiz_http_request_duration_seconds",
+    "netswift_http_request_duration_seconds",
     "HTTP request duration.",
     ["service", "method", "path"],
     buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),

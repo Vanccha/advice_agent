@@ -69,7 +69,7 @@ def core_api() -> ServiceProbe:
         ServiceProbe(
             "core-api",
             _env("CORE_API_BASE_URL", "http://core-api:8000"),
-            _env("CORE_API_KEY_PARTNER", "nethiz_partner_key_change_me"),
+            _env("CORE_API_KEY_PARTNER", "netswift_partner_key_change_me"),
         )
     )
 
@@ -81,7 +81,7 @@ def core_api_crm() -> ServiceProbe:
         ServiceProbe(
             "core-api(crm)",
             _env("CORE_API_BASE_URL", "http://core-api:8000"),
-            _env("CORE_API_KEY_CRM", "nethiz_crm_key_change_me"),
+            _env("CORE_API_KEY_CRM", "netswift_crm_key_change_me"),
         )
     )
 
@@ -91,7 +91,7 @@ def payment_api() -> ServiceProbe:
     probe = ServiceProbe(
         "payment-gateway",
         _env("PAYMENT_API_BASE_URL", "http://payment-gateway:8000"),
-        _env("PSP_API_KEY", "nethiz_psp_key_change_me"),
+        _env("PSP_API_KEY", "netswift_psp_key_change_me"),
     )
     # The gateway answers /health with 503 while an outage is injected, so probe the control
     # endpoint instead, which stays available by design.
@@ -104,7 +104,7 @@ def ticketing_api() -> ServiceProbe:
         ServiceProbe(
             "ticketing",
             _env("TICKETING_API_BASE_URL", "http://ticketing:8000"),
-            _env("TICKETING_API_KEY", "nethiz_tkt_key_change_me"),
+            _env("TICKETING_API_KEY", "netswift_tkt_key_change_me"),
         )
     )
 
@@ -115,7 +115,7 @@ def notification_api() -> ServiceProbe:
         ServiceProbe(
             "notification-hub",
             _env("NOTIFICATION_API_BASE_URL", "http://notification-hub:8000"),
-            _env("NOTIFY_API_KEY", "nethiz_notify_key_change_me"),
+            _env("NOTIFY_API_KEY", "netswift_notify_key_change_me"),
         )
     )
 

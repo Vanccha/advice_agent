@@ -1,4 +1,4 @@
-# NetHız Telekom + AI Support Assistant
+# NetSwift Telecom + AI Support Assistant
 SHELL := /bin/bash
 COMPOSE := docker compose
 OBS := docker compose -f docker-compose.yml -f docker-compose.observability.yml
@@ -63,7 +63,7 @@ test-integration: ## Integration tests (requires: make up)
 test-arch: ## Architecture boundary tests only
 	$(COMPOSE) run --rm test-runner python -m pytest tests/architecture $(PYTEST_ARGS)
 
-chaos: ## Inject a failure: make chaos SCENARIO=stuck_provisioning [CHAOS_ARGS="--customer NH-100042"]
+chaos: ## Inject a failure: make chaos SCENARIO=stuck_provisioning [CHAOS_ARGS="--customer NS-100042"]
 	$(COMPOSE) run --rm chaos python -m chaos.cli $(SCENARIO) $(CHAOS_ARGS)
 
 chaos-reset: ## Undo every injected failure

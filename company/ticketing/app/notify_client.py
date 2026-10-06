@@ -16,10 +16,10 @@ PRIORITY_TO_SEVERITY = {
 
 # Department -> notification-hub channel slug, per docs/contracts.md §1.3 / §2.6.
 CHANNEL_BY_DEPARTMENT = {
-    "TECHNICAL_INFRA": "teknik-altyapi",
-    "BILLING": "faturalama",
-    "SUBSCRIPTION_OPS": "abonelik-islemleri",
-    "FIELD_INSTALL": "saha-kurulum",
+    "TECHNICAL_INFRA": "technical-infra",
+    "BILLING": "billing",
+    "SUBSCRIPTION_OPS": "subscription-ops",
+    "FIELD_INSTALL": "field-install",
 }
 
 
@@ -33,7 +33,7 @@ def notify_department_channel(
     external_ref: str | None = None,
     fields: dict | None = None,
 ) -> None:
-    """Post a short Turkish message to the notification hub.
+    """Post a short message to the notification hub.
 
     The notification hub may be down or absent entirely; this must never fail the
     caller's request, so every error is swallowed and logged.
@@ -67,8 +67,8 @@ def notify_ticket_created(settings: TicketingSettings, ticket) -> None:
     notify_department_channel(
         settings,
         channel_slug=channel_slug,
-        title=f"Yeni talep: {ticket.ticket_key}",
-        text=f"{ticket.subject} (öncelik: {ticket.priority})",
+        title=f"New ticket: {ticket.ticket_key}",
+        text=f"{ticket.subject} (priority: {ticket.priority})",
         severity=PRIORITY_TO_SEVERITY.get(ticket.priority, "info"),
         external_ref=ticket.external_ref,
         fields={"ticket_key": ticket.ticket_key, "department": ticket.department},
@@ -82,8 +82,8 @@ def notify_ticket_resolved(settings: TicketingSettings, ticket) -> None:
     notify_department_channel(
         settings,
         channel_slug=channel_slug,
-        title=f"Talep çözüldü: {ticket.ticket_key}",
-        text=f"{ticket.subject} çözümlendi.",
+        title=f"Ticket resolved: {ticket.ticket_key}",
+        text=f"{ticket.subject} has been resolved.",
         severity="info",
         external_ref=ticket.external_ref,
         fields={"ticket_key": ticket.ticket_key, "department": ticket.department},

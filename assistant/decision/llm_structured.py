@@ -1,6 +1,6 @@
 """Default `DecisionService` (contracts §4.5: `DECISION_SERVICE=llm_structured`).
 
-One structured-output call per decision, each with a tight, Turkish-free English system
+One structured-output call per decision, each with a tight, English system
 prompt, returning the enum value plus a calibrated confidence and a rationale. The
 returned value is always validated against the target enum — an out-of-enum answer (or a
 failed provider call) becomes a confidence-0 `Decision`, never an exception that kills the

@@ -6,8 +6,8 @@ def _alert(
     alertname="HighPaymentFailureRate",
     severity="critical",
     department="BILLING",
-    summary="Ödeme başarısızlık oranı yüksek",
-    description="Son beş dakikada ödemelerin yarısından fazlası başarısız oldu.",
+    summary="High payment failure rate",
+    description="More than half of payments failed in the last five minutes.",
     fingerprint="fp-1",
 ):
     return {
@@ -21,12 +21,12 @@ def _alert(
 
 
 def test_billing_department_fans_into_faturalama(client, api_headers):
-    payload = {"receiver": "nethiz-channels", "status": "firing", "alerts": [_alert(fingerprint="fp-billing-1")]}
+    payload = {"receiver": "netswift-channels", "status": "firing", "alerts": [_alert(fingerprint="fp-billing-1")]}
     resp = client.post("/api/v1/alertmanager", json=payload)
     assert resp.status_code == 202
     assert resp.json()["posted"] == 1
 
-    listing = client.get("/api/v1/channels/faturalama/messages", headers=api_headers)
+    listing = client.get("/api/v1/channels/billing/messages", headers=api_headers)
     items = listing.json()["items"]
     match = next((m for m in items if m["external_ref"] == "fp-billing-1"), None)
     assert match is not None
@@ -36,27 +36,27 @@ def test_billing_department_fans_into_faturalama(client, api_headers):
 
 def test_unknown_department_falls_back_to_operasyon_genel(client, api_headers):
     payload = {
-        "receiver": "nethiz-channels",
+        "receiver": "netswift-channels",
         "status": "firing",
         "alerts": [_alert(department="NOT_A_REAL_DEPARTMENT", fingerprint="fp-unknown-1")],
     }
     resp = client.post("/api/v1/alertmanager", json=payload)
     assert resp.status_code == 202
 
-    listing = client.get("/api/v1/channels/operasyon-genel/messages", headers=api_headers)
+    listing = client.get("/api/v1/channels/ops-general/messages", headers=api_headers)
     items = listing.json()["items"]
     assert any(m["external_ref"] == "fp-unknown-1" for m in items)
 
 
 def test_missing_department_falls_back_to_operasyon_genel(client, api_headers):
     payload = {
-        "receiver": "nethiz-channels",
+        "receiver": "netswift-channels",
         "status": "firing",
         "alerts": [
             {
                 "status": "firing",
                 "labels": {"alertname": "RegionalOutageDetected", "severity": "critical"},
-                "annotations": {"summary": "Bölgesel kesinti", "description": "detay"},
+                "annotations": {"summary": "Regional outage", "description": "details"},
                 "fingerprint": "fp-no-dept-1",
             }
         ],
@@ -64,14 +64,14 @@ def test_missing_department_falls_back_to_operasyon_genel(client, api_headers):
     resp = client.post("/api/v1/alertmanager", json=payload)
     assert resp.status_code == 202
 
-    listing = client.get("/api/v1/channels/operasyon-genel/messages", headers=api_headers)
+    listing = client.get("/api/v1/channels/ops-general/messages", headers=api_headers)
     items = listing.json()["items"]
     assert any(m["external_ref"] == "fp-no-dept-1" for m in items)
 
 
-def test_resolved_alert_posts_turkish_resolution_message(client, api_headers):
+def test_resolved_alert_posts_resolution_message(client, api_headers):
     payload = {
-        "receiver": "nethiz-channels",
+        "receiver": "netswift-channels",
         "status": "resolved",
         "alerts": [
             _alert(
@@ -79,8 +79,8 @@ def test_resolved_alert_posts_turkish_resolution_message(client, api_headers):
                 alertname="CoreApiDown",
                 severity="critical",
                 department="TECHNICAL_INFRA",
-                summary="Core API erişilemez durumda",
-                description="core-api servisi yanıt vermiyordu.",
+                summary="Core API unreachable",
+                description="The core-api service was not responding.",
                 fingerprint="fp-resolved-1",
             )
         ],
@@ -88,9 +88,9 @@ def test_resolved_alert_posts_turkish_resolution_message(client, api_headers):
     resp = client.post("/api/v1/alertmanager", json=payload)
     assert resp.status_code == 202
 
-    listing = client.get("/api/v1/channels/teknik-altyapi/messages", headers=api_headers)
+    listing = client.get("/api/v1/channels/technical-infra/messages", headers=api_headers)
     items = listing.json()["items"]
     match = next((m for m in items if m["external_ref"] == "fp-resolved-1"), None)
     assert match is not None
-    assert "çözüldü" in match["title"]
+    assert "resolved" in match["title"]
     assert match["severity"] == "info"

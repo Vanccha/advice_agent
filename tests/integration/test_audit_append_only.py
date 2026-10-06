@@ -41,7 +41,7 @@ def _append_two_steps(url: str, conversation_id: str):
         "checked the subscription",
         "diagnosing a stuck provisioning job",
         {"record_ids": {"subscription_id": 201}},
-        tenant="nethiz",
+        tenant="netswift",
     )
     log.append(
         conversation_id,
@@ -49,7 +49,7 @@ def _append_two_steps(url: str, conversation_id: str):
         "retry permitted",
         "policy allows retrying a stuck job",
         {"record_ids": {"job_id": 7}},
-        tenant="nethiz",
+        tenant="netswift",
     )
     return log
 

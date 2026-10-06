@@ -1,9 +1,9 @@
 """The advisory suite (`evals/datasets/advisory_profiles.yaml`, contracts §4.4): for each
 customer profile, fetch the *live* package catalogue through the core adapter, call the
 deterministic `recommend_packages` directly, and check every expectation key plus the
-file's shared `invariants`. As a secondary, best-effort check (`conversation_tr`), the same
+file's shared `invariants`. As a secondary, best-effort check (`conversation_en`), the same
 profile is also driven through the real `Orchestrator`'s ADVISORY mode, to confirm the
-verbalised Turkish reply never names a package outside the live catalogue — this does not
+verbalised reply never names a package outside the live catalogue — this does not
 have to reproduce `expected_best` (the deterministic field-by-field parser in
 `modes/advisory.py` does not pretend to be an NLU model), so it is scored as an additional,
 separate check rather than folded into the primary pass/fail for `expected_best`.
@@ -25,7 +25,7 @@ _MAX_CONVERSATION_TURNS = 7  # policy.yaml max_questions_advisory (5) + opening 
 
 
 def _reason_patterns(templates: dict[str, str]) -> list[re.Pattern[str]]:
-    """One regex per `routing.yaml: recommendation.reason_codes_tr` template, with every
+    """One regex per `routing.yaml: recommendation.reason_codes_en` template, with every
     `{placeholder}` turned into a wildcard — used to prove every `PackageOffer.reasons`
     string actually came from the configured table, never free text."""
     patterns = []
@@ -43,7 +43,7 @@ def _matches_any(text: str, patterns: list[re.Pattern[str]]) -> bool:
 def _check_conversation_honesty(
     harness: Any, profile_case: dict[str, Any], catalogue_names: set[str], case: CaseResult
 ) -> None:
-    conversation = list(profile_case.get("conversation_tr") or [])
+    conversation = list(profile_case.get("conversation_en") or [])
     if not conversation:
         return
 
@@ -53,7 +53,7 @@ def _check_conversation_honesty(
         turns_sent = 1
         idx = 1
         while turn.mode != "CLOSING" and turns_sent < _MAX_CONVERSATION_TURNS:
-            answer = conversation[idx] if idx < len(conversation) else "farketmez"
+            answer = conversation[idx] if idx < len(conversation) else "no preference"
             turn = harness.send(conv_id, None, answer)
             idx += 1
             turns_sent += 1
@@ -67,9 +67,9 @@ def _check_conversation_honesty(
         ) + "conversation-driven advisory check inconclusive: never reached CLOSING"
         return
 
-    reply = turn.reply_tr or ""
+    reply = turn.reply_en or ""
     # `modes/advisory.py:_format_offer` renders each offer as "• <name> — <down>/<up> Mbps,
-    # <price>/ay" — parse that exact bullet shape to recover which package names the reply
+    # <price>/month" — parse that exact bullet shape to recover which package names the reply
     # actually names, without re-deriving the profile ourselves.
     mentioned = [line[2:].split(" — ")[0].strip() for line in reply.split("\n") if line.startswith("• ")]
     unknown = [name for name in mentioned if name not in catalogue_names]
@@ -129,16 +129,16 @@ def _check_profile(harness: Any, profile_case: dict[str, Any]) -> CaseResult:
         hit = sorted(banned & set(offer_codes))
         case.add("must_not_recommend", not hit, expected=f"none of {sorted(banned)}", actual=offer_codes)
 
-    # Interpretation (see evals/README.md): `max_monthly_price_try`/`min_down_mbps`, like
+    # Interpretation (see evals/README.md): `max_monthly_price_gbp`/`min_down_mbps`, like
     # `must_have_static_ip`/`must_have_tv`/`must_have_no_commitment`, describe the *best*
     # (top-ranked) recommendation — a top-3 list legitimately includes weaker/cheaper
     # comparison alternatives alongside it (that is what `must_not_recommend` is for: it
     # bans a package from appearing *anywhere* in the list, which these numeric floors/
     # ceilings deliberately do not).
-    if "max_monthly_price_try" in expect:
-        limit = expect["max_monthly_price_try"]
-        ok = bool(best) and best.monthly_price_try <= limit
-        case.add("max_monthly_price_try", ok, expected=f"<= {limit}", actual=best.monthly_price_try if best else None)
+    if "max_monthly_price_gbp" in expect:
+        limit = expect["max_monthly_price_gbp"]
+        ok = bool(best) and best.monthly_price_gbp <= limit
+        case.add("max_monthly_price_gbp", ok, expected=f"<= {limit}", actual=best.monthly_price_gbp if best else None)
 
     if "min_down_mbps" in expect:
         floor = expect["min_down_mbps"]
@@ -167,7 +167,7 @@ def _check_profile(harness: Any, profile_case: dict[str, Any]) -> CaseResult:
     deterministic = _fingerprint(offers1) == _fingerprint(offers2)
     case.add("deterministic", deterministic, expected="identical offers on repeat call", actual=deterministic)
 
-    patterns = _reason_patterns(harness.tenant_config.routing.recommendation.reason_codes_tr)
+    patterns = _reason_patterns(harness.tenant_config.routing.recommendation.reason_codes_en)
     bad_reasons = [r for o in offers1 for r in o.reasons if not _matches_any(r, patterns)]
     case.add("reasons_from_config_only", not bad_reasons, expected="every reason matches a routing.yaml template", actual=bad_reasons)
 

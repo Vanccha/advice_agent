@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block refresh %}<meta http-equiv="refresh" content="5">{% endblock %}
-{% block title %}{{ channel.display_name }} — NetHız Bildirim Merkezi{% endblock %}
+{% block title %}{{ channel.display_name }} — NetSwift Notification Hub{% endblock %}
 {% block content %}
-<a class="back-link" href="/">&larr; Kanallara dön</a>
+<a class="back-link" href="/">&larr; Back to channels</a>
 <h1>
   <span class="avatar avatar-lg">{{ channel.display_name | initials }}</span>
   {{ channel.display_name }}
@@ -22,11 +22,11 @@
       {% if message.fields %}
       <pre class="message-fields">{{ message.fields | to_pretty_json }}</pre>
       {% endif %}
-      <div class="message-source">kaynak: {{ message.source }}{% if message.external_ref %} · ref: {{ message.external_ref }}{% endif %}</div>
+      <div class="message-source">source: {{ message.source }}{% if message.external_ref %} · ref: {{ message.external_ref }}{% endif %}</div>
     </div>
   </div>
   {% else %}
-  <p class="empty">Bu kanalda henüz mesaj yok.</p>
+  <p class="empty">No messages in this channel yet.</p>
   {% endfor %}
 </div>
 {% endblock %}

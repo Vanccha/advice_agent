@@ -154,7 +154,7 @@ class AdvisoryProfile(BaseModel):
     usage: list[UsageType] = Field(default_factory=list)
     household_size: int | None = None
     device_count: int | None = None
-    budget_try: float | None = None
+    budget_gbp: float | None = None
     commitment_preference: CommitmentPreference | None = None
     needs_static_ip: bool = False
     needs_tv: bool = False
@@ -170,7 +170,7 @@ class PackageOffer(BaseModel):
     down_mbps: int
     up_mbps: int
     commitment_months: int
-    monthly_price_try: float
+    monthly_price_gbp: float
     score: float
     reasons: list[str]
     is_best: bool
@@ -203,7 +203,7 @@ class PolicyDecision(BaseModel):
     allowed: bool
     requires_confirmation: bool = False
     reason_code: str | None = None
-    reason_tr: str | None = None
+    reason_en: str | None = None
     escalate_to: Department | None = None
     limit_applied: str | None = None
     details: dict[str, Any] = Field(default_factory=dict)

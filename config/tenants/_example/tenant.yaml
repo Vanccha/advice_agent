@@ -1,16 +1,16 @@
 # A deliberately DIFFERENT second customer, so "adding a tenant needs no code change" is
 # something you can run rather than something you take on faith. Everything here differs
-# from `nethiz/`: identifier format, persona, tone, even which adapters are mandatory.
+# from `netswift/`: identifier format, persona, tone, even which adapters are mandatory.
 version: 1
 tenant: _example
-display_name: "Örnek Fiber A.Ş."
-locale: tr-TR
-timezone: Europe/Istanbul
-currency: TRY
+display_name: "Example Fibre Ltd"
+locale: en-GB
+timezone: Europe/London
+currency: GBP
 
 business_domain: fiber_isp
 customer_identifier:
-  label_tr: "Abone numarası"
+  label_en: "Account number"
   pattern: "^OR-[0-9]{7}$"
   example: "OR-2045118"
 
@@ -40,22 +40,22 @@ adapters:
 
 departments:
   TECHNICAL_INFRA:
-    display_name_tr: "Şebeke Operasyon"
-    channel: sebeke-operasyon
+    display_name_en: "Network Operations"
+    channel: network-operations
   BILLING:
-    display_name_tr: "Gelir Yönetimi"
-    channel: gelir-yonetimi
+    display_name_en: "Revenue Management"
+    channel: revenue-management
   SUBSCRIPTION_OPS:
-    display_name_tr: "Müşteri Operasyon"
-    channel: musteri-operasyon
+    display_name_en: "Customer Operations"
+    channel: customer-operations
   FIELD_INSTALL:
-    display_name_tr: "Saha Hizmetleri"
-    channel: saha-hizmetleri
+    display_name_en: "Field Services"
+    channel: field-services
 
 persona:
-  name_tr: "Örnek Fiber Yardım Asistanı"
-  tone_tr: "resmi, mesafeli, kısa ve net; samimiyet kurmaz"
-  language: tr
-  disclaimers_tr:
-    - "Bu görüşme kalite amacıyla kayıt altına alınır."
-    - "Yetkim dışındaki talepler ilgili birime iletilir."
+  name_en: "Example Fibre Help Assistant"
+  tone_en: "formal, reserved, brief and clear; never chummy"
+  language: en
+  disclaimers_en:
+    - "This conversation is recorded for quality purposes."
+    - "Requests outside my authority are passed to the relevant unit."

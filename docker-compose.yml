@@ -1,9 +1,9 @@
-# NetHız Telekom (company) + AI support assistant (guest product)
+# NetSwift Telecom (company) + AI support assistant (guest product)
 # Single command:  docker compose up      |  Observability: make up-observability
-name: ${COMPOSE_PROJECT_NAME:-nethiz}
+name: ${COMPOSE_PROJECT_NAME:-netswift}
 
 x-company-env: &company-env
-  TZ: ${TZ:-Europe/Istanbul}
+  TZ: ${TZ:-Europe/London}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   COMPANY_DB_USER: ${COMPANY_DB_USER}
   COMPANY_DB_PASSWORD: ${COMPANY_DB_PASSWORD}
@@ -11,7 +11,7 @@ x-company-env: &company-env
   COMPANY_DB_PORT: 5432
 
 x-integration-env: &integration-env
-  TZ: ${TZ:-Europe/Istanbul}
+  TZ: ${TZ:-Europe/London}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   COMPANY_API_KEY: ${COMPANY_API_KEY}
   CORE_API_BASE_URL: http://core-api:8000
@@ -20,7 +20,7 @@ x-integration-env: &integration-env
   NOTIFICATION_API_BASE_URL: http://notification-hub:8000
   PROMETHEUS_BASE_URL: http://prometheus:9090
   ALERTMANAGER_BASE_URL: http://alertmanager:9093
-  DIAG_DATABASE_URL: postgresql+psycopg://${READONLY_DIAG_USER}:${READONLY_DIAG_PASSWORD}@company-db:5432/nethiz_core
+  DIAG_DATABASE_URL: postgresql+psycopg://${READONLY_DIAG_USER}:${READONLY_DIAG_PASSWORD}@company-db:5432/netswift_core
 
 services:
   # ───────────────────────── company: data stores ─────────────────────────
@@ -29,7 +29,7 @@ services:
     environment:
       POSTGRES_USER: ${COMPANY_DB_USER}
       POSTGRES_PASSWORD: ${COMPANY_DB_PASSWORD}
-      POSTGRES_DB: nethiz_core
+      POSTGRES_DB: netswift_core
       READONLY_DIAG_USER: ${READONLY_DIAG_USER}
       READONLY_DIAG_PASSWORD: ${READONLY_DIAG_PASSWORD}
     ports: ["${COMPANY_DB_PORT_HOST:-55432}:5432"]
@@ -37,7 +37,7 @@ services:
       - company-db-data:/var/lib/postgresql/data
       - ./company/db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${COMPANY_DB_USER} -d nethiz_core"]
+      test: ["CMD-SHELL", "pg_isready -U ${COMPANY_DB_USER} -d netswift_core"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -62,7 +62,7 @@ services:
     build: {context: ./company, dockerfile: core-api/Dockerfile}
     environment:
       <<: *company-env
-      COMPANY_DB_NAME: nethiz_core
+      COMPANY_DB_NAME: netswift_core
       CORE_API_KEY_CRM: ${CORE_API_KEY_CRM}
       CORE_API_KEY_PARTNER: ${CORE_API_KEY_PARTNER}
       READONLY_DIAG_USER: ${READONLY_DIAG_USER}
@@ -70,7 +70,7 @@ services:
       PAYMENT_API_BASE_URL: http://payment-gateway:8000
       PSP_API_KEY: ${PSP_API_KEY}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET}
-      CREDIT_MAX_PER_REQUEST_TRY: ${CREDIT_MAX_PER_REQUEST_TRY:-250}
+      CREDIT_MAX_PER_REQUEST_GBP: ${CREDIT_MAX_PER_REQUEST_GBP:-25}
       RESEND_COOLDOWN_SECONDS: ${RESEND_COOLDOWN_SECONDS:-120}
       SEED_ON_STARTUP: "true"
     ports: ["8001:8000"]
@@ -81,7 +81,7 @@ services:
     build: {context: ./company, dockerfile: provisioning-worker/Dockerfile}
     environment:
       <<: *company-env
-      COMPANY_DB_NAME: nethiz_core
+      COMPANY_DB_NAME: netswift_core
       PROVISION_SUCCESS_RATE: ${PROVISION_SUCCESS_RATE:-0.9}
       WORKER_INTERVAL_SECONDS: ${WORKER_INTERVAL_SECONDS:-5}
       STUCK_AFTER_SECONDS: ${STUCK_AFTER_SECONDS:-300}
@@ -92,7 +92,7 @@ services:
     build: {context: ./company, dockerfile: payment-gateway-mock/Dockerfile}
     environment:
       <<: *company-env
-      COMPANY_DB_NAME: nethiz_payment
+      COMPANY_DB_NAME: netswift_payment
       PSP_API_KEY: ${PSP_API_KEY}
       PSP_FAILURE_RATE: ${PSP_FAILURE_RATE:-0.08}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET}
@@ -105,7 +105,7 @@ services:
     build: {context: ./company, dockerfile: ticketing/Dockerfile}
     environment:
       <<: *company-env
-      COMPANY_DB_NAME: nethiz_ticketing
+      COMPANY_DB_NAME: netswift_ticketing
       TICKETING_API_KEY: ${TICKETING_API_KEY}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET}
       NOTIFICATION_API_BASE_URL: http://notification-hub:8000
@@ -119,7 +119,7 @@ services:
     build: {context: ./company, dockerfile: notification-hub/Dockerfile}
     environment:
       <<: *company-env
-      COMPANY_DB_NAME: nethiz_notify
+      COMPANY_DB_NAME: netswift_notify
       NOTIFY_API_KEY: ${NOTIFY_API_KEY}
     ports: ["8004:8000"]
     depends_on:
@@ -148,20 +148,20 @@ services:
   # ───────────────────── integration layer (adapters) ─────────────────────
   mcp-core:
     build: {context: ./integrations, dockerfile: mcp_core/Dockerfile}
-    environment: {<<: *integration-env, MCP_SERVER_NAME: nethiz-core}
+    environment: {<<: *integration-env, MCP_SERVER_NAME: netswift-core}
     ports: ["9101:8000"]
     depends_on:
       core-api: {condition: service_healthy}
 
   mcp-payment:
     build: {context: ./integrations, dockerfile: mcp_payment/Dockerfile}
-    environment: {<<: *integration-env, MCP_SERVER_NAME: nethiz-payment, PSP_API_KEY: "${PSP_API_KEY}"}
+    environment: {<<: *integration-env, MCP_SERVER_NAME: netswift-payment, PSP_API_KEY: "${PSP_API_KEY}"}
     ports: ["9102:8000"]
     depends_on: [payment-gateway]
 
   mcp-ticketing:
     build: {context: ./integrations, dockerfile: mcp_ticketing/Dockerfile}
-    environment: {<<: *integration-env, MCP_SERVER_NAME: nethiz-ticketing, TICKETING_API_KEY: "${TICKETING_API_KEY}"}
+    environment: {<<: *integration-env, MCP_SERVER_NAME: netswift-ticketing, TICKETING_API_KEY: "${TICKETING_API_KEY}"}
     ports: ["9103:8000"]
     depends_on:
       ticketing: {condition: service_healthy}
@@ -170,14 +170,14 @@ services:
     build: {context: ./integrations, dockerfile: mcp_monitoring/Dockerfile}
     environment:
       <<: *integration-env
-      MCP_SERVER_NAME: nethiz-monitoring
+      MCP_SERVER_NAME: netswift-monitoring
       ASSISTANT_ALERT_WEBHOOK_URL: ${ASSISTANT_ALERT_WEBHOOK_URL}
     ports: ["9104:8000"]
     depends_on: [prometheus]
 
   mcp-notification:
     build: {context: ./integrations, dockerfile: mcp_notification/Dockerfile}
-    environment: {<<: *integration-env, MCP_SERVER_NAME: nethiz-notification, NOTIFY_API_KEY: "${NOTIFY_API_KEY}"}
+    environment: {<<: *integration-env, MCP_SERVER_NAME: netswift-notification, NOTIFY_API_KEY: "${NOTIFY_API_KEY}"}
     ports: ["9105:8000"]
     depends_on:
       notification-hub: {condition: service_healthy}
@@ -186,9 +186,9 @@ services:
   assistant:
     build: {context: ./assistant}
     environment:
-      TZ: ${TZ:-Europe/Istanbul}
+      TZ: ${TZ:-Europe/London}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      TENANT: ${TENANT:-nethiz}
+      TENANT: ${TENANT:-netswift}
       TENANT_CONFIG_DIR: /app/config/tenants
       ASSISTANT_DATABASE_URL: postgresql+psycopg://${ASSISTANT_DB_USER}:${ASSISTANT_DB_PASSWORD}@assistant-db:5432/${ASSISTANT_DB_NAME}
       MCP_CORE_URL: http://mcp-core:8000/mcp
@@ -224,8 +224,8 @@ services:
     profiles: ["tools"]
     environment:
       <<: *company-env
-      COMPANY_DB_NAME: nethiz_core
-      PAYMENT_DB_NAME: nethiz_payment
+      COMPANY_DB_NAME: netswift_core
+      PAYMENT_DB_NAME: netswift_payment
       CORE_API_BASE_URL: http://core-api:8000
       CORE_API_KEY_CRM: ${CORE_API_KEY_CRM}
       PAYMENT_API_BASE_URL: http://payment-gateway:8000
@@ -238,7 +238,7 @@ services:
     profiles: ["test"]
     environment:
       <<: *integration-env
-      TENANT: ${TENANT:-nethiz}
+      TENANT: ${TENANT:-netswift}
       TENANT_CONFIG_DIR: /workspace/config/tenants
       COMPANY_DB_USER: ${COMPANY_DB_USER}
       COMPANY_DB_PASSWORD: ${COMPANY_DB_PASSWORD}

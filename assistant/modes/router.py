@@ -24,25 +24,24 @@ _INTENT_TO_MODE: dict[Intent, Mode] = {
     Intent.OUT_OF_SCOPE: Mode.CLOSING,
 }
 
-_SMALLTALK_REPLY_TR = (
-    "Merhaba! Paket önerisi, arıza teşhisi ya da mevcut talebinizin durumu hakkında "
-    "yardımcı olabilirim. Nasıl destek olabilirim?"
+_SMALLTALK_REPLY_EN = (
+    "Hello! I can help with package recommendations, diagnosing a fault, or the status of "
+    "an existing request. How can I help?"
 )
-_OUT_OF_SCOPE_REPLY_TR = (
-    "Bu konuda yardımcı olamıyorum çünkü yetkim NetHız internet hizmetleriyle sınırlı. "
-    "İnternet paketiniz, aboneliğiniz veya mevcut bir talebinizle ilgili yazabilirsiniz."
+_OUT_OF_SCOPE_REPLY_EN = (
+    "I cannot help with that, as I can only assist with NetSwift internet services. "
+    "Feel free to ask about your broadband package, your subscription or an existing request."
 )
-_HANDOVER_REPLY_TR = (
-    "Ne ile ilgili yardım istediğinizden tam olarak emin olamadım, bu yüzden sizi bir "
-    "temsilciye yönlendiriyorum."
+_HANDOVER_REPLY_EN = (
+    "I was not quite sure what you need help with, so I am passing you to an agent."
 )
 # When the model itself is unreachable the honest answer is not "I did not understand you" —
 # the customer wrote perfectly clearly. `LLMStructuredDecisionService` reports a failed
 # provider call as a confidence-0 decision whose rationale starts with this marker.
 _PROVIDER_FAILURE_MARKER = "decision provider call failed"
-_PROVIDER_DOWN_REPLY_TR = (
-    "Şu anda yapay zekâ servisime ulaşamıyorum, bu yüzden talebinizi değerlendiremiyorum. "
-    "Sizi bir temsilciye yönlendiriyorum; kısa süre içinde tekrar denemeniz de mümkün."
+_PROVIDER_DOWN_REPLY_EN = (
+    "I cannot reach my AI service right now, so I am unable to look at your request. "
+    "I am passing you to an agent; you are also welcome to try again shortly."
 )
 
 
@@ -52,7 +51,7 @@ class RouterResult:
     next_mode: Mode
     confidence: float
     escalated: bool
-    reply_tr: str | None  # set only for terminal intents (smalltalk/out_of_scope/handover)
+    reply_en: str | None  # set only for terminal intents (smalltalk/out_of_scope/handover)
 
 
 def route_intent(ctx: TurnContext, masked_message: str) -> RouterResult:
@@ -94,25 +93,25 @@ def route_intent(ctx: TurnContext, masked_message: str) -> RouterResult:
             next_mode=Mode.CLOSING,
             confidence=fallback.decision.confidence,
             escalated=True,
-            reply_tr=(
-                _PROVIDER_DOWN_REPLY_TR
+            reply_en=(
+                _PROVIDER_DOWN_REPLY_EN
                 if _PROVIDER_FAILURE_MARKER in (fallback.decision.rationale or "")
-                else _HANDOVER_REPLY_TR
+                else _HANDOVER_REPLY_EN
             ),
         )
 
     intent = fallback.decision.value
     next_mode = _INTENT_TO_MODE[intent]
-    reply_tr = None
+    reply_en = None
     if intent is Intent.SMALLTALK:
-        reply_tr = _SMALLTALK_REPLY_TR
+        reply_en = _SMALLTALK_REPLY_EN
     elif intent is Intent.OUT_OF_SCOPE:
-        reply_tr = _OUT_OF_SCOPE_REPLY_TR
+        reply_en = _OUT_OF_SCOPE_REPLY_EN
 
     return RouterResult(
         intent=intent,
         next_mode=next_mode,
         confidence=fallback.decision.confidence,
         escalated=fallback.escalated,
-        reply_tr=reply_tr,
+        reply_en=reply_en,
     )

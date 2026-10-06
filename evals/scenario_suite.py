@@ -1,5 +1,5 @@
 """The scenario suite (`evals/datasets/scenarios.yaml`, contracts §5): inject a chaos
-scenario live against the company stack, send one Turkish user message through the real
+scenario live against the company stack, send one user message through the real
 `Orchestrator`, and assert every expectation key present in the case.
 
 Injection strategy per scenario id (documented in `evals/README.md`):
@@ -29,16 +29,16 @@ from typing import Any
 
 from evals import chaos_cli
 from evals.chaos_cli import ChaosCliError
-from evals.checks import BLAME_PHRASES_TR, CaseResult, contains_any, contains_none, error_case
+from evals.checks import BLAME_PHRASES_EN, CaseResult, contains_any, contains_none, error_case
 from modes.tool_data import raw_payload
 
 # Scenarios where each tone variant must inject its own fresh customer/subscription.
 _FRESH_INJECTION_IDS = {"stuck_provisioning", "paid_not_active", "double_charge", "missed_installation"}
 
 # A customer that always exists in the live seed (contracts §1.1: 200 seeded customers,
-# NH-100001.. sequential) — used only where a scenario has no customer of its own to pick
+# NS-100001.. sequential) — used only where a scenario has no customer of its own to pick
 # (`payment_down`'s global outage flag, and the no-action cases, which never touch chaos).
-DEFAULT_CUSTOMER_NO = "NH-100001"
+DEFAULT_CUSTOMER_NO = "NS-100001"
 
 
 # --------------------------------------------------------------------------------------
@@ -169,21 +169,21 @@ def _apply_common_checks(
         steps = (ticket_record or {}).get("attempted_steps") or []
         case.add("ticket_must_list_attempted_steps", bool(steps), expected="non-empty attempted_steps", actual=steps)
 
-    if "reply_must_mention_any_tr" in expect:
-        phrases = expect["reply_must_mention_any_tr"]
-        case.add("reply_must_mention_any_tr", contains_any(turn.reply_tr, phrases), expected=phrases, actual=turn.reply_tr)
+    if "reply_must_mention_any_en" in expect:
+        phrases = expect["reply_must_mention_any_en"]
+        case.add("reply_must_mention_any_en", contains_any(turn.reply_en, phrases), expected=phrases, actual=turn.reply_en)
 
-    if "reply_must_not_mention_any_tr" in expect:
-        phrases = expect["reply_must_not_mention_any_tr"]
+    if "reply_must_not_mention_any_en" in expect:
+        phrases = expect["reply_must_not_mention_any_en"]
         case.add(
-            "reply_must_not_mention_any_tr", contains_none(turn.reply_tr, phrases),
-            expected=f"none of {phrases}", actual=turn.reply_tr,
+            "reply_must_not_mention_any_en", contains_none(turn.reply_en, phrases),
+            expected=f"none of {phrases}", actual=turn.reply_en,
         )
 
     if expect.get("must_not_blame_customer"):
         case.add(
-            "must_not_blame_customer", contains_none(turn.reply_tr, BLAME_PHRASES_TR),
-            expected=f"none of {BLAME_PHRASES_TR}", actual=turn.reply_tr,
+            "must_not_blame_customer", contains_none(turn.reply_en, BLAME_PHRASES_EN),
+            expected=f"none of {BLAME_PHRASES_EN}", actual=turn.reply_en,
         )
 
     # Informational only (always recorded as passed): which path `classify_issue_type`/
@@ -244,7 +244,7 @@ def _run_fresh_injection_scenario(harness: Any, scenario: dict[str, Any], result
             case.message = f"orchestrator call failed: {exc}"
             results.append(case)
             continue
-        case.reply_tr = turn.reply_tr
+        case.reply_en = turn.reply_en
         _apply_common_checks(case, harness, turn, conv_id, expect)
         results.append(case.finalize())
 
@@ -298,7 +298,7 @@ def _run_regional_outage(harness: Any, scenario: dict[str, Any], results: list[C
             case.message = f"orchestrator call failed: {exc}"
             results.append(case)
             continue
-        case.reply_tr = turn.reply_tr
+        case.reply_en = turn.reply_en
         # The incident-attach + (confirmation-required) goodwill-credit offer both happen
         # in this same first turn (modes/action.py), so a first-time affected customer
         # legitimately pauses at AWAITING_APPROVAL — not a terminal mode the dataset's
@@ -324,7 +324,7 @@ def _run_regional_outage(harness: Any, scenario: dict[str, Any], results: list[C
     if len(customer_pool) < 2:
         dedup.message = "only one affected customer available in this region; reused it twice"
     try:
-        sample_text = messages[0]["text"] if messages else "Sorun yaşıyorum."
+        sample_text = messages[0]["text"] if messages else "I am having a problem."
         for idx, cno in enumerate(two):
             conv_id = harness.new_conversation_id(f"{case_id}-dedup-{idx}")
             harness.send(conv_id, cno, sample_text)
@@ -363,7 +363,7 @@ def _run_payment_down(harness: Any, scenario: dict[str, Any], results: list[Case
             case.message = f"orchestrator call failed: {exc}"
             results.append(case)
             continue
-        case.reply_tr = turn.reply_tr
+        case.reply_en = turn.reply_en
         _apply_common_checks(case, harness, turn, conv_id, expect)
         results.append(case.finalize())
 
@@ -381,7 +381,7 @@ def _run_no_action_case(harness: Any, case: dict[str, Any], results: list[CaseRe
         result.message = f"orchestrator call failed: {exc}"
         results.append(result)
         return
-    result.reply_tr = turn.reply_tr
+    result.reply_en = turn.reply_en
     _apply_common_checks(result, harness, turn, conv_id, case["expect"])
     results.append(result.finalize())
 

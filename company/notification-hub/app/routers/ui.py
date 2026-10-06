@@ -29,7 +29,7 @@ def _initials(name: str) -> str:
 def _fmt_dt(value: datetime | None) -> str:
     if value is None:
         return ""
-    return value.strftime("%d.%m.%Y %H:%M")
+    return value.strftime("%d/%m/%Y %H:%M")
 
 
 def _to_pretty_json(value: object) -> str:

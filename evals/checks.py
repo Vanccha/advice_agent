@@ -16,21 +16,21 @@ from typing import Any
 # instead of on the company's system. This is necessarily a judgement call for a
 # string-matching harness — the list below is deliberately a module-level constant (not
 # inlined into the assertion) so it is easy to find and extend.
-BLAME_PHRASES_TR: tuple[str, ...] = (
-    "kartınızda bir sorun",
-    "kartınızda sorun",
-    "kartınızdan kaynaklanıyor",
-    "kartınızla ilgili bir sorun",
-    "kartınız geçersiz",
-    "kartınızı kontrol edin",
-    "cihazınızdaki sorun",
-    "cihazınızdan kaynaklanıyor",
-    "modeminizde sorun",
-    "modeminizden kaynaklanıyor",
-    "sizin hatanız",
-    "sizden kaynaklanan",
-    "siz hatalı",
-    "hatalı girdiniz",
+BLAME_PHRASES_EN: tuple[str, ...] = (
+    "a problem with your card",
+    "an issue with your card",
+    "caused by your card",
+    "your card is invalid",
+    "please check your card",
+    "check your card details",
+    "a problem with your device",
+    "caused by your device",
+    "a problem with your modem",
+    "caused by your modem",
+    "your fault",
+    "caused by you",
+    "your mistake",
+    "you entered it incorrectly",
 )
 
 
@@ -65,7 +65,7 @@ class CaseResult:
     checks: list[Check] = field(default_factory=list)
     message: str = ""
     conversation_id: str | None = None
-    reply_tr: str | None = None
+    reply_en: str | None = None
 
     @property
     def full_id(self) -> str:
@@ -87,7 +87,7 @@ class CaseResult:
             "status": self.status,
             "message": self.message,
             "conversation_id": self.conversation_id,
-            "reply_tr": self.reply_tr,
+            "reply_en": self.reply_en,
             "checks": [c.to_dict() for c in self.checks],
         }
 

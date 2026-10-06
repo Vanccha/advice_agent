@@ -15,7 +15,7 @@ def test_ticket_status_webhook_produces_user_notice(tenant_config, session_facto
     })
     orch = build_orchestrator(tenant_config, session_factory, gateway=gateway)
     turn = orch.handle_message(
-        conversation_id=None, customer_no="NH-100001", message="Faturamda yanlış tahsilat var, iki kere çekilmiş"
+        conversation_id=None, customer_no="NS-100001", message="There is a wrong charge on my bill, I was charged twice"
     )
     assert turn.ticket_key == "TKT-2026-00050"
 
@@ -26,8 +26,8 @@ def test_ticket_status_webhook_produces_user_notice(tenant_config, session_facto
     result = orch.handle_ticket_event(event)
     assert result is not None
     assert result.conversation_id == turn.conversation_id
-    assert "TKT-2026-00050" in result.reply_tr
-    assert "işlemde" in result.reply_tr
+    assert "TKT-2026-00050" in result.reply_en
+    assert "in progress" in result.reply_en
 
 
 def test_ticket_webhook_for_unknown_ticket_returns_none(tenant_config, session_factory) -> None:
@@ -53,7 +53,7 @@ def test_alert_webhook_records_event_and_creates_ticket(tenant_config, session_f
     assert result is not None
     assert result.mode == Mode.ESCALATED.value
     assert result.ticket_key == "TKT-2026-00077"
-    assert "ödeme sistemi geçici olarak kullanılamıyor" in result.reply_tr.lower()
+    assert "the payment system is temporarily unavailable" in result.reply_en.lower()
     assert any(name == "post_department_message" for name, _ in gateway.calls_made)
 
     with session_factory() as session:

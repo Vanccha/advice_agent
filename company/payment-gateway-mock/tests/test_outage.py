@@ -20,9 +20,9 @@ def test_outage_blocks_business_endpoints_and_health(client, auth_headers):
     create_resp = client.post(
         "/psp/v1/charges",
         json={
-            "amount_try": 10.0,
-            "currency": "TRY",
-            "customer_ref": "NH-20",
+            "amount_gbp": 10.0,
+            "currency": "GBP",
+            "customer_ref": "NS-20",
             "method": "card",
             "card_token": "tok_test_1",
             "idempotency_key": "during-outage",

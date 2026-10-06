@@ -7,37 +7,37 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core_common.tr import format_money_try
+from core_common.text import format_money
 from core_common.types import Mode, StepType
 from modes.context import TurnContext
 from modes.tool_data import first_record
 
-_SUBSCRIPTION_STATUS_TR = {
-    "registered": "kayıt oluşturuldu",
-    "awaiting_payment": "ödeme bekleniyor",
-    "payment_received": "ödeme alındı, kurulum bekleniyor",
-    "provisioning": "kurulum işlemi sürüyor",
-    "provisioned": "kurulum tamamlandı, randevu bekleniyor",
-    "installation_scheduled": "kurulum randevusu planlandı",
-    "active": "aktif",
-    "suspended": "askıya alınmış",
-    "cancelled": "iptal edilmiş",
+_SUBSCRIPTION_STATUS_EN = {
+    "registered": "registered",
+    "awaiting_payment": "awaiting payment",
+    "payment_received": "payment received, waiting for setup",
+    "provisioning": "setup in progress",
+    "provisioned": "setup complete, waiting for an appointment",
+    "installation_scheduled": "installation appointment booked",
+    "active": "active",
+    "suspended": "suspended",
+    "cancelled": "cancelled",
 }
 
-_TICKET_STATUS_TR = {
-    "NEW": "yeni",
-    "TRIAGE": "değerlendiriliyor",
-    "IN_PROGRESS": "işlemde",
-    "WAITING_CUSTOMER": "sizden bilgi bekleniyor",
-    "RESOLVED": "çözüldü",
-    "CLOSED": "kapatıldı",
-    "REJECTED": "reddedildi",
+_TICKET_STATUS_EN = {
+    "NEW": "new",
+    "TRIAGE": "under review",
+    "IN_PROGRESS": "in progress",
+    "WAITING_CUSTOMER": "waiting for information from you",
+    "RESOLVED": "resolved",
+    "CLOSED": "closed",
+    "REJECTED": "rejected",
 }
 
 
 @dataclass
 class StatusQueryResult:
-    reply_tr: str
+    reply_en: str
     next_mode: Mode
 
 
@@ -53,22 +53,22 @@ def handle_status_query(ctx: TurnContext, customer_no: str) -> StatusQueryResult
 
     if tickets:
         latest = tickets[0]
-        status_tr = _TICKET_STATUS_TR.get(latest.get("status"), latest.get("status", "bilinmiyor"))
+        status_en = _TICKET_STATUS_EN.get(latest.get("status"), latest.get("status", "unknown"))
         parts.append(
-            f"En güncel talebiniz {latest.get('ticket_key', '—')}: durum '{status_tr}'."
+            f"Your most recent request is {latest.get('ticket_key', '—')}: status '{status_en}'."
         )
     else:
-        parts.append("Açık bir talebiniz görünmüyor.")
+        parts.append("I cannot see any open requests for you.")
 
     sub_outcome = ctx.call_tool("get_subscription_status", {"customer_no": customer_no})
     sub = first_record(sub_outcome)
     if sub is not None:
-        status_tr = _SUBSCRIPTION_STATUS_TR.get(sub.get("status"), sub.get("status", "bilinmiyor"))
-        price = sub.get("monthly_price_try")
-        price_part = f", aylık {format_money_try(price)}" if price is not None else ""
-        parts.append(f"Aboneliğinizin durumu: {status_tr}{price_part}.")
+        status_en = _SUBSCRIPTION_STATUS_EN.get(sub.get("status"), sub.get("status", "unknown"))
+        price = sub.get("monthly_price_gbp")
+        price_part = f", {format_money(price)} a month" if price is not None else ""
+        parts.append(f"Your subscription status: {status_en}{price_part}.")
 
-    reply_tr = " ".join(parts)
+    reply_en = " ".join(parts)
     ctx.audit_log.append(
         ctx.conversation_id,
         StepType.MODE_DECISION,
@@ -77,4 +77,4 @@ def handle_status_query(ctx: TurnContext, customer_no: str) -> StatusQueryResult
         {"ticket_count": len(tickets)},
         tenant=ctx.tenant,
     )
-    return StatusQueryResult(reply_tr=reply_tr, next_mode=Mode.CLOSING)
+    return StatusQueryResult(reply_en=reply_en, next_mode=Mode.CLOSING)

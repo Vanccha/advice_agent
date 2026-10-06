@@ -22,7 +22,7 @@ class PaymentStatus(BaseModel):
     subscription_id: int
     payment_id: int
     charge_ref: str
-    amount_try: float
+    amount_gbp: float
     status: str
     method: str
     failure_code: Optional[str] = None
@@ -53,7 +53,7 @@ class Charge(BaseModel):
     charge_ref: str
     status: str
     customer_ref: str
-    amount_try: float
+    amount_gbp: float
     currency: str
     method: str
     card_last4: Optional[str] = None
@@ -101,7 +101,7 @@ class DetectDuplicateChargesInput(BaseModel):
 
 
 class DuplicateChargeGroup(BaseModel):
-    amount_try: float
+    amount_gbp: float
     charge_refs: list[str]
     timestamps: list[str]
     count: int

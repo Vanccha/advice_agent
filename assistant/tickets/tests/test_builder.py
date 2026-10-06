@@ -8,18 +8,18 @@ def _double_charge_ticket() -> StructuredTicket:
         department=Department.BILLING,
         issue_type=IssueType.DOUBLE_CHARGE,
         priority=Priority.HIGH,
-        subject_tr="Çift tahsilat — NH-100042 (2 x 459,00 TRY)",
-        body_tr=(
-            "Müşteri NH-100042 için 88 ve 89 numaralı ödemelerin aynı gün, aynı tutarda ve "
-            "4 dakika arayla başarılı şekilde tahsil edildiği tespit edildi. İade işlemi "
-            "yetkim dışında olduğu için gerçekleştirilemedi."
+        subject_en="Double charge — NS-100042 (2 x £45.90)",
+        body_en=(
+            "For customer NS-100042, payments 88 and 89 were both taken successfully on the "
+            "same day, for the same amount, 4 minutes apart. The refund could not be issued "
+            "because it is outside my authority."
         ),
-        requester_customer_no="NH-100042",
-        requester_name="Ali Kaya",
-        requester_contact="+90 532 111 22 31",
+        requester_customer_no="NS-100042",
+        requester_name="Amy Khan",
+        requester_contact="+44 7700 900 131",
         evidence_record_ids={"subscription_id": 42, "payment_ids": [88, 89]},
         evidence_error_codes=[],
-        evidence_observations=["İki ödeme aynı gün, aynı tutar, 4 dakika arayla succeeded."],
+        evidence_observations=["Two payments on the same day, same amount, 4 minutes apart, both succeeded."],
         evidence_queried_sources=["diag.payment_status", "payment_api:list_customer_charges"],
         attempted_steps=[
             AttemptedStep(step="get_payment_status", result="2 succeeded charges found", outcome="info"),
@@ -29,8 +29,8 @@ def _double_charge_ticket() -> StructuredTicket:
                 outcome="blocked",
             ),
         ],
-        suggested_next_step_tr="88 numaralı ödemenin iadesi (459,00 TRY) onaylanmalı.",
-        urgency_reason_tr="Müşteriden iki kez tahsilat alındı, yasal süre içinde iade gerekiyor.",
+        suggested_next_step_en="Approve the refund of payment 88 (£45.90).",
+        urgency_reason_en="The customer was charged twice; a refund is due within the statutory period.",
     )
 
 
@@ -41,19 +41,19 @@ def test_matches_contracts_4_1_shape_field_for_field():
     assert payload["department"] == "BILLING"
     assert payload["issue_type"] == "double_charge"
     assert payload["priority"] == "HIGH"
-    assert payload["subject"] == "Çift tahsilat — NH-100042 (2 x 459,00 TRY)"
+    assert payload["subject"] == "Double charge — NS-100042 (2 x £45.90)"
     assert payload["source"] == "api"
     assert payload["external_ref"] == "conv-9f2c1a:double_charge"
     assert payload["incident_ref"] is None
     assert payload["requester"] == {
-        "customer_no": "NH-100042",
+        "customer_no": "NS-100042",
         "name": "A** K***",
-        "contact": "+90 5** *** ** 31",
+        "contact": "+44 7*** *** *31",
     }
     assert payload["evidence"]["record_ids"] == {"subscription_id": 42, "payment_ids": [88, 89]}
     assert payload["evidence"]["error_codes"] == []
     assert payload["evidence"]["observations"] == [
-        "İki ödeme aynı gün, aynı tutar, 4 dakika arayla succeeded."
+        "Two payments on the same day, same amount, 4 minutes apart, both succeeded."
     ]
     assert payload["evidence"]["queried_sources"] == [
         "diag.payment_status",
@@ -67,19 +67,19 @@ def test_matches_contracts_4_1_shape_field_for_field():
             "outcome": "blocked",
         },
     ]
-    assert payload["affected_customers"] == ["NH-100042"]
-    assert payload["suggested_next_step"] == "88 numaralı ödemenin iadesi (459,00 TRY) onaylanmalı."
+    assert payload["affected_customers"] == ["NS-100042"]
+    assert payload["suggested_next_step"] == "Approve the refund of payment 88 (£45.90)."
     assert payload["urgency_reason"] == (
-        "Müşteriden iki kez tahsilat alındı, yasal süre içinde iade gerekiyor."
+        "The customer was charged twice; a refund is due within the statutory period."
     )
 
 
 def test_no_raw_pii_survives_but_customer_no_does():
     ticket = _double_charge_ticket()
     payload_text = str(ticket.model_dump(mode="json"))
-    assert "+90 532 111 22 31" not in payload_text
-    assert "Ali Kaya" not in payload_text
-    assert "NH-100042" in payload_text  # allow_unmasked: customer_no survives
+    assert "+44 7700 900 131" not in payload_text
+    assert "Amy Khan" not in payload_text
+    assert "NS-100042" in payload_text  # allow_unmasked: customer_no survives
 
 
 def test_external_ref_makes_two_builds_of_the_same_issue_identical():
@@ -100,13 +100,13 @@ def test_affected_customers_defaults_to_the_requester_when_not_given():
         department=Department.FIELD_INSTALL,
         issue_type=IssueType.MISSED_INSTALLATION,
         priority=Priority.NORMAL,
-        subject_tr="Kurulum randevusu kaçırıldı",
-        body_tr="Randevu kaçırıldı, saha ekibi bilgilendirildi.",
-        requester_customer_no="NH-100099",
-        requester_name="Ayşe Demir",
-        requester_contact="ayse.demir@ornek-eposta.test",
-        suggested_next_step_tr="Yeni randevu planlanmalı.",
-        urgency_reason_tr="Müşteri hizmete bağlanamıyor.",
+        subject_en="Installation appointment missed",
+        body_en="The appointment was missed; the field team has been informed.",
+        requester_customer_no="NS-100099",
+        requester_name="Grace Evans",
+        requester_contact="grace.evans@example-mail.test",
+        suggested_next_step_en="Book a new appointment.",
+        urgency_reason_en="The customer cannot get connected.",
     )
-    assert ticket.affected_customers == ["NH-100099"]
-    assert "@ornek-eposta.test" not in str(ticket.model_dump(mode="json"))
+    assert ticket.affected_customers == ["NS-100099"]
+    assert "@example-mail.test" not in str(ticket.model_dump(mode="json"))

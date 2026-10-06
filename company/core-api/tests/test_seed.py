@@ -15,7 +15,7 @@ def seeded_session():
     from app.seed import run_seed
     from app.settings import CoreApiSettings
 
-    db_name = "nethiz_core_test_seed"
+    db_name = "netswift_core_test_seed"
     ensure_database(db_name)
 
     settings = CoreApiSettings(company_db_name=db_name, seed_on_startup=False)
@@ -44,15 +44,15 @@ def test_seed_creates_200_customers(seeded_session):
     assert count == 200
 
 
-def test_seed_national_ids_all_fail_checksum(seeded_session):
-    from shared.fake_identity import national_id_checksum_valid
+def test_seed_national_ids_are_all_unallocatable(seeded_session):
+    from shared.fake_identity import national_id_is_valid
 
     from app.models import Customer
 
     national_ids = seeded_session.scalars(select(Customer.national_id)).all()
     assert len(national_ids) == 200
     for nid in national_ids:
-        assert not national_id_checksum_valid(nid), f"{nid} unexpectedly passes the checksum"
+        assert not national_id_is_valid(nid), f"{nid} unexpectedly looks like a real NI number"
 
 
 def test_seed_status_distribution(seeded_session):
@@ -76,7 +76,7 @@ def test_seed_is_idempotent(seeded_session):
     from app.seed import run_seed
     from app.settings import CoreApiSettings
 
-    ran_again = run_seed(seeded_session, CoreApiSettings(company_db_name="nethiz_core_test_seed"))
+    ran_again = run_seed(seeded_session, CoreApiSettings(company_db_name="netswift_core_test_seed"))
     assert ran_again is False
     count = seeded_session.scalar(select(func.count()).select_from(Customer))
     assert count == 200
@@ -86,4 +86,4 @@ def test_seed_creates_service_accounts(seeded_session):
     from app.models import ServiceAccount
 
     names = set(seeded_session.scalars(select(ServiceAccount.name)).all())
-    assert names == {"nethiz-crm", "partner-integration"}
+    assert names == {"netswift-crm", "partner-integration"}

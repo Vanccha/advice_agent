@@ -12,13 +12,13 @@ def _ticket():
         department=Department.BILLING,
         issue_type=IssueType.DOUBLE_CHARGE,
         priority=Priority.HIGH,
-        subject_tr="Çift tahsilat",
-        body_tr="Detaylar...",
-        requester_customer_no="NH-100042",
-        requester_name="Ali Kaya",
-        requester_contact="+90 532 111 22 31",
-        suggested_next_step_tr="İade onaylanmalı.",
-        urgency_reason_tr="Yasal süre var.",
+        subject_en="Double charge",
+        body_en="Detaylar...",
+        requester_customer_no="NS-100042",
+        requester_name="Amy Khan",
+        requester_contact="+44 7700 900 131",
+        suggested_next_step_en="Approve the refund.",
+        urgency_reason_en="There is a statutory deadline.",
     )
 
 
@@ -64,7 +64,7 @@ def test_list_for_customer():
         {"list_customer_tickets": {"items": [{"ticket_key": "TKT-2026-00001"}], "total": 1}}
     )
     service = TicketService(gateway)
-    tickets = service.list_for_customer("NH-100042")
+    tickets = service.list_for_customer("NS-100042")
     assert tickets == [{"ticket_key": "TKT-2026-00001"}]
 
 

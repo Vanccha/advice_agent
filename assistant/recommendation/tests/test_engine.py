@@ -21,44 +21,44 @@ REQUIRED_ENV = {
 # The 7 seeded packages (contracts §1.1), as the catalogue API would return them.
 PACKAGES = [
     {
-        "code": "FIBER_50_OGRENCI", "name": "Öğrenci Fiber 50", "down_mbps": 50, "up_mbps": 10,
-        "commitment_months": 12, "monthly_price_try": 269.00, "target_profile": "student",
+        "code": "FIBER_50_STUDENT", "name": "Student Fibre 50", "down_mbps": 50, "up_mbps": 10,
+        "commitment_months": 12, "monthly_price_gbp": 26.90, "target_profile": "student",
         "max_devices": 8, "static_ip": False, "tv_included": False, "gaming_optimized": False,
         "is_active": True,
     },
     {
-        "code": "FIBER_100_TEMEL", "name": "Temel Fiber 100", "down_mbps": 100, "up_mbps": 20,
-        "commitment_months": 24, "monthly_price_try": 349.00, "target_profile": "basic",
+        "code": "FIBER_100_BASIC", "name": "Basic Fibre 100", "down_mbps": 100, "up_mbps": 20,
+        "commitment_months": 24, "monthly_price_gbp": 34.90, "target_profile": "basic",
         "max_devices": 12, "static_ip": False, "tv_included": False, "gaming_optimized": False,
         "is_active": True,
     },
     {
-        "code": "FIBER_200_AILE", "name": "Aile Fiber 200", "down_mbps": 200, "up_mbps": 40,
-        "commitment_months": 24, "monthly_price_try": 459.00, "target_profile": "family",
+        "code": "FIBER_200_FAMILY", "name": "Family Fibre 200", "down_mbps": 200, "up_mbps": 40,
+        "commitment_months": 24, "monthly_price_gbp": 45.90, "target_profile": "family",
         "max_devices": 20, "static_ip": False, "tv_included": True, "gaming_optimized": False,
         "is_active": True,
     },
     {
-        "code": "FIBER_400_HOMEOFFICE", "name": "Home Office Fiber 400", "down_mbps": 400,
-        "up_mbps": 80, "commitment_months": 24, "monthly_price_try": 629.00,
+        "code": "FIBER_400_HOMEOFFICE", "name": "Home Office Fibre 400", "down_mbps": 400,
+        "up_mbps": 80, "commitment_months": 24, "monthly_price_gbp": 62.90,
         "target_profile": "home_office", "max_devices": 30, "static_ip": True,
         "tv_included": False, "gaming_optimized": False, "is_active": True,
     },
     {
-        "code": "FIBER_500_OYUNCU", "name": "Oyuncu Fiber 500", "down_mbps": 500, "up_mbps": 100,
-        "commitment_months": 12, "monthly_price_try": 749.00, "target_profile": "gamer",
+        "code": "FIBER_500_GAMER", "name": "Gamer Fibre 500", "down_mbps": 500, "up_mbps": 100,
+        "commitment_months": 12, "monthly_price_gbp": 74.90, "target_profile": "gamer",
         "max_devices": 25, "static_ip": False, "tv_included": False, "gaming_optimized": True,
         "is_active": True,
     },
     {
-        "code": "FIBER_1000_PREMIUM", "name": "Premium Fiber 1000", "down_mbps": 1000,
-        "up_mbps": 200, "commitment_months": 24, "monthly_price_try": 999.00,
+        "code": "FIBER_1000_PREMIUM", "name": "Premium Fibre 1000", "down_mbps": 1000,
+        "up_mbps": 200, "commitment_months": 24, "monthly_price_gbp": 99.90,
         "target_profile": "premium", "max_devices": 50, "static_ip": True,
         "tv_included": True, "gaming_optimized": True, "is_active": True,
     },
     {
-        "code": "FIBER_200_ESNEK", "name": "Esnek Fiber 200 (taahhütsüz)", "down_mbps": 200,
-        "up_mbps": 40, "commitment_months": 0, "monthly_price_try": 589.00,
+        "code": "FIBER_200_FLEX", "name": "Flex Fibre 200 (no contract)", "down_mbps": 200,
+        "up_mbps": 40, "commitment_months": 0, "monthly_price_gbp": 58.90,
         "target_profile": "basic", "max_devices": 20, "static_ip": False,
         "tv_included": False, "gaming_optimized": False, "is_active": True,
     },
@@ -70,7 +70,7 @@ def routing_config(monkeypatch: pytest.MonkeyPatch):
     clear_tenant_config_cache()
     for key, value in REQUIRED_ENV.items():
         monkeypatch.setenv(key, value)
-    cfg = load_tenant_config("nethiz", config_dir=CONFIG_DIR)
+    cfg = load_tenant_config("netswift", config_dir=CONFIG_DIR)
     clear_tenant_config_cache()
     return cfg.routing
 
@@ -87,21 +87,21 @@ def _template_regex(template: str) -> re.Pattern[str]:
 PROFILES = {
     "student_on_a_budget": (
         AdvisoryProfile(
-            usage=[UsageType.STUDENT], device_count=3, budget_try=300,
+            usage=[UsageType.STUDENT], device_count=3, budget_gbp=30,
             commitment_preference=CommitmentPreference.TWELVE,
         ),
-        "FIBER_50_OGRENCI",
+        "FIBER_50_STUDENT",
     ),
     "large_family": (
         AdvisoryProfile(
-            usage=[UsageType.FAMILY], household_size=6, device_count=15, budget_try=500,
+            usage=[UsageType.FAMILY], household_size=6, device_count=15, budget_gbp=50,
             commitment_preference=CommitmentPreference.TWENTY_FOUR, needs_tv=True,
         ),
-        "FIBER_200_AILE",
+        "FIBER_200_FAMILY",
     ),
     "home_office_static_ip": (
         AdvisoryProfile(
-            usage=[UsageType.HOME_OFFICE], device_count=10, budget_try=700,
+            usage=[UsageType.HOME_OFFICE], device_count=10, budget_gbp=70,
             commitment_preference=CommitmentPreference.TWENTY_FOUR, needs_static_ip=True,
         ),
         "FIBER_400_HOMEOFFICE",
@@ -111,28 +111,28 @@ PROFILES = {
             usage=[UsageType.GAMING], device_count=5,
             commitment_preference=CommitmentPreference.TWELVE,
         ),
-        "FIBER_500_OYUNCU",
+        "FIBER_500_GAMER",
     ),
     "no_commitment_seeker": (
         AdvisoryProfile(
-            usage=[UsageType.BASIC], device_count=4, budget_try=600,
+            usage=[UsageType.BASIC], device_count=4, budget_gbp=60,
             commitment_preference=CommitmentPreference.NONE,
         ),
-        "FIBER_200_ESNEK",
+        "FIBER_200_FLEX",
     ),
     "streaming_family": (
         AdvisoryProfile(
-            usage=[UsageType.STREAMING], household_size=4, device_count=8, budget_try=500,
+            usage=[UsageType.STREAMING], household_size=4, device_count=8, budget_gbp=50,
             commitment_preference=CommitmentPreference.TWENTY_FOUR, needs_tv=True,
         ),
-        "FIBER_200_AILE",
+        "FIBER_200_FAMILY",
     ),
     "light_user_small_budget": (
         AdvisoryProfile(
-            usage=[UsageType.BASIC], device_count=2, budget_try=300,
+            usage=[UsageType.BASIC], device_count=2, budget_gbp=30,
             commitment_preference=CommitmentPreference.ANY,
         ),
-        "FIBER_50_OGRENCI",
+        "FIBER_50_STUDENT",
     ),
     "power_user_everything": (
         AdvisoryProfile(
@@ -144,17 +144,17 @@ PROFILES = {
     ),
     "minimal_tight_budget": (
         AdvisoryProfile(
-            usage=[UsageType.BASIC], device_count=1, budget_try=280,
+            usage=[UsageType.BASIC], device_count=1, budget_gbp=28,
             commitment_preference=CommitmentPreference.NONE,
         ),
-        "FIBER_50_OGRENCI",
+        "FIBER_50_STUDENT",
     ),
     "gamer_strict_budget_falls_back_to_generic": (
         AdvisoryProfile(
-            usage=[UsageType.GAMING], device_count=6, budget_try=400,
+            usage=[UsageType.GAMING], device_count=6, budget_gbp=40,
             commitment_preference=CommitmentPreference.TWELVE,
         ),
-        "FIBER_100_TEMEL",
+        "FIBER_100_BASIC",
     ),
 }
 
@@ -181,18 +181,18 @@ def test_top_3_at_most(routing_config):
 
 def test_budget_hard_filter_excludes_over_budget_packages(routing_config):
     profile = AdvisoryProfile(
-        usage=[UsageType.GAMING], device_count=6, budget_try=400,
+        usage=[UsageType.GAMING], device_count=6, budget_gbp=40,
         commitment_preference=CommitmentPreference.TWELVE,
     )
     offers = recommend_packages(profile, PACKAGES, routing_config)
     codes = {o.package_code for o in offers}
-    assert "FIBER_500_OYUNCU" not in codes  # 749 TL, way above 400 * 1.15
-    assert "FIBER_1000_PREMIUM" not in codes  # 999 TL
+    assert "FIBER_500_GAMER" not in codes  # £74.90, way above 40 * 1.15
+    assert "FIBER_1000_PREMIUM" not in codes  # £99.90
 
 
 def test_determinism_same_input_same_output(routing_config):
     profile = AdvisoryProfile(
-        usage=[UsageType.FAMILY], household_size=4, device_count=8, budget_try=500,
+        usage=[UsageType.FAMILY], household_size=4, device_count=8, budget_gbp=50,
         needs_tv=True, commitment_preference=CommitmentPreference.TWENTY_FOUR,
     )
     first = recommend_packages(profile, PACKAGES, routing_config)
@@ -201,7 +201,7 @@ def test_determinism_same_input_same_output(routing_config):
 
 
 def test_every_reason_comes_from_configured_templates(routing_config):
-    templates = routing_config.recommendation.reason_codes_tr
+    templates = routing_config.recommendation.reason_codes_en
     patterns = [_template_regex(t) for t in templates.values()]
 
     for profile, _ in PROFILES.values():

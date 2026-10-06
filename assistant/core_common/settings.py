@@ -17,7 +17,7 @@ class AssistantSettings(BaseSettings):
     )
 
     # Tenant / config location
-    TENANT: str = "nethiz"
+    TENANT: str = "netswift"
     TENANT_CONFIG_DIR: str = "/app/config/tenants"
 
     # Database

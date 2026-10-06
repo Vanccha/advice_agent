@@ -110,7 +110,7 @@ def test_assistant_never_hardcodes_company_endpoints() -> None:
     prove the configuration layer resolves them.
     """
     violations: list[str] = []
-    hardcoded = re.compile(r"(?i)(core-api|payment-gateway|ticketing|notification-hub|nethiz)")
+    hardcoded = re.compile(r"(?i)(core-api|payment-gateway|ticketing|notification-hub|netswift)")
     for path in _python_files(ASSISTANT):
         if "tests" in path.parts or path.name.startswith("test_"):
             continue

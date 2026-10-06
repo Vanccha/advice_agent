@@ -35,7 +35,7 @@ def test_ticket_webhook_accepts_valid_signature(client, fake_gateway) -> None:
     )
     turn = client.post(
         "/api/chat",
-        json={"message": "Yanlış tahsilat yapılmış, iki kere para çekilmiş", "customer_no": "NH-100001"},
+        json={"message": "There has been a wrong charge, I was charged twice", "customer_no": "NS-100001"},
     ).json()
     assert turn["ticket_key"] == "TKT-2026-00088"
 

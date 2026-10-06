@@ -29,7 +29,7 @@ class MessageDetail(BaseModel):
 
 
 class PostDepartmentMessageInput(BaseModel):
-    channel: str = Field(description="channel slug, e.g. 'faturalama', 'teknik-altyapi'")
+    channel: str = Field(description="channel slug, e.g. 'billing', 'technical-infra'")
     title: str
     text: str
     severity: Severity = "info"

@@ -34,7 +34,7 @@ class FakeGateway:
         *,
         adapter_map: dict[str, str] | None = None,
         conversation_id: str = "fake-conversation",
-        tenant: str = "nethiz",
+        tenant: str = "netswift",
         actor: str = "assistant",
         max_calls_per_turn: int = 8,
     ) -> None:

@@ -53,8 +53,8 @@ def create_subscription(body: SubscriptionCreate, db: Session = Depends(get_db))
         customer_id=customer.id,
         package_id=package.id,
         status="registered",
-        monthly_price_try=package.monthly_price_try,
-        early_termination_fee_try=package.monthly_price_try * 2,
+        monthly_price_gbp=package.monthly_price_gbp,
+        early_termination_fee_gbp=package.monthly_price_gbp * 2,
         created_at=now,
         updated_at=now,
     )
@@ -150,7 +150,7 @@ def create_payment(
         )
 
     customer = db.get(Customer, sub.customer_id)
-    amount = body.amount_try if body.amount_try is not None else float(sub.monthly_price_try)
+    amount = body.amount_gbp if body.amount_gbp is not None else float(sub.monthly_price_gbp)
 
     if sub.status == "registered":
         transition(db, sub, "awaiting_payment", actor="api_client", reason="payment initiated")
@@ -159,7 +159,7 @@ def create_payment(
     payment = Payment(
         subscription_id=sub.id,
         customer_id=sub.customer_id,
-        amount_try=amount,
+        amount_gbp=amount,
         status="pending",
         method=body.method,
         idempotency_key=body.idempotency_key,
@@ -173,7 +173,7 @@ def create_payment(
     client = PaymentClient(settings)
     try:
         result = client.create_charge(
-            amount_try=amount,
+            amount_gbp=amount,
             customer_ref=customer.customer_no if customer else str(sub.customer_id),
             method=body.method,
             card_token=body.card_token,

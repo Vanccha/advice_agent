@@ -37,14 +37,14 @@ from privacy.masking import mask_text
 from tickets.builder import build_structured_ticket
 from tickets.client import TicketService
 
-_TICKET_STATUS_TR = {
-    "NEW": "yeni",
-    "TRIAGE": "değerlendiriliyor",
-    "IN_PROGRESS": "işlemde",
-    "WAITING_CUSTOMER": "sizden bilgi bekleniyor",
-    "RESOLVED": "çözüldü",
-    "CLOSED": "kapatıldı",
-    "REJECTED": "reddedildi",
+_TICKET_STATUS_EN = {
+    "NEW": "new",
+    "TRIAGE": "under review",
+    "IN_PROGRESS": "in progress",
+    "WAITING_CUSTOMER": "waiting for information from you",
+    "RESOLVED": "resolved",
+    "CLOSED": "closed",
+    "REJECTED": "rejected",
 }
 
 _HISTORY_CAP = 16
@@ -61,7 +61,7 @@ class TurnResult(BaseModel):
 
     conversation_id: str
     mode: str
-    reply_tr: str
+    reply_en: str
     actions: list[dict[str, Any]] = Field(default_factory=list)
     ticket_key: str | None = None
     requires_approval: bool = False
@@ -71,7 +71,7 @@ class TurnResult(BaseModel):
 
 @dataclass
 class _StepOutcome:
-    reply_tr: str
+    reply_en: str
     actions: list[dict[str, Any]] = field(default_factory=list)
     ticket_key: str | None = None
     requires_approval: bool = False
@@ -156,9 +156,9 @@ class Orchestrator:
             except LimitExceeded as exc:
                 new_mode = Mode.ESCALATED if self.machine.can_transition(mode, Mode.ESCALATED) else Mode.CLOSING
                 step = _StepOutcome(
-                    reply_tr=(
-                        "Bu konuşmada izin verilen adım sayısına ulaştım, bir temsilciye "
-                        "aktarıyorum."
+                    reply_en=(
+                        "I have reached the number of steps allowed in this conversation, so "
+                        "I am passing you to an agent."
                     )
                 )
                 self.audit_log.append(
@@ -170,9 +170,9 @@ class Orchestrator:
                 # the conversation.
                 new_mode = Mode.ESCALATED if self.machine.can_transition(mode, Mode.ESCALATED) else Mode.CLOSING
                 step = _StepOutcome(
-                    reply_tr=(
-                        "Kontrollerimi tamamlayamadan sorgu sınırıma ulaştım. Durumu bir "
-                        "temsilciye aktarıyorum, en kısa sürede size dönecekler."
+                    reply_en=(
+                        "I reached my lookup limit before finishing my checks. I am passing "
+                        "this to an agent, who will get back to you as soon as possible."
                     )
                 )
                 self.audit_log.append(
@@ -185,18 +185,18 @@ class Orchestrator:
                 )
 
         history.append({"role": "user", "content": masked_message})
-        history.append({"role": "assistant", "content": step.reply_tr})
+        history.append({"role": "assistant", "content": step.reply_en})
         state["history"] = history[-_HISTORY_CAP:]
         state["mode"] = new_mode.value
 
         self._append_message(conv_id, "user", masked_message, mode.value)
-        self._append_message(conv_id, "assistant", step.reply_tr, new_mode.value)
+        self._append_message(conv_id, "assistant", step.reply_en, new_mode.value)
         self._save_state(conv_id, state, customer_no)
 
         return TurnResult(
             conversation_id=conv_id,
             mode=new_mode.value,
-            reply_tr=step.reply_tr,
+            reply_en=step.reply_en,
             actions=step.actions,
             ticket_key=step.ticket_key,
             requires_approval=step.requires_approval,
@@ -237,7 +237,7 @@ class Orchestrator:
         ticket_key: str | None = None
 
         if not granted:
-            reply_tr = "Anlaşıldı, bu işlemi uygulamadım."
+            reply_en = "Understood, I have not carried out that action."
             new_mode = Mode.CLOSING
         else:
             try:
@@ -251,33 +251,33 @@ class Orchestrator:
                     department=department,
                     issue_type=IssueType.OTHER,
                     priority=Priority.NORMAL,
-                    subject_tr=f"Onaylanan işlem gerçekleştirilemedi — {action_name}",
-                    body_tr=f"'{action_name}' onaylandı fakat politika tarafından engellendi: {exc.decision.reason_tr}",
+                    subject_en=f"Approved action could not be carried out — {action_name}",
+                    body_en=f"'{action_name}' was approved but blocked by policy: {exc.decision.reason_en}",
                     requester_customer_no=customer_no or "unknown",
                     requester_name=name,
                     requester_contact=contact,
-                    suggested_next_step_tr=exc.decision.reason_tr or "Manuel inceleme gerekiyor.",
-                    urgency_reason_tr="Onaylanmış bir işlem tamamlanamadı.",
+                    suggested_next_step_en=exc.decision.reason_en or "Manuel inceleme gerekiyor.",
+                    urgency_reason_en="An approved action could not be completed.",
                     evidence_record_ids={"action_name": action_name},
                     evidence_queried_sources=[],
                 )
                 ticket_ref = self.ticket_service.create(ticket)
                 record_ticket_link(ctx, ticket_key=ticket_ref.ticket_key, department=ticket_ref.department)
                 ticket_key = ticket_ref.ticket_key
-                reply_tr = f"İşlemi tamamlayamadım, talebinizi ilgili ekibe ilettim: {ticket_key}."
+                reply_en = f"I could not complete the action, so I have passed your request to the relevant team: {ticket_key}."
                 new_mode = Mode.ESCALATED
             else:
-                reply_tr = "Onayınız için teşekkürler, işlemi tamamladım."
+                reply_en = "Thank you for approving; I have completed the action."
                 new_mode = Mode.CLOSING
 
         state["mode"] = new_mode.value
         self._save_state(conv_id, state, customer_no)
-        self._append_message(conv_id, "assistant", reply_tr, new_mode.value)
+        self._append_message(conv_id, "assistant", reply_en, new_mode.value)
 
         return TurnResult(
             conversation_id=conv_id,
             mode=new_mode.value,
-            reply_tr=reply_tr,
+            reply_en=reply_en,
             actions=[],
             ticket_key=ticket_key,
             requires_approval=False,
@@ -304,11 +304,11 @@ class Orchestrator:
             link.last_known_status = new_status
             link.notified_status = new_status
 
-        status_tr = _TICKET_STATUS_TR.get(new_status, new_status or "güncellendi")
-        reply_tr = f"Talebinizin ({ticket_key}) durumu güncellendi: {status_tr}."
+        status_en = _TICKET_STATUS_EN.get(new_status, new_status or "updated")
+        reply_en = f"Your request ({ticket_key}) has been updated: {status_en}."
         comment = event.get("comment")
         if comment:
-            reply_tr += f" Not: {mask_text(str(comment)).masked}"
+            reply_en += f" Not: {mask_text(str(comment)).masked}"
 
         self.audit_log.append(
             conv_id,
@@ -318,12 +318,12 @@ class Orchestrator:
             {"ticket_key": ticket_key, "new_status": new_status},
             tenant=self.tenant,
         )
-        self._append_message(conv_id, "assistant", reply_tr, Mode.CLOSING.value)
+        self._append_message(conv_id, "assistant", reply_en, Mode.CLOSING.value)
 
         return TurnResult(
             conversation_id=conv_id,
             mode=Mode.CLOSING.value,
-            reply_tr=reply_tr,
+            reply_en=reply_en,
             actions=[],
             ticket_key=ticket_key,
             requires_approval=False,
@@ -376,16 +376,16 @@ class Orchestrator:
             department=department,
             issue_type=IssueType.PAYMENT_SYSTEM_DOWN,
             priority=Priority.URGENT,
-            subject_tr=f"{alertname} — izleme sisteminden otomatik tespit",
-            body_tr=(
-                f"İzleme sisteminden gelen uyarı: {alert.get('summary') or alertname}. "
-                f"Durum: {status}, önem: {severity}."
+            subject_en=f"{alertname} — izleme sisteminden otomatik tespit",
+            body_en=(
+                f"Alert from the monitoring system: {alert.get('summary') or alertname}. "
+                f"Status: {status}, severity: {severity}."
             ),
             requester_customer_no="SYSTEM",
-            requester_name="İzleme Sistemi",
+            requester_name="Monitoring System",
             requester_contact="n/a",
-            suggested_next_step_tr="Ödeme/çekirdek API altyapısını kontrol edin.",
-            urgency_reason_tr="Sistem genelinde kesinti riski.",
+            suggested_next_step_en="Check the payment/core API infrastructure.",
+            urgency_reason_en="Risk of a system-wide outage.",
             evidence_record_ids={"alert_fingerprint": fingerprint},
             evidence_queried_sources=["mcp-monitoring:webhooks/alertmanager"],
             source="monitoring",
@@ -402,7 +402,7 @@ class Orchestrator:
                 {
                     "channel": channel.channel,
                     "title": alertname,
-                    "text": f"{alertname} tetiklendi, bilet: {ticket_ref.ticket_key}",
+                    "text": f"{alertname} fired, ticket: {ticket_ref.ticket_key}",
                     "severity": severity,
                     "source": "assistant",
                 },
@@ -418,14 +418,14 @@ class Orchestrator:
         )
         self._mark_alert_handled(fingerprint, f"ticket {ticket_ref.ticket_key} created")
 
-        reply_tr = (
-            "Ödeme sistemi geçici olarak kullanılamıyor. Teknik ekip bilgilendirildi, "
-            f"takip numarası: {ticket_ref.ticket_key}."
+        reply_en = (
+            "The payment system is temporarily unavailable. The technical team has been "
+            f"notified; reference number: {ticket_ref.ticket_key}."
         )
         return TurnResult(
             conversation_id=conv_id,
             mode=Mode.ESCALATED.value,
-            reply_tr=reply_tr,
+            reply_en=reply_en,
             actions=[],
             ticket_key=ticket_ref.ticket_key,
             requires_approval=False,
@@ -445,14 +445,14 @@ class Orchestrator:
             hops += 1
             if hops > 5:
                 return Mode.CLOSING, _StepOutcome(
-                    reply_tr="Bu konuşmayı bir temsilciye aktarıyorum."
+                    reply_en="I am passing this conversation to an agent."
                 )
 
             if mode is Mode.ROUTER:
                 router_result = route_intent(ctx, masked_message)
                 mode = self.machine.transition(Mode.ROUTER, router_result.next_mode)
-                if router_result.reply_tr is not None:
-                    return mode, _StepOutcome(reply_tr=router_result.reply_tr)
+                if router_result.reply_en is not None:
+                    return mode, _StepOutcome(reply_en=router_result.reply_en)
                 if mode is Mode.ADVISORY:
                     # Keep what the customer has already told us about their household.
                     # Re-entering advisory after a recommendation (CLOSING -> ROUTER ->
@@ -484,12 +484,12 @@ class Orchestrator:
                 state["advisory_questions_asked"] = step.questions_asked
                 target = Mode.CLOSING if step.done else Mode.ADVISORY
                 new_mode = self.machine.transition(Mode.ADVISORY, target)
-                return new_mode, _StepOutcome(reply_tr=step.reply_tr)
+                return new_mode, _StepOutcome(reply_en=step.reply_en)
 
             if mode is Mode.DIAGNOSTIC:
                 if not customer_no:
                     return Mode.CLOSING, _StepOutcome(
-                        reply_tr="Teşhis yapabilmem için önce giriş yapmanız (müşteri numaranız) gerekiyor."
+                        reply_en="Please sign in (with your customer number) first so that I can diagnose the problem."
                     )
                 diagnosis_obj = diagnostic.run_diagnosis(ctx, customer_no)
                 state["diagnosis"] = diagnosis_obj.model_dump(mode="json")
@@ -499,11 +499,11 @@ class Orchestrator:
             if mode is Mode.STATUS_QUERY:
                 if not customer_no:
                     return Mode.CLOSING, _StepOutcome(
-                        reply_tr="Durum sorgusu için önce giriş yapmanız gerekiyor."
+                        reply_en="Please sign in first so that I can check your status."
                     )
                 sq_step = status_query.handle_status_query(ctx, customer_no)
                 new_mode = self.machine.transition(Mode.STATUS_QUERY, sq_step.next_mode)
-                return new_mode, _StepOutcome(reply_tr=sq_step.reply_tr)
+                return new_mode, _StepOutcome(reply_en=sq_step.reply_en)
 
             if mode is Mode.ACTION:
                 if diagnosis_obj is None:
@@ -518,7 +518,7 @@ class Orchestrator:
                 )
                 new_mode = self.machine.transition(Mode.ACTION, action_step.next_mode)
                 return new_mode, _StepOutcome(
-                    reply_tr=action_step.reply_tr,
+                    reply_en=action_step.reply_en,
                     actions=action_step.actions,
                     ticket_key=action_step.ticket_key,
                     requires_approval=action_step.requires_approval,
@@ -528,26 +528,26 @@ class Orchestrator:
 
             if mode is Mode.AWAITING_APPROVAL:
                 return mode, _StepOutcome(
-                    reply_tr="Lütfen onay kartındaki seçeneklerden birini kullanın."
+                    reply_en="Please use one of the options on the approval card."
                 )
 
             # ESCALATED/CLOSING reached mid-loop (shouldn't normally happen): stop here.
             return mode, _StepOutcome(
-                reply_tr="Bu konuşma tamamlandı. Yeni bir konu için yazabilirsiniz."
+                reply_en="This conversation is complete. Feel free to write about something new."
             )
 
     # -- helpers --------------------------------------------------------------------------
 
     def _lookup_requester(self, ctx: TurnContext, customer_no: str | None) -> tuple[str, str]:
         if not customer_no:
-            return "Müşteri", "bilinmiyor"
+            return "Customer", "unknown"
         outcome = ctx.call_tool_cached("find_customer", {"customer_no": customer_no})
         data = first_record(outcome)
         if data is not None:
-            name = data.get("full_name") or "Müşteri"
-            contact = data.get("phone") or data.get("email") or "bilinmiyor"
+            name = data.get("full_name") or "Customer"
+            contact = data.get("phone") or data.get("email") or "unknown"
             return str(name), str(contact)
-        return "Müşteri", "bilinmiyor"
+        return "Customer", "unknown"
 
     def _mark_alert_handled(self, fingerprint: str, note: str) -> None:
         with session_scope(self.session_factory) as session:

@@ -18,7 +18,7 @@ def _reset_observability_state():
 
 def make_settings(**overrides) -> types.SimpleNamespace:
     base = dict(
-        TENANT="nethiz",
+        TENANT="netswift",
         LANGFUSE_ENABLED=False,
         LANGFUSE_PUBLIC_KEY=None,
         LANGFUSE_SECRET_KEY=None,

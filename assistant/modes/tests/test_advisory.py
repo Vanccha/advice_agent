@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core_common.tr import format_money_try
+from core_common.text import format_money
 from core_common.types import AdvisoryProfile, Mode
 from llm.scripted import ScriptedProvider, ScriptedRule
 from modes.tests.conftest import PACKAGES, build_orchestrator, make_gateway
@@ -9,35 +9,35 @@ from recommendation.engine import recommend_packages
 # `recommendation.questions.profile_is_complete` now requires usage + a household/device
 # count + budget before the profile counts as complete (contracts §4.3: 3-5 questions
 # covering usage, household/device count, budget, commitment). The fixed question order
-# (usage -> household_size -> device_count -> budget_try -> commitment_preference) means
+# (usage -> household_size -> device_count -> budget_gbp -> commitment_preference) means
 # four answers are needed even though only one of household_size/device_count is strictly
-# required, because device_count is still asked before budget_try regardless.
+# required, because device_count is still asked before budget_gbp regardless.
 FIRST_FOUR_ANSWERS = [
-    "Ev ofis için kullanıyorum, uzaktan çalışıyorum",  # usage
-    "4 kişi yaşıyoruz",  # household_size
-    "yaklaşık 10 cihaz var",  # device_count
-    "600 TL civarı",  # budget_try -> profile complete here
+    "I use it for my home office, I work remotely",  # usage
+    "4 people live here",  # household_size
+    "about 10 devices",  # device_count
+    "around £60",  # budget_gbp -> profile complete here
 ]
 
 ALL_FIVE_ANSWERS = FIRST_FOUR_ANSWERS + [
-    "24 ay taahhüt olabilir",  # commitment_preference (optional, still within the cap)
+    "a 24 month contract is fine",  # commitment_preference (optional, still within the cap)
 ]
 
 EXPECTED_PROFILE = AdvisoryProfile(
-    usage=["home_office"], household_size=4, device_count=10, budget_try=600
+    usage=["home_office"], household_size=4, device_count=10, budget_gbp=60
 )
 
 
 def _run_advisory_conversation(orch, answers: list[str]) -> list[str]:
     replies: list[str] = []
-    result = orch.handle_message(conversation_id=None, customer_no="NH-100001", message="Paket önerisi istiyorum")
+    result = orch.handle_message(conversation_id=None, customer_no="NS-100001", message="I would like a package recommendation")
     conv_id = result.conversation_id
-    replies.append(result.reply_tr)
+    replies.append(result.reply_en)
     assert result.mode == Mode.ADVISORY.value
 
     for answer in answers:
-        result = orch.handle_message(conversation_id=conv_id, customer_no="NH-100001", message=answer)
-        replies.append(result.reply_tr)
+        result = orch.handle_message(conversation_id=conv_id, customer_no="NS-100001", message=answer)
+        replies.append(result.reply_en)
         if result.mode != Mode.ADVISORY.value:
             break
     return replies
@@ -51,15 +51,15 @@ def _advisory_provider_with_reply(reply_text: str | None) -> ScriptedProvider:
 
     `ScriptedProvider._match` returns the *first* rule whose pattern matches regardless of
     which schema is being requested, so the (very specific) verbalization-reply rule must be
-    listed before the (broad, "paket"-matching) intent-classification rule — otherwise the
+    listed before the (broad, "package"-matching) intent-classification rule — otherwise the
     intent rule would shadow it and the `complete()` call would look unscripted.
     """
     rules = []
     if reply_text is not None:
-        rules.append(ScriptedRule(match=r"Müşteriye anlatılacak paket önerileri", reply=reply_text))
+        rules.append(ScriptedRule(match=r"Package recommendations to present to the customer", reply=reply_text))
     rules.append(
         ScriptedRule(
-            match=r"paket|tavsiye|öner|internet.*seç",
+            match=r"package|recommend|suggest|choose.*broadband",
             structured={"_IntentResult": {"value": "advisory", "confidence": 0.95, "rationale": "scripted"}},
         )
     )
@@ -76,40 +76,40 @@ def test_advisory_asks_at_most_five_questions(tenant_config, session_factory) ->
 
 def test_advisory_asks_for_budget_before_recommending(tenant_config, session_factory) -> None:
     orch = build_orchestrator(tenant_config, session_factory)
-    result = orch.handle_message(conversation_id=None, customer_no="NH-100001", message="Paket önerisi istiyorum")
+    result = orch.handle_message(conversation_id=None, customer_no="NS-100001", message="I would like a package recommendation")
     conv_id = result.conversation_id
 
-    for answer in ["Ev ofis için kullanıyorum, uzaktan çalışıyorum", "4 kişi yaşıyoruz", "yaklaşık 10 cihaz var"]:
-        result = orch.handle_message(conversation_id=conv_id, customer_no="NH-100001", message=answer)
+    for answer in ["I use it for my home office, I work remotely", "4 people live here", "about 10 devices"]:
+        result = orch.handle_message(conversation_id=conv_id, customer_no="NS-100001", message=answer)
 
     # usage + household_size + device_count answered, but budget is still unknown ->
     # must still be asking, not recommending yet.
     assert result.mode == Mode.ADVISORY.value
-    assert "bütçe" in result.reply_tr.lower() or "tl" in result.reply_tr.lower()
+    assert "budget" in result.reply_en.lower() or "£" in result.reply_en
 
-    result = orch.handle_message(conversation_id=conv_id, customer_no="NH-100001", message="600 TL civarı")
+    result = orch.handle_message(conversation_id=conv_id, customer_no="NS-100001", message="around £60")
     assert result.mode == Mode.CLOSING.value
 
 
 def test_advisory_recommends_at_cap_with_note_when_budget_unknown(tenant_config, session_factory) -> None:
     orch = build_orchestrator(tenant_config, session_factory)
-    result = orch.handle_message(conversation_id=None, customer_no="NH-100001", message="Paket önerisi istiyorum")
+    result = orch.handle_message(conversation_id=None, customer_no="NS-100001", message="I would like a package recommendation")
     conv_id = result.conversation_id
 
     # Explicitly skip budget and commitment -> profile never completes, so the mode must
     # stop at the policy.yaml max_questions_advisory (5) cap and recommend anyway, saying so.
     answers = [
-        "Ev ofis için kullanıyorum, uzaktan çalışıyorum",
-        "4 kişi yaşıyoruz",
-        "yaklaşık 10 cihaz var",
-        "geçebilirim",
-        "farketmez",
+        "I use it for my home office, I work remotely",
+        "4 people live here",
+        "about 10 devices",
+        "I would rather skip that",
+        "no preference",
     ]
     for answer in answers:
-        result = orch.handle_message(conversation_id=conv_id, customer_no="NH-100001", message=answer)
+        result = orch.handle_message(conversation_id=conv_id, customer_no="NS-100001", message=answer)
 
     assert result.mode == Mode.CLOSING.value
-    assert "sorabileceğim soru sayısına ulaştığım" in result.reply_tr.lower()
+    assert "i have reached the number of questions i can ask" in result.reply_en.lower()
 
 
 def test_advisory_reply_only_names_engine_returned_packages(tenant_config, session_factory) -> None:
@@ -143,9 +143,9 @@ def test_advisory_well_formed_model_reply_is_used_as_is(tenant_config, session_f
     expected_offers = recommend_packages(EXPECTED_PROFILE, PACKAGES, tenant_config.routing)
     best = expected_offers[0]
     reply_text = (
-        f"Size en uygun seçenek {best.name}: {best.down_mbps} Mbps hız, "
-        f"{format_money_try(best.monthly_price_try)}/ay. Dilerseniz diğer seçenekleri de "
-        "birlikte değerlendirebiliriz."
+        f"The best option for you is {best.name}: {best.down_mbps} Mbps, "
+        f"{format_money(best.monthly_price_gbp)}/month. If you like, we can go through the "
+        "other options together too."
     )
     provider = _advisory_provider_with_reply(reply_text)
     orch = build_orchestrator(tenant_config, session_factory, provider=provider)
@@ -162,8 +162,8 @@ def test_advisory_model_reply_with_fabricated_package_is_rejected(tenant_config,
     fabricated_name = next(p["name"] for p in PACKAGES if p["name"] not in offered_names)
 
     reply_text = (
-        f"{expected_offers[0].name} önerim, ayrıca {fabricated_name} paketini de "
-        "düşünebilirsiniz."
+        f"I recommend {expected_offers[0].name}, and you could also consider "
+        f"{fabricated_name}."
     )
     provider_with_fabrication = _advisory_provider_with_reply(reply_text)
     orch_bad = build_orchestrator(tenant_config, session_factory, provider=provider_with_fabrication)
@@ -180,9 +180,9 @@ def test_advisory_model_reply_with_fabricated_package_is_rejected(tenant_config,
 def test_advisory_model_reply_with_wrong_price_is_rejected(tenant_config, session_factory) -> None:
     expected_offers = recommend_packages(EXPECTED_PROFILE, PACKAGES, tenant_config.routing)
     best = expected_offers[0]
-    wrong_price = format_money_try(best.monthly_price_try + 100)
+    wrong_price = format_money(best.monthly_price_gbp + 10)
 
-    reply_text = f"{best.name}: {best.down_mbps} Mbps, {wrong_price}/ay."
+    reply_text = f"{best.name}: {best.down_mbps} Mbps, {wrong_price}/month."
     provider_with_wrong_price = _advisory_provider_with_reply(reply_text)
     orch_bad = build_orchestrator(tenant_config, session_factory, provider=provider_with_wrong_price)
     replies_bad = _run_advisory_conversation(orch_bad, FIRST_FOUR_ANSWERS)

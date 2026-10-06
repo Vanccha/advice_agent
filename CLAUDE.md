@@ -1,4 +1,4 @@
-# CLAUDE.md — NetHız Telekom + AI Support Assistant
+# CLAUDE.md — NetSwift Telecom + AI Support Assistant
 
 This repository is a realistic rehearsal of a commercial product: an **AI status-check agent +
 chatbot** that an enterprise buys and bolts onto systems it already runs. To keep the rehearsal
@@ -6,10 +6,10 @@ honest, the repo contains **two worlds that must never blend**.
 
 ## The two worlds
 
-| | `company/` — NetHız Telekom | `assistant/` — the product |
+| | `company/` — NetSwift Telecom | `assistant/` — the product |
 |---|---|---|
 | Story | A mid-size fiber ISP that has been running its own stack for years | A guest system installed from outside |
-| Knowledge | Knows nothing about any AI assistant | Knows nothing about NetHız internals |
+| Knowledge | Knows nothing about any AI assistant | Knows nothing about NetSwift internals |
 | Access | Owns its databases and APIs | Reaches the company **only** through `integrations/` |
 | Writes | Freely, it owns the data | Never writes to a company database; actions go through the company's own REST API |
 
@@ -42,9 +42,9 @@ company/ ──REST + read-only SQL──> integrations/ (MCP servers) ──MCP
 
 ## Language rule
 
-- Code, identifiers, comments, commit messages, logs: **English**.
-- Everything an end user or a department agent reads: **Turkish** (UI strings, assistant
-  replies, ticket bodies, policy `*_tr` fields).
+- Everything is **English** — code, identifiers, comments, commit messages and logs, and also
+  everything an end user or a department agent reads (UI strings, assistant replies, ticket
+  bodies, policy `*_en` fields). User-facing text is British English; money is GBP.
 
 ## Where things live
 
@@ -66,7 +66,7 @@ assistant/core_common/     shared types, settings, tenant-config loader, assista
                        top-level import name `common` inside assistant/)
 assistant/policy/     authority engine (policy.yaml interpreter)
 assistant/recommendation/  deterministic package scoring (no LLM)
-assistant/privacy/    KVKK masking
+assistant/privacy/    UK GDPR masking
 assistant/audit/      hash-chained, append-only audit log
 assistant/decision/   DecisionService interface (llm_structured | typesafe_jev stub)
 assistant/llm/        LLMProvider interface (openai_agents | anthropic | scripted)
@@ -76,9 +76,9 @@ assistant/mcp_gateway/  MCP client gateway + action runner (named mcp_gateway, N
                       a package called `mcp` would shadow the installed MCP client SDK)
 assistant/observability/  Langfuse + OTel wrapper (no-op when disabled)
 assistant/api/, assistant/web/   HTTP API + embedded chat widget
-config/tenants/       per-customer configuration (nethiz, _example)
+config/tenants/       per-customer configuration (netswift, _example)
 evals/                scenario + advisory evaluations (make eval)
-evals/datasets/       the Turkish user messages and customer profiles under test
+evals/datasets/       the user messages and customer profiles under test
 tests/architecture/   boundary enforcement
 tests/integration/    cross-service critical flows
 ```

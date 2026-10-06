@@ -1,7 +1,7 @@
 /* ==========================================================================
-   NetHız Destek Asistanı — embeddable chat widget
+   NetSwift Support Assistant — embeddable chat widget
    Deliberately its own visual system (indigo/violet) so it reads as a guest
-   product bolted onto NetHız's own teal-branded site (site.css), not as part
+   product bolted onto NetSwift's own teal-branded site (site.css), not as part
    of it. Every selector is scoped under .nh-widget / #chat-widget so the
    widget cannot leak styles onto — or be broken by — the host page.
    ========================================================================== */

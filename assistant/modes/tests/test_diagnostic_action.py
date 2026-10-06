@@ -3,24 +3,24 @@ from __future__ import annotations
 from core_common.types import Mode
 from modes.tests.conftest import build_orchestrator, make_gateway
 
-COMPLAINT = "İnternetim hala açılmadı, bir sorun var"
+COMPLAINT = "My internet still has not been switched on, there is a problem"
 
 
 def test_stuck_provisioning_is_fixed_without_a_ticket(tenant_config, session_factory) -> None:
     gateway = make_gateway({
         "get_subscription_status": {
-            "customer_no": "NH-100001", "subscription_id": 42, "package_code": "FIBER_100_TEMEL",
-            "status": "provisioning", "monthly_price_try": 349.0, "region_code": "IST-KAD",
+            "customer_no": "NS-100001", "subscription_id": 42, "package_code": "FIBER_100_BASIC",
+            "status": "provisioning", "monthly_price_gbp": 34.9, "region_code": "LDN-CAM",
         },
         "get_provisioning_status": {"job_id": 7, "status": "stuck", "attempt_count": 1, "is_stuck": True},
     })
     orch = build_orchestrator(tenant_config, session_factory, gateway=gateway)
-    result = orch.handle_message(conversation_id=None, customer_no="NH-100001", message=COMPLAINT)
+    result = orch.handle_message(conversation_id=None, customer_no="NS-100001", message=COMPLAINT)
 
     assert result.diagnosis["root_cause"] == "stuck_provisioning"
     assert result.mode == Mode.CLOSING.value
     assert result.ticket_key is None
-    assert ("retry_provisioning_job", {"customer_no": "NH-100001", "subscription_id": 42, "job_id": 7}) in gateway.calls_made
+    assert ("retry_provisioning_job", {"customer_no": "NS-100001", "subscription_id": 42, "job_id": 7}) in gateway.calls_made
 
 
 def test_double_charge_is_refused_and_creates_billing_ticket(tenant_config, session_factory) -> None:
@@ -32,7 +32,7 @@ def test_double_charge_is_refused_and_creates_billing_ticket(tenant_config, sess
         },
     })
     orch = build_orchestrator(tenant_config, session_factory, gateway=gateway)
-    result = orch.handle_message(conversation_id=None, customer_no="NH-100001", message=COMPLAINT)
+    result = orch.handle_message(conversation_id=None, customer_no="NS-100001", message=COMPLAINT)
 
     assert result.diagnosis["root_cause"] == "double_charge"
     assert result.mode == Mode.ESCALATED.value
@@ -49,13 +49,13 @@ def test_double_charge_is_refused_and_creates_billing_ticket(tenant_config, sess
 
 def test_regional_incident_two_customers_share_one_ticket(tenant_config, session_factory) -> None:
     incident = {
-        "incident_no": "INC-2026-014", "region_code": "IST-KAD", "severity": "critical",
-        "status": "open", "title": "Bölgesel kesinti",
+        "incident_no": "INC-2026-014", "region_code": "LDN-CAM", "severity": "critical",
+        "status": "open", "title": "Regional outage",
     }
     gateway = make_gateway({"get_active_incidents_for_region": {"items": [incident]}})
     orch = build_orchestrator(tenant_config, session_factory, gateway=gateway)
 
-    result1 = orch.handle_message(conversation_id=None, customer_no="NH-100001", message=COMPLAINT)
+    result1 = orch.handle_message(conversation_id=None, customer_no="NS-100001", message=COMPLAINT)
     assert result1.diagnosis["root_cause"] == "regional_outage"
     ticket_key_1 = result1.ticket_key
     assert ticket_key_1 is not None
@@ -66,7 +66,7 @@ def test_regional_incident_two_customers_share_one_ticket(tenant_config, session
         "find_tickets_by_incident",
         {"items": [{"ticket_key": ticket_key_1, "department": "TECHNICAL_INFRA", "status": "NEW"}]},
     )
-    result2 = orch.handle_message(conversation_id=None, customer_no="NH-100002", message=COMPLAINT)
+    result2 = orch.handle_message(conversation_id=None, customer_no="NS-100002", message=COMPLAINT)
     assert result2.ticket_key == ticket_key_1
 
     created_calls = [name for name, _ in gateway.calls_made if name == "create_structured_ticket"]
@@ -77,13 +77,13 @@ def test_regional_incident_two_customers_share_one_ticket(tenant_config, session
 
 def test_outage_credit_requires_approval_then_executes(tenant_config, session_factory) -> None:
     incident = {
-        "incident_no": "INC-2026-020", "region_code": "IST-KAD", "severity": "critical",
-        "status": "open", "title": "Bölgesel kesinti",
+        "incident_no": "INC-2026-020", "region_code": "LDN-CAM", "severity": "critical",
+        "status": "open", "title": "Regional outage",
     }
     gateway = make_gateway({"get_active_incidents_for_region": {"items": [incident]}})
     orch = build_orchestrator(tenant_config, session_factory, gateway=gateway)
 
-    result = orch.handle_message(conversation_id=None, customer_no="NH-100001", message=COMPLAINT)
+    result = orch.handle_message(conversation_id=None, customer_no="NS-100001", message=COMPLAINT)
     assert result.mode == Mode.AWAITING_APPROVAL.value
     assert result.requires_approval is True
     assert result.approval_id is not None

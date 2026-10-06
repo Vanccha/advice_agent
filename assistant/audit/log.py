@@ -181,7 +181,7 @@ class AuditLog:
         tool_input: dict[str, Any] | None = None,
         tool_output_digest: str | None = None,
     ) -> AuditEntry:
-        """Append one hash-chained row. `evidence` must already be masked (KVKK) — this is
+        """Append one hash-chained row. `evidence` must already be masked (UK GDPR) — this is
         enforced by `assert_no_pii` before anything is written."""
         evidence = evidence or {}
         assert_no_pii(evidence)

@@ -1,61 +1,61 @@
-# İkinci kiracı — kanıt, şablon değil
+# Second tenant — proof, not a template
 
-Bu klasör boş bir şablon değil: **çalışan ve `nethiz/`'den kasten farklı** ikinci bir
-müşteri. "Yeni bir müşteriye geçmek kod değişikliği gerektirmez" iddiasını okumak yerine
-çalıştırabilmen için var.
+This folder is not an empty template: it is a **working second customer, deliberately
+different from `netswift/`**. It exists so that you can run the claim "moving to a new
+customer needs no code change" instead of just reading it.
 
-## Neyi farklı yapıyor
+## What it does differently
 
-| | `nethiz` | `_example` |
+| | `netswift` | `_example` |
 |---|---|---|
-| Görünen ad | NetHız Telekom | Örnek Fiber A.Ş. |
-| Abone numarası formatı | `^NH-\d{6}$` | `^OR-[0-9]{7}$` |
-| Faturalama biriminin adı | Faturalama | Gelir Yönetimi |
-| Devretme eşiği | 0.6 | **0.8** (daha çabuk insana devreder) |
-| Danışma soru sınırı | 5 | **3** |
-| Kesinti telafisi | ≤50 TL, onayla **yapabilir** | **yapamaz** → Gelir Yönetimi |
-| Kurulum randevusu değiştirme | **yapamaz** → Saha ekibi | **onayla yapabilir** |
-| Öneri ağırlığı | hız 0.35 / bütçe 0.25 | hız 0.20 / **bütçe 0.45** |
-| İzleme ve kanal adaptörleri | zorunlu | **isteğe bağlı** (bu müşteri tedarikçiye açmıyor) |
+| Display name | NetSwift Telecom | Example Fibre Ltd |
+| Account number format | `^NS-\d{6}$` | `^OR-[0-9]{7}$` |
+| Name of the billing unit | Billing | Revenue Management |
+| Handover threshold | 0.6 | **0.8** (hands over to a human sooner) |
+| Advisory question limit | 5 | **3** |
+| Outage compensation | up to £5, **can** apply with consent | **cannot** → Revenue Management |
+| Rescheduling installations | **cannot** → field team | **can** with consent |
+| Recommendation weights | speed 0.35 / budget 0.25 | speed 0.20 / **budget 0.45** |
+| Monitoring and channel adapters | required | **optional** (this customer does not expose them to suppliers) |
 
-## Kanıtı kendin koştur
+## Run the proof yourself
 
 ```bash
-# Aynı imaj, aynı kod, yalnızca TENANT farklı:
+# Same image, same code, only TENANT differs:
 docker compose run --rm -e TENANT=_example test-runner \
   env PYTHONPATH=/workspace/assistant python -c "
 from fastapi.testclient import TestClient
 from api.main import app
 with TestClient(app) as c:
-    print(c.post('/api/login', json={'customer_no': 'NH-100001'}).json())   # INVALID_FORMAT
-    print(c.get('/login').text.count('Abone numarası'))                      # kiracının etiketi
+    print(c.post('/api/login', json={'customer_no': 'NS-100001'}).json())   # INVALID_FORMAT
+    print(c.get('/login').text.count('Account number'))                      # the tenant's label
 "
 ```
-Beklenen: `nethiz`'de geçerli olan `NH-100001` burada **format hatası** alır, giriş ekranı
-"Abone numarası" der, yetki motoru telafiyi reddedip randevu değişikliğine izin verir.
+Expected: `NS-100001`, valid for `netswift`, gets a **format error** here, the sign-in page
+says "Account number", and the authority engine denies compensation but allows rescheduling.
 
-## Dürüst sınır
+## The honest limit
 
-Yetki, eşikler, persona, departman adları, öneri ağırlıkları, hangi adaptörün zorunlu
-olduğu — hepsi konfigürasyon. Ancak **sorun tipi ve departman kodları** (`IssueType`,
-`Department`) asistanın kodunda enum olarak tanımlı. Yani:
+Authority, thresholds, persona, department names, recommendation weights, which adapters are
+required — all of it is configuration. However, the **issue types and department codes**
+(`IssueType`, `Department`) are defined as enums in the assistant's code. So:
 
-- Başka bir **internet sağlayıcısına** geçmek: yalnızca bu klasör (ve sistemleri farklıysa
-  yeni adaptörler).
-- Başka bir **sektöre** (enerji, sigorta, banka) geçmek: bu klasöre ek olarak o alanın
-  sorun tipi/departman sözlüğünün koda eklenmesi gerekir — adaptörler ve yetki motoru
-  olduğu gibi kalır.
+- Moving to another **broadband provider**: only this folder (plus new adapters if their
+  systems differ).
+- Moving to another **sector** (energy, insurance, banking): on top of this folder, that
+  domain's issue type/department vocabulary has to be added to the code — the adapters and
+  the authority engine stay as they are.
 
-## Yeni bir kiracı eklemek
+## Adding a new tenant
 
-1. Bu klasörü `config/tenants/<müşteri>/` olarak kopyala.
-2. `tenant.yaml`: görünen ad, abone numarası formatı, departman kodları ve Türkçe adları,
-   adaptör adresleri, persona.
-3. `policy.yaml`: bu müşteri için asistanın **ne yapabileceği**, parasal üst sınırlar,
-   reddedilen her aksiyonun hangi birime gideceği.
-4. `routing.yaml`: öneri ağırlıkları ve sorun tipi → departman yönlendirmesi.
-5. Sistemleri farklıysa `integrations/mcp_<sistem>/` altına yeni adaptör ekle.
-6. `TENANT=<müşteri>` ile çalıştır.
+1. Copy this folder to `config/tenants/<customer>/`.
+2. `tenant.yaml`: display name, account number format, department codes and their display
+   names, adapter URLs, persona.
+3. `policy.yaml`: **what the assistant may do** for this customer, monetary caps, and which
+   unit each denied action goes to.
+4. `routing.yaml`: recommendation weights and issue type → department routing.
+5. If their systems differ, add new adapters under `integrations/mcp_<system>/`.
+6. Run with `TENANT=<customer>`.
 
-Asistan kaynak dosyalarının hiçbirinde kiracının adı geçmez; bunu
-`tests/architecture/test_boundaries.py` kontrol eder.
+The tenant's name appears in none of the assistant's source files;
+`tests/architecture/test_boundaries.py` checks this.

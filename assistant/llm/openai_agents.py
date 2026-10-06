@@ -55,7 +55,7 @@ class OpenAIAgentsProvider:
         from agents import Agent, ModelSettings, Runner  # lazy
 
         agent = Agent(
-            name="nethiz-assistant-turn",
+            name="netswift-assistant-turn",
             instructions=system,
             model=self.model,
             model_settings=ModelSettings(temperature=temperature, max_tokens=max_tokens),

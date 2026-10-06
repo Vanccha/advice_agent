@@ -97,8 +97,8 @@ def _write_markdown(results: list[CaseResult], meta: dict[str, Any], path: Path)
         for c in r.checks:
             if not c.passed:
                 lines.append(f"- **{c.name}**: expected `{c.expected!r}`, actual `{c.actual!r}` ({c.detail})")
-        if r.reply_tr:
-            lines.append(f"- reply_tr: `{r.reply_tr}`")
+        if r.reply_en:
+            lines.append(f"- reply_en: `{r.reply_en}`")
         lines.append("")
     if not any_failure:
         lines.append("(none)")

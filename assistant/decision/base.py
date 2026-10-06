@@ -25,7 +25,7 @@ class DecisionContext(BaseModel):
     tenant: str
     # Masked conversation turns, oldest first: [{"role": "user"|"assistant", "content": "..."}].
     history: list[dict[str, str]] = Field(default_factory=list)
-    # e.g. {"customer_no": "NH-100042", "subscription_status": "active", ...} — masked.
+    # e.g. {"customer_no": "NS-100042", "subscription_status": "active", ...} — masked.
     masked_customer_facts: dict[str, Any] = Field(default_factory=dict)
     diagnosis: Diagnosis | None = None
     advisory_profile: AdvisoryProfile | None = None

@@ -12,7 +12,7 @@ from app import webhooks
 from app.main import build_app
 from app.settings import TicketingSettings
 
-TEST_DB_NAME = "nethiz_ticketing_test"
+TEST_DB_NAME = "netswift_ticketing_test"
 
 API_KEY = "test_tkt_key"
 WEBHOOK_SECRET = "test_webhook_secret"
@@ -20,8 +20,8 @@ WEBHOOK_SECRET = "test_webhook_secret"
 
 def _build_settings() -> TicketingSettings:
     return TicketingSettings(
-        company_db_user=os.environ.get("COMPANY_DB_USER", "nethiz"),
-        company_db_password=os.environ.get("COMPANY_DB_PASSWORD", "nethiz_dev_pw"),
+        company_db_user=os.environ.get("COMPANY_DB_USER", "netswift"),
+        company_db_password=os.environ.get("COMPANY_DB_PASSWORD", "netswift_dev_pw"),
         company_db_host=os.environ.get("COMPANY_DB_HOST", "localhost"),
         company_db_port=int(os.environ.get("COMPANY_DB_PORT", "55432")),
         company_db_name=TEST_DB_NAME,
@@ -37,11 +37,11 @@ def _ensure_test_database_exists(s: TicketingSettings) -> None:
     """Best-effort: create the `_test` database if it doesn't exist yet.
 
     docs/contracts.md's db-init only provisions the non-test databases; this service's
-    own tests need `nethiz_ticketing_test`. We never touch company/db-init (out of
+    own tests need `netswift_ticketing_test`. We never touch company/db-init (out of
     scope for this service), so we create it ourselves against the real
-    `nethiz_ticketing` database, which db-init does provision.
+    `netswift_ticketing` database, which db-init does provision.
     """
-    admin_engine = make_engine(s.database_url_for("nethiz_ticketing"))
+    admin_engine = make_engine(s.database_url_for("netswift_ticketing"))
     try:
         with admin_engine.connect() as conn:
             conn = conn.execution_options(isolation_level="AUTOCOMMIT")

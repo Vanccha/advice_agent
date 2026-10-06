@@ -7,14 +7,14 @@ from pydantic import BaseModel, Field
 
 class CustomerCreate(BaseModel):
     full_name: str
-    national_id: str = Field(min_length=11, max_length=11)
+    national_id: str = Field(min_length=9, max_length=9)
     phone: str
     email: str
     address_line: str
     district: str
     city: str
     region_code: str
-    kvkk_consent: bool = True
+    gdpr_consent: bool = True
 
 
 class SubscriptionCreate(BaseModel):
@@ -23,7 +23,7 @@ class SubscriptionCreate(BaseModel):
 
 
 class PaymentCreate(BaseModel):
-    amount_try: float | None = None
+    amount_gbp: float | None = None
     method: str = "card"
     card_token: str | None = None
     idempotency_key: str
@@ -40,13 +40,13 @@ class CancelRequest(BaseModel):
 
 class RefundRequest(BaseModel):
     payment_id: int
-    amount_try: float
+    amount_gbp: float
     reason: str
 
 
 class CreditRequest(BaseModel):
     subscription_id: int
-    amount_try: float
+    amount_gbp: float
     reason: str
     idempotency_key: str
 

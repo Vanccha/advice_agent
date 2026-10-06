@@ -88,7 +88,7 @@ def create_charge(
     session: Session,
     *,
     default_failure_rate: float,
-    amount_try: float,
+    amount_gbp: float,
     customer_ref: str,
     method: str,
     card_token: str | None,
@@ -126,7 +126,7 @@ def create_charge(
     charge = Charge(
         charge_ref=new_charge_ref(),
         customer_ref=customer_ref,
-        amount_try=Decimal(str(amount_try)),
+        amount_gbp=Decimal(str(amount_gbp)),
         status=status,
         method=method,
         card_last4=last4_from_token(card_token),
@@ -172,11 +172,11 @@ def total_refunded(session: Session, charge_id: int) -> Decimal:
     rows = session.execute(
         select(Refund).where(Refund.charge_id == charge_id, Refund.status == "completed")
     ).scalars()
-    return sum((r.amount_try for r in rows), Decimal("0"))
+    return sum((r.amount_gbp for r in rows), Decimal("0"))
 
 
 def refund_charge(
-    session: Session, charge: Charge, *, amount_try: float, reason: str | None
+    session: Session, charge: Charge, *, amount_gbp: float, reason: str | None
 ) -> Refund:
     if charge.status == "refunded":
         raise Conflict("ALREADY_REFUNDED", f"Charge '{charge.charge_ref}' is already fully refunded.")
@@ -186,31 +186,31 @@ def refund_charge(
             f"Charge '{charge.charge_ref}' is in status '{charge.status}' and cannot be refunded.",
         )
 
-    amount = Decimal(str(amount_try))
+    amount = Decimal(str(amount_gbp))
     already = total_refunded(session, charge.id)
-    if already + amount > charge.amount_try:
+    if already + amount > charge.amount_gbp:
         raise ApiError(
             "REFUND_EXCEEDS_CHARGE",
             "The refund amount exceeds the charge amount.",
             status_code=422,
             details={
-                "charge_amount_try": float(charge.amount_try),
-                "already_refunded_try": float(already),
-                "requested_try": float(amount),
+                "charge_amount_gbp": float(charge.amount_gbp),
+                "already_refunded_gbp": float(already),
+                "requested_gbp": float(amount),
             },
         )
 
     refund = Refund(
         refund_ref=new_refund_ref(),
         charge_id=charge.id,
-        amount_try=amount,
+        amount_gbp=amount,
         status="completed",
         reason=reason,
     )
     session.add(refund)
 
     new_total = already + amount
-    charge.status = "refunded" if new_total >= charge.amount_try else "partially_refunded"
+    charge.status = "refunded" if new_total >= charge.amount_gbp else "partially_refunded"
 
     session.flush()
     return refund

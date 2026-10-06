@@ -212,7 +212,7 @@ class FindTicketsByIncidentOutput(BaseModel):
 class AddTicketCommentInput(BaseModel):
     ticket_key: str
     body: str
-    author: str = "nethiz-mcp-ticketing"
+    author: str = "netswift-mcp-ticketing"
     is_internal: bool = False
 
 

@@ -28,37 +28,37 @@ REQUIRED_ENV = {
 
 # The 7 seeded packages (contracts §1.1), as the `list_packages` tool would return them.
 PACKAGES: list[dict[str, Any]] = [
-    {"code": "FIBER_50_OGRENCI", "name": "Öğrenci Fiber 50", "down_mbps": 50, "up_mbps": 10,
-     "commitment_months": 12, "monthly_price_try": 269.0, "target_profile": "student",
+    {"code": "FIBER_50_STUDENT", "name": "Student Fibre 50", "down_mbps": 50, "up_mbps": 10,
+     "commitment_months": 12, "monthly_price_gbp": 26.9, "target_profile": "student",
      "max_devices": 8, "static_ip": False, "tv_included": False, "gaming_optimized": False, "is_active": True},
-    {"code": "FIBER_100_TEMEL", "name": "Temel Fiber 100", "down_mbps": 100, "up_mbps": 20,
-     "commitment_months": 24, "monthly_price_try": 349.0, "target_profile": "basic",
+    {"code": "FIBER_100_BASIC", "name": "Basic Fibre 100", "down_mbps": 100, "up_mbps": 20,
+     "commitment_months": 24, "monthly_price_gbp": 34.9, "target_profile": "basic",
      "max_devices": 12, "static_ip": False, "tv_included": False, "gaming_optimized": False, "is_active": True},
-    {"code": "FIBER_200_AILE", "name": "Aile Fiber 200", "down_mbps": 200, "up_mbps": 40,
-     "commitment_months": 24, "monthly_price_try": 459.0, "target_profile": "family",
+    {"code": "FIBER_200_FAMILY", "name": "Family Fibre 200", "down_mbps": 200, "up_mbps": 40,
+     "commitment_months": 24, "monthly_price_gbp": 45.9, "target_profile": "family",
      "max_devices": 20, "static_ip": False, "tv_included": True, "gaming_optimized": False, "is_active": True},
-    {"code": "FIBER_400_HOMEOFFICE", "name": "Home Office Fiber 400", "down_mbps": 400, "up_mbps": 80,
-     "commitment_months": 24, "monthly_price_try": 629.0, "target_profile": "home_office",
+    {"code": "FIBER_400_HOMEOFFICE", "name": "Home Office Fibre 400", "down_mbps": 400, "up_mbps": 80,
+     "commitment_months": 24, "monthly_price_gbp": 62.9, "target_profile": "home_office",
      "max_devices": 30, "static_ip": True, "tv_included": False, "gaming_optimized": False, "is_active": True},
-    {"code": "FIBER_500_OYUNCU", "name": "Oyuncu Fiber 500", "down_mbps": 500, "up_mbps": 100,
-     "commitment_months": 12, "monthly_price_try": 749.0, "target_profile": "gamer",
+    {"code": "FIBER_500_GAMER", "name": "Gamer Fibre 500", "down_mbps": 500, "up_mbps": 100,
+     "commitment_months": 12, "monthly_price_gbp": 74.9, "target_profile": "gamer",
      "max_devices": 25, "static_ip": False, "tv_included": False, "gaming_optimized": True, "is_active": True},
-    {"code": "FIBER_1000_PREMIUM", "name": "Premium Fiber 1000", "down_mbps": 1000, "up_mbps": 200,
-     "commitment_months": 24, "monthly_price_try": 999.0, "target_profile": "premium",
+    {"code": "FIBER_1000_PREMIUM", "name": "Premium Fibre 1000", "down_mbps": 1000, "up_mbps": 200,
+     "commitment_months": 24, "monthly_price_gbp": 99.9, "target_profile": "premium",
      "max_devices": 50, "static_ip": True, "tv_included": True, "gaming_optimized": True, "is_active": True},
-    {"code": "FIBER_200_ESNEK", "name": "Esnek Fiber 200 (taahhütsüz)", "down_mbps": 200, "up_mbps": 40,
-     "commitment_months": 0, "monthly_price_try": 589.0, "target_profile": "basic",
+    {"code": "FIBER_200_FLEX", "name": "Flex Fibre 200 (no contract)", "down_mbps": 200, "up_mbps": 40,
+     "commitment_months": 0, "monthly_price_gbp": 58.9, "target_profile": "basic",
      "max_devices": 20, "static_ip": False, "tv_included": False, "gaming_optimized": False, "is_active": True},
 ]
 
 DEFAULT_CUSTOMER = {
-    "customer_no": "NH-100001",
-    "full_name": "Ali Veli",
-    "phone": "+905551112233",
-    "email": "ali.veli@ornek-eposta.test",
-    "district": "Kadıköy",
-    "city": "İstanbul",
-    "region_code": "IST-KAD",
+    "customer_no": "NS-100001",
+    "full_name": "Adam Khan",
+    "phone": "+447700900133",
+    "email": "adam.khan@example-mail.test",
+    "district": "Camden",
+    "city": "London",
+    "region_code": "LDN-CAM",
     "subscription_count": 1,
 }
 
@@ -67,15 +67,15 @@ def default_responses() -> dict[str, Any]:
     return {
         "find_customer": dict(DEFAULT_CUSTOMER),
         "get_subscription_status": {
-            "customer_no": "NH-100001", "subscription_id": 42, "package_code": "FIBER_100_TEMEL",
-            "status": "active", "monthly_price_try": 349.0, "region_code": "IST-KAD",
+            "customer_no": "NS-100001", "subscription_id": 42, "package_code": "FIBER_100_BASIC",
+            "status": "active", "monthly_price_gbp": 34.9, "region_code": "LDN-CAM",
         },
-        "get_payment_status": {"customer_no": "NH-100001", "payment_id": 1, "status": "succeeded"},
+        "get_payment_status": {"customer_no": "NS-100001", "payment_id": 1, "status": "succeeded"},
         "detect_duplicate_charges": {"duplicates": []},
         "get_provisioning_status": {
             "job_id": 7, "status": "succeeded", "attempt_count": 1, "is_stuck": False,
         },
-        "get_installation_status": {"appointment_id": 5, "status": "completed", "team_code": "FIELD-IST-1"},
+        "get_installation_status": {"appointment_id": 5, "status": "completed", "team_code": "FIELD-LDN-CAM-1"},
         "get_active_incidents_for_region": {"items": []},
         "get_service_health": {"payment_gateway": {"ok": True}, "core_api": {"ok": True}},
         "list_packages": {"items": PACKAGES},
@@ -85,7 +85,7 @@ def default_responses() -> dict[str, Any]:
         "retry_provisioning_job": {"status": "queued"},
         "enqueue_provisioning_job": {"status": "queued"},
         "resend_activation_notification": {"status": "sent"},
-        "apply_outage_credit": {"status": "applied", "amount_try": 50},
+        "apply_outage_credit": {"status": "applied", "amount_gbp": 5},
         "post_department_message": {"ok": True},
         "create_structured_ticket": {
             "ticket_key": "TKT-2026-00001", "department": "BILLING", "status": "NEW",
@@ -100,7 +100,7 @@ def tenant_config(monkeypatch: pytest.MonkeyPatch):
     for key, value in REQUIRED_ENV.items():
         monkeypatch.setenv(key, value)
     get_settings.cache_clear()
-    cfg = load_tenant_config("nethiz", config_dir=CONFIG_DIR)
+    cfg = load_tenant_config("netswift", config_dir=CONFIG_DIR)
     yield cfg
     clear_tenant_config_cache()
     get_settings.cache_clear()
@@ -147,10 +147,15 @@ def build_orchestrator(
     gateway = gateway or make_gateway()
     provider = provider or make_scripted_provider(
         [
-            (r"paket|tavsiye|öner|internet.*seç", "advisory", 0.95),
-            (r"arıza|çalışmıyor|bozuk|açılmadı|sorun|kesinti|fatura.*çift|yanlış tahsilat", "problem_report", 0.95),
-            (r"durum|talebim|biletim ne oldu", "status_query", 0.95),
-            (r"merhaba|selam|teşekkür", "smalltalk", 0.95),
+            (r"package|recommend|suggest|choose.*broadband", "advisory", 0.95),
+            (
+                r"fault|not working|broken|not (been )?switched on|problem|outage|charged twice"
+                r"|wrong charge|no internet",
+                "problem_report",
+                0.95,
+            ),
+            (r"status|my request|what happened to my ticket", "status_query", 0.95),
+            (r"\bhello\b|\bhi\b|thank", "smalltalk", 0.95),
         ]
     )
     audit_log = AuditLog(session_factory)

@@ -10,8 +10,8 @@ def _create_succeeding_charge(client, auth_headers, customer_ref, idem_key, amou
     resp = client.post(
         "/psp/v1/charges",
         json={
-            "amount_try": amount,
-            "currency": "TRY",
+            "amount_gbp": amount,
+            "currency": "GBP",
             "customer_ref": customer_ref,
             "method": "card",
             "card_token": "tok_test_5",
@@ -25,11 +25,11 @@ def _create_succeeding_charge(client, auth_headers, customer_ref, idem_key, amou
 
 
 def test_full_refund_marks_refunded(client, auth_headers):
-    charge_ref = _create_succeeding_charge(client, auth_headers, "NH-10", "refund-full-1")
+    charge_ref = _create_succeeding_charge(client, auth_headers, "NS-10", "refund-full-1")
 
     resp = client.post(
         f"/psp/v1/charges/{charge_ref}/refunds",
-        json={"amount_try": 200.0, "reason": "customer request"},
+        json={"amount_gbp": 200.0, "reason": "customer request"},
         headers=auth_headers,
     )
     assert resp.status_code == 201
@@ -40,11 +40,11 @@ def test_full_refund_marks_refunded(client, auth_headers):
 
 
 def test_partial_then_full_refund(client, auth_headers):
-    charge_ref = _create_succeeding_charge(client, auth_headers, "NH-11", "refund-partial-1", amount=200.0)
+    charge_ref = _create_succeeding_charge(client, auth_headers, "NS-11", "refund-partial-1", amount=200.0)
 
     first = client.post(
         f"/psp/v1/charges/{charge_ref}/refunds",
-        json={"amount_try": 50.0},
+        json={"amount_gbp": 50.0},
         headers=auth_headers,
     )
     assert first.status_code == 201
@@ -55,7 +55,7 @@ def test_partial_then_full_refund(client, auth_headers):
 
     second = client.post(
         f"/psp/v1/charges/{charge_ref}/refunds",
-        json={"amount_try": 150.0},
+        json={"amount_gbp": 150.0},
         headers=auth_headers,
     )
     assert second.status_code == 201
@@ -63,16 +63,16 @@ def test_partial_then_full_refund(client, auth_headers):
 
 
 def test_second_full_refund_conflicts(client, auth_headers):
-    charge_ref = _create_succeeding_charge(client, auth_headers, "NH-12", "refund-conflict-1")
+    charge_ref = _create_succeeding_charge(client, auth_headers, "NS-12", "refund-conflict-1")
 
     client.post(
         f"/psp/v1/charges/{charge_ref}/refunds",
-        json={"amount_try": 200.0},
+        json={"amount_gbp": 200.0},
         headers=auth_headers,
     )
     again = client.post(
         f"/psp/v1/charges/{charge_ref}/refunds",
-        json={"amount_try": 10.0},
+        json={"amount_gbp": 10.0},
         headers=auth_headers,
     )
     assert again.status_code == 409
@@ -80,11 +80,11 @@ def test_second_full_refund_conflicts(client, auth_headers):
 
 
 def test_refund_exceeds_charge(client, auth_headers):
-    charge_ref = _create_succeeding_charge(client, auth_headers, "NH-13", "refund-exceed-1", amount=100.0)
+    charge_ref = _create_succeeding_charge(client, auth_headers, "NS-13", "refund-exceed-1", amount=100.0)
 
     resp = client.post(
         f"/psp/v1/charges/{charge_ref}/refunds",
-        json={"amount_try": 150.0},
+        json={"amount_gbp": 150.0},
         headers=auth_headers,
     )
     assert resp.status_code == 422

@@ -10,7 +10,7 @@ class TicketingSettings(CompanySettings):
 
     service_name: str = "ticketing"
     service_version: str = "1.0.0"
-    company_db_name: str = "nethiz_ticketing"
+    company_db_name: str = "netswift_ticketing"
 
     ticketing_api_key: str = ""
     webhook_secret: str = ""

@@ -23,17 +23,17 @@ recommendation:
     gaming: [gamer, premium]
     streaming: [family, premium]
     basic: [basic, student]
-  reason_codes_tr:
-    speed_ok: "Ev içindeki {device_count} cihaz için {down_mbps} Mbps rahat yeter."
-    speed_tight: "{down_mbps} Mbps, {device_count} cihaz için sınırda kalabilir."
-    budget_ok: "Aylık {monthly_price_try} TL bütçenizin içinde."
-    budget_over: "Aylık {monthly_price_try} TL bütçenizin bir miktar üzerinde."
-    profile_match: "{profile_tr} kullanım profiline göre tasarlanmış paket."
-    no_commitment: "Taahhüt yok, istediğiniz zaman çıkabilirsiniz."
-    commitment_discount: "{commitment_months} ay taahhütle aylık fiyat daha düşük."
-    static_ip: "Sabit IP dahil, uzaktan çalışma için uygun."
-    tv_included: "TV paketi dahil."
-    gaming_optimized: "Oyun trafiği için düşük gecikme optimizasyonu var."
+  reason_codes_en:
+    speed_ok: "{down_mbps} Mbps is plenty for the {device_count} devices in your home."
+    speed_tight: "{down_mbps} Mbps may be tight for {device_count} devices."
+    budget_ok: "At {monthly_price_gbp} a month, it is within your budget."
+    budget_over: "At {monthly_price_gbp} a month, it is slightly over your budget."
+    profile_match: "A package designed for {profile_en} use."
+    no_commitment: "No minimum term — you can leave whenever you like."
+    commitment_discount: "A lower monthly price with a {commitment_months}-month contract."
+    static_ip: "Static IP included, good for working from home."
+    tv_included: "TV package included."
+    gaming_optimized: "Low-latency optimisation for gaming traffic."
 
 # ── Issue type → department (fallback when the decision service is unsure) ──
 issue_routing:

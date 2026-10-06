@@ -14,12 +14,12 @@ router = APIRouter(prefix="/api/v1", tags=["alertmanager"])
 
 # department (ticketing/core-api label) -> notification-hub channel slug.
 DEPARTMENT_CHANNEL_MAP: dict[str, str] = {
-    "TECHNICAL_INFRA": "teknik-altyapi",
-    "BILLING": "faturalama",
-    "SUBSCRIPTION_OPS": "abonelik-islemleri",
-    "FIELD_INSTALL": "saha-kurulum",
+    "TECHNICAL_INFRA": "technical-infra",
+    "BILLING": "billing",
+    "SUBSCRIPTION_OPS": "subscription-ops",
+    "FIELD_INSTALL": "field-install",
 }
-DEFAULT_CHANNEL = "operasyon-genel"
+DEFAULT_CHANNEL = "ops-general"
 
 
 class AlertmanagerAlert(BaseModel):
@@ -56,14 +56,14 @@ def receive_alert(payload: AlertmanagerPayload, session: Session = Depends(get_s
         if session.get(Channel, channel_slug) is None:
             channel_slug = DEFAULT_CHANNEL
 
-        alertname = alert.labels.get("alertname", "Uyarı")
+        alertname = alert.labels.get("alertname", "Alert")
         severity = alert.labels.get("severity", "warning")
         summary = alert.annotations.get("summary") or alertname
         description = alert.annotations.get("description", "")
 
         if alert.status == "resolved":
-            title = f"{alertname} çözüldü"
-            text = f"Bu uyarı çözüldü: {description or summary}"
+            title = f"{alertname} resolved"
+            text = f"This alert has been resolved: {description or summary}"
             message_severity = "info"
         else:
             title = summary

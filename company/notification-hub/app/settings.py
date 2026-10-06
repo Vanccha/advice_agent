@@ -10,10 +10,10 @@ class NotificationHubSettings(CompanySettings):
 
     service_name: str = "notification-hub"
     service_version: str = "1.0.0"
-    company_db_name: str = "nethiz_notify"
+    company_db_name: str = "netswift_notify"
 
     # Plain API key clients must send as X-API-Key. Stored hashed in the in-memory registry.
-    notify_api_key: str = "nethiz_notify_key_change_me"
+    notify_api_key: str = "netswift_notify_key_change_me"
 
 
 @lru_cache

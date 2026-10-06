@@ -11,8 +11,8 @@ VALID_FAILURE_CODES = {
 
 def _charge_body(customer_ref: str, idem_key: str, amount: float = 100.0) -> dict:
     return {
-        "amount_try": amount,
-        "currency": "TRY",
+        "amount_gbp": amount,
+        "currency": "GBP",
         "customer_ref": customer_ref,
         "method": "card",
         "card_token": "tok_test_9",
@@ -28,7 +28,7 @@ def test_force_failure_code_wins(client, auth_headers):
     )
     resp = client.post(
         "/psp/v1/charges",
-        json=_charge_body("NH-1", "force-1"),
+        json=_charge_body("NS-1", "force-1"),
         headers=auth_headers,
     )
     assert resp.status_code == 201
@@ -47,7 +47,7 @@ def test_failure_rate_zero_always_succeeds(client, auth_headers):
     for i in range(15):
         resp = client.post(
             "/psp/v1/charges",
-            json=_charge_body("NH-2", f"rate0-{i}"),
+            json=_charge_body("NS-2", f"rate0-{i}"),
             headers=auth_headers,
         )
         assert resp.json()["status"] == "succeeded"
@@ -62,7 +62,7 @@ def test_failure_rate_one_always_fails(client, auth_headers):
     for i in range(15):
         resp = client.post(
             "/psp/v1/charges",
-            json=_charge_body("NH-3", f"rate1-{i}"),
+            json=_charge_body("NS-3", f"rate1-{i}"),
             headers=auth_headers,
         )
         data = resp.json()

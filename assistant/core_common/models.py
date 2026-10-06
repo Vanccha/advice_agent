@@ -120,7 +120,7 @@ class PendingApproval(Base):
     conversation_id: Mapped[str] = mapped_column(String, nullable=False)
     action_name: Mapped[str] = mapped_column(String, nullable=False)
     params: Mapped[dict | None] = mapped_column(JSONType, nullable=True)
-    prompt_tr: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_en: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String, default="pending")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     resolved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

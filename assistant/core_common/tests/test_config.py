@@ -28,17 +28,17 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(key, value)
 
 
-def test_loads_nethiz(monkeypatch: pytest.MonkeyPatch):
+def test_loads_netswift(monkeypatch: pytest.MonkeyPatch):
     _set_required_env(monkeypatch)
-    cfg = load_tenant_config("nethiz", config_dir=CONFIG_DIR)
+    cfg = load_tenant_config("netswift", config_dir=CONFIG_DIR)
 
-    assert cfg.tenant.tenant == "nethiz"
-    assert cfg.tenant.display_name == "NetHız Telekom"
+    assert cfg.tenant.tenant == "netswift"
+    assert cfg.tenant.display_name == "NetSwift Telecom"
     assert cfg.adapters["core"].url == "http://mcp-core:8000/mcp"
-    assert cfg.departments["BILLING"].display_name_tr == "Faturalama"
-    assert cfg.persona.language == "tr"
+    assert cfg.departments["BILLING"].display_name_en == "Billing"
+    assert cfg.persona.language == "en"
     assert cfg.policy.actions["issue_refund"].allowed is False
-    assert cfg.policy.actions["apply_outage_credit"].max_amount_try == 50
+    assert cfg.policy.actions["apply_outage_credit"].max_amount_gbp == 5
     assert cfg.routing.issue_routing["double_charge"] == "BILLING"
 
 
@@ -52,8 +52,8 @@ def test_loads_example_tenant_without_code_changes(monkeypatch: pytest.MonkeyPat
 
 def test_config_is_cached(monkeypatch: pytest.MonkeyPatch):
     _set_required_env(monkeypatch)
-    first = load_tenant_config("nethiz", config_dir=CONFIG_DIR)
-    second = load_tenant_config("nethiz", config_dir=CONFIG_DIR)
+    first = load_tenant_config("netswift", config_dir=CONFIG_DIR)
+    second = load_tenant_config("netswift", config_dir=CONFIG_DIR)
     assert first is second
 
 
@@ -62,7 +62,7 @@ def test_missing_env_var_raises_named_error(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("MCP_CORE_URL", raising=False)
 
     with pytest.raises(ConfigError) as exc_info:
-        load_tenant_config("nethiz", config_dir=CONFIG_DIR)
+        load_tenant_config("netswift", config_dir=CONFIG_DIR)
 
     assert "MCP_CORE_URL" in str(exc_info.value)
 

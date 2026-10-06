@@ -5,7 +5,7 @@ from decision.typesafe_jev import TypeSafeJevDecisionService
 
 
 def _ctx() -> DecisionContext:
-    return DecisionContext(conversation_id="conv-1", tenant="nethiz")
+    return DecisionContext(conversation_id="conv-1", tenant="netswift")
 
 
 def test_every_method_raises_not_implemented_with_a_documented_contract():

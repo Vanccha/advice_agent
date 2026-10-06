@@ -13,11 +13,11 @@ from app.settings import TicketingSettings
 logger = logging.getLogger(__name__)
 
 DEPARTMENTS = [
-    # code, display_name (Turkish), email, channel_slug
-    ("TECHNICAL_INFRA", "Teknik Altyapı", "teknik-altyapi@ornek-eposta.test", "teknik-altyapi"),
-    ("BILLING", "Faturalama", "faturalama@ornek-eposta.test", "faturalama"),
-    ("SUBSCRIPTION_OPS", "Abonelik İşlemleri", "abonelik-islemleri@ornek-eposta.test", "abonelik-islemleri"),
-    ("FIELD_INSTALL", "Saha Kurulum Ekibi", "saha-kurulum@ornek-eposta.test", "saha-kurulum"),
+    # code, display_name, email, channel_slug
+    ("TECHNICAL_INFRA", "Technical Infrastructure", "technical-infra@example-mail.test", "technical-infra"),
+    ("BILLING", "Billing", "billing@example-mail.test", "billing"),
+    ("SUBSCRIPTION_OPS", "Subscription Operations", "subscription-ops@example-mail.test", "subscription-ops"),
+    ("FIELD_INSTALL", "Field Installation Team", "field-install@example-mail.test", "field-install"),
 ]
 
 DEFAULT_WEBHOOK_EVENTS = ["ticket.created", "ticket.status_changed", "ticket.commented"]

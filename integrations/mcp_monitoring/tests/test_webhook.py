@@ -45,7 +45,7 @@ def _realistic_alertmanager_payload() -> dict:
                     "job": "payment-gateway",
                 },
                 "annotations": {
-                    "summary": "Odeme ag gecidi erisilemez durumda",
+                    "summary": "Payment gateway unreachable",
                     "description": "payment-gateway servisi bir dakikadir health check'e yanit vermiyor.",
                 },
                 "startsAt": "2026-10-05T12:00:00Z",
@@ -77,11 +77,11 @@ def test_normalize_alert_maps_every_contract_field() -> None:
     assert normalized.severity == "critical"
     assert normalized.department == "TECHNICAL_INFRA"
     assert normalized.fingerprint == "ab12cd34ef567890"
-    assert normalized.summary == "Odeme ag gecidi erisilemez durumda"
+    assert normalized.summary == "Payment gateway unreachable"
     assert "health check" in normalized.description
     assert normalized.labels["alertname"] == "PaymentGatewayDown"
     assert normalized.starts_at == "2026-10-05T12:00:00Z"
-    assert normalized.source == "nethiz-alertmanager"
+    assert normalized.source == "netswift-alertmanager"
 
 
 def test_webhook_forwards_and_returns_2xx_when_target_is_up(client: TestClient) -> None:
