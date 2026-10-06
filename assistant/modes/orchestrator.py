@@ -454,10 +454,16 @@ class Orchestrator:
                 if router_result.reply_tr is not None:
                     return mode, _StepOutcome(reply_tr=router_result.reply_tr)
                 if mode is Mode.ADVISORY:
-                    state["advisory_profile"] = {}
+                    # Keep what the customer has already told us about their household.
+                    # Re-entering advisory after a recommendation (CLOSING -> ROUTER ->
+                    # ADVISORY) means they are refining, not starting over, and asking
+                    # "what do you use the internet for?" again reads as amnesia.
+                    # Only the per-round bookkeeping resets.
+                    previous_profile = state.get("advisory_profile") or {}
+                    state["advisory_profile"] = previous_profile
                     state["advisory_awaiting_field"] = None
                     state["advisory_questions_asked"] = 0
-                    state["_advisory_first_turn"] = True
+                    state["_advisory_first_turn"] = not previous_profile
                 continue
 
             if mode is Mode.ADVISORY:

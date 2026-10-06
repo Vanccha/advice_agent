@@ -523,7 +523,7 @@ Normalized alert payload forwarded to the assistant:
 |---|---|---|
 | GET | `/` | demo page: fake login by `customer_no` + embedded chat widget |
 | POST | `/api/login` | body: `{customer_no}` → session cookie (demo only, no password) |
-| POST | `/api/chat` | body: `{conversation_id?, message, customer_no?}` → `{conversation_id, mode, reply_tr, actions[], ticket_key?, requires_approval?, approval_id?}` |
+| POST | `/api/chat` | body: `{conversation_id?, message, customer_no?}` → `{conversation_id, mode, reply_tr, actions[], ticket_key?, requires_approval?, approval_id?}`. Each `actions[]` entry is self-describing: `{label_tr, action_name, executed, policy_allowed, awaiting_confirmation?, escalated_to?, ticket_key?}` — a Turkish label for the widget plus what was actually attempted and whether policy permitted it. |
 | GET | `/api/chat/stream?conversation_id=&message=` | SSE stream of the same turn. Event framing: `event: token` (plain-text chunk, appended by the client), `event: final` (JSON, identical body to `POST /api/chat`), `event: error` (any payload; the client falls back to `POST /api/chat`). |
 | POST | `/api/approvals/{approval_id}` | `{decision: "granted"\|"denied"}` |
 | GET | `/api/conversations/{conversation_id}/audit` | audit trail for the demo |

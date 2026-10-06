@@ -151,6 +151,62 @@ _FINDING_TR: dict[str, str] = {
 }
 
 
+# The department reads these fields, so they are Turkish and specific. A subject of
+# "double_charge — NH-100039" and a next step that merely repeats the refusal both make a
+# human re-do the work the assistant already did.
+_TICKET_SUBJECT_TR: dict[str, str] = {
+    "double_charge": "Çift tahsilat — {customer_no}",
+    "stuck_provisioning": "Provizyon işi takılı kaldı — {customer_no}",
+    "paid_not_active": "Ödeme alındı, abonelik aktif değil — {customer_no}",
+    "regional_outage": "Bölgesel altyapı arızası — {customer_no}",
+    "missed_installation": "Kurulum randevusu gerçekleşmedi — {customer_no}",
+    "payment_system_down": "Ödeme sistemi hizmet veremiyor — {customer_no}",
+    "refund_request": "İade talebi — {customer_no}",
+    "plan_change_request": "Paket değişikliği talebi — {customer_no}",
+    "infrastructure_repair": "Altyapı onarımı gerekiyor — {customer_no}",
+}
+
+_NEXT_STEP_TR: dict[str, str] = {
+    "double_charge": "Mükerrer ödemenin iadesi onaylanmalı (ödeme kayıtları kanıtlarda).",
+    "missed_installation": "Müşteriyle iletişime geçilip yeni bir kurulum randevusu planlanmalı.",
+    "regional_outage": "Arıza kaydı üzerinden çözüm süresi güncellenmeli ve müşteri bilgilendirilmeli.",
+    "paid_not_active": "Abonelik elle aktifleştirilmeli ya da provizyon süreci kontrol edilmeli.",
+    "stuck_provisioning": "Provizyon altyapısı kontrol edilmeli; iş yeniden başlatma denemesi sonuç vermedi.",
+    "payment_system_down": "Ödeme altyapısı ekibi devrede olmalı; müşteriye dönüş yapılmalı.",
+    "plan_change_request": "Paket değişikliği ve varsa cayma bedeli hesaplanıp müşteriye bildirilmeli.",
+    "infrastructure_repair": "Saha/şebeke ekibi yönlendirilmeli.",
+}
+
+_ID_EVIDENCE_KEYS = ("record_ids", "observations", "error_codes", "queried_sources")
+
+
+def _evidence_record_ids(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Ids only — anything that is not an identifier belongs in its own evidence field."""
+    nested = evidence.get("record_ids")
+    collected: dict[str, Any] = dict(nested) if isinstance(nested, dict) else {}
+    for key, value in evidence.items():
+        if key in _ID_EVIDENCE_KEYS:
+            continue
+        collected[key] = value
+    return {
+        key: value
+        for key, value in collected.items()
+        if key not in ("observations", "error_codes")
+    }
+
+
+def _evidence_list(evidence: dict[str, Any], key: str) -> list[Any]:
+    """Merge a list-valued evidence field whether it sits at the top level or under
+    `record_ids`, since diagnostic steps write it in both places."""
+    merged: list[Any] = []
+    for source in (evidence, evidence.get("record_ids") or {}):
+        if isinstance(source, dict):
+            for item in source.get(key) or []:
+                if item not in merged:
+                    merged.append(item)
+    return merged
+
+
 def _finding_tr(root_cause: str) -> str:
     return _FINDING_TR.get(root_cause, "Durumunuzu inceledim.")
 
@@ -304,7 +360,9 @@ def _escalate_with_ticket(
         department=department,
         issue_type=issue_type,
         priority=priority,
-        subject_tr=f"{issue_type.value} — {customer_no}",
+        subject_tr=_TICKET_SUBJECT_TR.get(
+            issue_type.value, f"Destek talebi ({issue_type.value}) — {customer_no}"
+        ).format(customer_no=customer_no),
         body_tr=(
             f"Teşhis sonucu: {diagnosis.root_cause}. Müşteri {customer_no} için "
             f"'{attempted_action}' işlemi politika tarafından engellendi: {blocked_reason_tr} "
@@ -313,9 +371,11 @@ def _escalate_with_ticket(
         requester_customer_no=customer_no,
         requester_name=requester_name,
         requester_contact=requester_contact,
-        suggested_next_step_tr=blocked_reason_tr,
+        suggested_next_step_tr=_NEXT_STEP_TR.get(issue_type.value, blocked_reason_tr),
         urgency_reason_tr=f"Teşhis güveni: {diagnosis.confidence:.2f}",
-        evidence_record_ids={k: v for k, v in evidence.items() if k != "queried_sources"},
+        evidence_record_ids=_evidence_record_ids(evidence),
+        evidence_observations=_evidence_list(evidence, "observations"),
+        evidence_error_codes=_evidence_list(evidence, "error_codes"),
         evidence_queried_sources=evidence.get("queried_sources", []),
         attempted_steps=[
             {"step": f"diagnosis:{diagnosis.root_cause}", "result": "established", "outcome": "info"},
@@ -344,7 +404,16 @@ def _escalate_with_ticket(
         reply_tr=reply_tr,
         next_mode=Mode.ESCALATED,
         ticket_key=ticket_ref.ticket_key,
-        actions=[{"label_tr": f"Bilet oluşturuldu: {department.value}", "ticket_key": ticket_ref.ticket_key}],
+        actions=[
+            {
+                "label_tr": f"Bilet oluşturuldu: {department.value}",
+                "action_name": attempted_action,
+                "executed": False,
+                "policy_allowed": False,
+                "escalated_to": department.value,
+                "ticket_key": ticket_ref.ticket_key,
+            }
+        ],
     )
 
 
@@ -404,7 +473,15 @@ def handle_action(
                 ticket_key=incident_ticket.ticket_key,
                 requires_approval=True,
                 approval_id=approval_id,
-                actions=[{"label_tr": "Politika kontrolü: apply_outage_credit"}],
+                actions=[
+                    {
+                        "label_tr": "Onay bekleniyor: apply_outage_credit",
+                        "action_name": "apply_outage_credit",
+                        "executed": False,
+                        "policy_allowed": True,
+                        "awaiting_confirmation": True,
+                    }
+                ],
             )
         except PolicyDenied as exc:
             reply_tr = (
@@ -468,7 +545,15 @@ def handle_action(
             next_mode=Mode.AWAITING_APPROVAL,
             requires_approval=True,
             approval_id=approval_id,
-            actions=[{"label_tr": f"Politika kontrolü: {action_name}"}],
+            actions=[
+                {
+                    "label_tr": f"Onay bekleniyor: {action_name}",
+                    "action_name": action_name,
+                    "executed": False,
+                    "policy_allowed": True,
+                    "awaiting_confirmation": True,
+                }
+            ],
         )
     else:
         reply_tr = _SUCCESS_REPLY_TR.get(
@@ -477,7 +562,14 @@ def handle_action(
         return ActionStepResult(
             reply_tr=reply_tr,
             next_mode=Mode.CLOSING,
-            actions=[{"label_tr": f"İşlem uygulandı: {action_name}"}],
+            actions=[
+                {
+                    "label_tr": f"İşlem uygulandı: {action_name}",
+                    "action_name": action_name,
+                    "executed": True,
+                    "policy_allowed": True,
+                }
+            ],
         )
 
 

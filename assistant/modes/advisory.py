@@ -28,6 +28,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import BaseModel
+
 from core_common.tr import format_money_try
 from core_common.types import AdvisoryProfile, CommitmentPreference, Mode, PackageOffer, StepType, UsageType
 from llm.base import ChatMessage
@@ -98,18 +100,108 @@ def _parse_commitment(text: str) -> CommitmentPreference:
     return CommitmentPreference.ANY
 
 
-def _apply_answer(profile: AdvisoryProfile, field_name: str, text: str) -> AdvisoryProfile:
+# ── understanding the answer ───────────────────────────────────────────────────────────
+# Positional regex parsing is not enough for real conversation: "Aylık 500 lira olsun" in
+# answer to "how many devices?" would set device_count=500, and "24 ay taahhüt verebilirim"
+# would set a 24 TL budget — observed against a live model. The model is allowed to *read*
+# the sentence into typed fields (it still never chooses a package); regex stays as the
+# offline fallback, and both paths go through the same plausibility check.
+
+_PLAUSIBLE = {
+    "household_size": (1, 30),
+    "device_count": (1, 200),
+    "budget_try": (50.0, 100_000.0),
+}
+
+
+class _ExtractedFields(BaseModel):
+    """Only what the sentence actually states; everything else stays None."""
+
+    usage: list[str] | None = None
+    household_size: int | None = None
+    device_count: int | None = None
+    budget_try: float | None = None
+    commitment_preference: str | None = None
+    needs_static_ip: bool | None = None
+    needs_tv: bool | None = None
+
+
+_EXTRACT_SYSTEM = (
+    "You read one Turkish sentence from a broadband customer and extract only the facts it "
+    "states. Never guess or infer a value that is not stated. Fields: usage (any of "
+    "student, family, home_office, gaming, streaming, basic), household_size (people), "
+    "device_count (connected devices), budget_try (monthly budget in Turkish lira), "
+    "commitment_preference (none, 12, 24 or any), needs_static_ip, needs_tv. A sentence "
+    "about a monthly budget is never a device count, and a commitment length in months is "
+    "never a budget. Leave a field null when the sentence does not state it."
+)
+
+
+def _plausible(field_name: str, value: Any) -> bool:
+    bounds = _PLAUSIBLE.get(field_name)
+    if bounds is None or value is None:
+        return value is not None
+    low, high = bounds
+    return low <= value <= high
+
+
+def _extract_with_model(ctx: TurnContext, text: str) -> dict[str, Any]:
+    """What the sentence states, as typed fields. Empty dict when the model cannot help."""
+    try:
+        extracted = ctx.provider.structured(
+            system=_EXTRACT_SYSTEM,
+            messages=[ChatMessage(role="user", content=text)],
+            schema=_ExtractedFields,
+        )
+    except Exception:  # provider unavailable or answered unusably — fall back to regex
+        return {}
+
+    values: dict[str, Any] = {}
+    for name, value in extracted.model_dump().items():
+        if value is None:
+            continue
+        if name == "usage":
+            usages = [u for u in value if u in {m.value for m in UsageType}]
+            if usages:
+                values["usage"] = usages
+        elif name == "commitment_preference":
+            if value in {m.value for m in CommitmentPreference}:
+                values[name] = value
+        elif name in _PLAUSIBLE:
+            if _plausible(name, value):
+                values[name] = value
+        else:
+            values[name] = value
+    return values
+
+
+def _apply_answer(
+    profile: AdvisoryProfile,
+    field_name: str,
+    text: str,
+    ctx: TurnContext | None = None,
+) -> AdvisoryProfile:
     data = profile.model_dump(mode="json")
+
+    # Whatever the sentence genuinely states, for any field — a customer who answers
+    # "4 kişiyiz, 8 cihaz var" should not be asked about devices again.
+    extracted = _extract_with_model(ctx, text) if ctx is not None else {}
+    for name, value in extracted.items():
+        data[name] = value
+    if field_name in extracted:
+        return AdvisoryProfile.model_validate(data)
+
     if field_name == "usage":
         data["usage"] = [u.value for u in _parse_usage(text)]
     elif field_name == "household_size":
         value = _parse_int(text)
-        data["household_size"] = value if value is not None else 1
+        data["household_size"] = value if _plausible("household_size", value) else 1
     elif field_name == "device_count":
         value = _parse_int(text)
-        data["device_count"] = value if value is not None else 1
+        data["device_count"] = value if _plausible("device_count", value) else 1
     elif field_name == "budget_try":
-        data["budget_try"] = _parse_float(text)
+        value = _parse_float(text)
+        data["budget_try"] = value if _plausible("budget_try", value) else None
     elif field_name == "commitment_preference":
         data["commitment_preference"] = _parse_commitment(text).value
     needs_static_ip = bool(re.search(r"statik.?ip|static.?ip", text, re.IGNORECASE))
@@ -254,7 +346,7 @@ def handle_turn(
     max_questions = ctx.tenant_config.policy.limits.max_questions_advisory
 
     if not is_first_turn and awaiting_field and masked_message is not None:
-        profile = _apply_answer(profile, awaiting_field, masked_message)
+        profile = _apply_answer(profile, awaiting_field, masked_message, ctx)
         questions_asked += 1
         ctx.audit_log.append(
             ctx.conversation_id,
