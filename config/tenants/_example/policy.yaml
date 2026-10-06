@@ -1,15 +1,17 @@
 # Authority engine. The model NEVER decides what it is allowed to do: every action is
 # checked here first, and an unknown action name is denied by default.
+# This customer trusts the assistant with LESS than NetHiz does, and more in one place —
+# which is the point: authority is configuration, not code.
 version: 1
 tenant: _example
 
 decision:
-  min_confidence: 0.6          # below this → hand over instead of guessing
+  min_confidence: 0.8          # stricter: hands over sooner than NetHiz          # below this → hand over instead of guessing
   escalate_on_low_confidence: true
 
 limits:
-  max_tool_calls_per_turn: 12
-  max_questions_advisory: 5
+  max_tool_calls_per_turn: 10
+  max_questions_advisory: 3    # their customers dislike long questionnaires
   max_actions_per_conversation: 3
 
 actions:
@@ -41,16 +43,10 @@ actions:
       - {field: payment.status, in: [succeeded]}
 
   apply_outage_credit:
-    allowed: true
-    requires_confirmation: true          # money leaves the company → explicit consent
-    description_tr: "Kesinti için tek seferlik telafi tanımlar."
-    max_amount_try: 50
-    conditions:
-      - {field: incident.exists, eq: true}
-      - {field: credit.existing_count_30d, lt: 1}
-    on_condition_fail:
-      escalate_to: BILLING
-      reason_code: credit_not_applicable
+    allowed: false
+    escalate_to: BILLING
+    reason_code: credit_not_permitted
+    reason_tr: "Telafi tanımlama yetkisi yalnızca Gelir Yönetimi birimindedir."
 
   issue_refund:
     allowed: false
@@ -65,10 +61,9 @@ actions:
     reason_tr: "Paket değişikliği cayma bedeli doğurabileceği için Abonelik İşlemleri tarafından yapılır."
 
   reschedule_installation:
-    allowed: false
-    escalate_to: FIELD_INSTALL
-    reason_code: field_scheduling_not_permitted
-    reason_tr: "Kurulum randevuları Saha Kurulum Ekibi tarafından planlanır."
+    allowed: true
+    requires_confirmation: true
+    description_tr: "Kurulum randevusunu müşteri onayıyla ileri bir tarihe alır."
 
   repair_infrastructure:
     allowed: false

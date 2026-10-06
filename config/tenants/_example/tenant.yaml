@@ -1,20 +1,19 @@
-# Tenant wiring. Moving to another customer means adding a sibling directory and
-# (if their systems differ) new adapters under integrations/ — nothing else.
+# A deliberately DIFFERENT second customer, so "adding a tenant needs no code change" is
+# something you can run rather than something you take on faith. Everything here differs
+# from `nethiz/`: identifier format, persona, tone, even which adapters are mandatory.
 version: 1
 tenant: _example
-display_name: "Örnek Şirket A.Ş."
+display_name: "Örnek Fiber A.Ş."
 locale: tr-TR
 timezone: Europe/Istanbul
 currency: TRY
 
 business_domain: fiber_isp
 customer_identifier:
-  label_tr: "Müşteri numarası"
-  pattern: "^NH-\\d{6}$"
-  example: "NH-100042"
+  label_tr: "Abone numarası"
+  pattern: "^OR-[0-9]{7}$"
+  example: "OR-2045118"
 
-# Adapter endpoints. Values resolve from the environment so the same config works in
-# compose, staging and production.
 adapters:
   core:
     transport: mcp_streamable_http
@@ -28,6 +27,8 @@ adapters:
     transport: mcp_streamable_http
     url: ${MCP_TICKETING_URL}
     required: true
+  # This customer does not expose its monitoring or chat platform to suppliers, so the
+  # assistant runs without them: no proactive alert diagnosis, no department channel posts.
   monitoring:
     transport: mcp_streamable_http
     url: ${MCP_MONITORING_URL}
@@ -39,21 +40,22 @@ adapters:
 
 departments:
   TECHNICAL_INFRA:
-    display_name_tr: "Teknik Altyapı"
-    channel: teknik-altyapi
+    display_name_tr: "Şebeke Operasyon"
+    channel: sebeke-operasyon
   BILLING:
-    display_name_tr: "Faturalama"
-    channel: faturalama
+    display_name_tr: "Gelir Yönetimi"
+    channel: gelir-yonetimi
   SUBSCRIPTION_OPS:
-    display_name_tr: "Abonelik İşlemleri"
-    channel: abonelik-islemleri
+    display_name_tr: "Müşteri Operasyon"
+    channel: musteri-operasyon
   FIELD_INSTALL:
-    display_name_tr: "Saha Kurulum Ekibi"
-    channel: saha-kurulum
+    display_name_tr: "Saha Hizmetleri"
+    channel: saha-hizmetleri
 
 persona:
-  name_tr: "NetHız Dijital Asistan"
-  tone_tr: "kibar, net, kısa cümleler; müşteriye teknik jargon yüklemez"
+  name_tr: "Örnek Fiber Yardım Asistanı"
+  tone_tr: "resmi, mesafeli, kısa ve net; samimiyet kurmaz"
   language: tr
   disclaimers_tr:
-    - "Yetkim dışındaki işlemleri ilgili ekibe aktarırım."
+    - "Bu görüşme kalite amacıyla kayıt altına alınır."
+    - "Yetkim dışındaki talepler ilgili birime iletilir."

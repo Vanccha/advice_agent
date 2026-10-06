@@ -179,6 +179,24 @@ make chaos-reset
 
 Her senaryodan sonra `make chaos-reset`.
 
+## İkinci kiracı (çok kiracılılık kanıtı)
+
+`config/tenants/_example/` boş bir şablon değil, çalışan ikinci bir müşteri: farklı abone
+numarası formatı (`OR-2045118`), farklı departman adları, daha katı devretme eşiği, telafi
+yetkisi **yok**, randevu değiştirme yetkisi **var**, bütçe odaklı öneri ağırlıkları.
+
+```bash
+docker compose run --rm -e TENANT=_example test-runner \
+  env PYTHONPATH=/workspace/assistant python -c "
+from fastapi.testclient import TestClient
+from api.main import app
+with TestClient(app) as c: print(c.post('/api/login', json={'customer_no':'NH-100001'}).json())"
+```
+
+Aynı imaj ve aynı kodla: `nethiz`'de geçerli olan müşteri numarası burada format hatası
+alır, giriş ekranı kiracının etiketini gösterir, yetki motoru kararlarını o müşterinin
+`policy.yaml`'ından verir. Ayrıntı ve dürüst sınırlar: `config/tenants/_example/README.md`.
+
 ## Değerlendirme
 
 ```bash

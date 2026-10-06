@@ -1,16 +1,16 @@
 # Deterministic routing + scoring tables. Changing these does not require code changes.
 version: 1
-tenant: nethiz
+tenant: _example
 
 # ── Package recommendation weights (assistant/recommendation/engine.py) ─────
 recommendation:
   weights:
-    speed_adequacy: 0.35
-    budget_fit: 0.25
+    speed_adequacy: 0.20
+    budget_fit: 0.45
     profile_match: 0.20
     commitment_match: 0.10
     extras_match: 0.10
-  mbps_per_device: 25
+  mbps_per_device: 20
   budget_hard_filter_tolerance: 0.15   # >15% over budget → excluded
   min_mbps_floor: 50
   # Packages below this fraction of the household's required speed are not offered,

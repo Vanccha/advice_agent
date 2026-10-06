@@ -29,7 +29,9 @@ company/ ──REST + read-only SQL──> integrations/ (MCP servers) ──MCP
    The Alertmanager webhook that reaches the assistant is an **environment variable**
    (`ALERT_INTEGRATION_WEBHOOK_URL`), i.e. configuration, not code.
 4. The assistant never hardcodes a company hostname; adapter URLs come from
-   `config/tenants/<tenant>/tenant.yaml` + env.
+   `config/tenants/<tenant>/tenant.yaml` + env. Nothing on the product's own surface is
+   tied to one customer either: the login form's label, placeholder, input pattern and
+   demo shortcuts all come from the tenant's `customer_identifier`.
 5. Database writes from the integration layer are impossible by construction: it connects as
    `readonly_diag`, which only has `SELECT` on the `diag.*` views.
 6. The model never decides its own authority. `assistant/policy/engine.py` checks

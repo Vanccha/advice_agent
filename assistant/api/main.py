@@ -171,9 +171,41 @@ def index(request: Request):
     return templates.TemplateResponse(request, "site.html", {"customer_no": customer_no})
 
 
+# Demo shortcuts, per tenant. A tenant with none falls back to the single documented
+# example from its own `customer_identifier`, so the page is never customer-specific in code.
+_DEMO_EXAMPLE_CUSTOMERS: dict[str, list[dict[str, str]]] = {
+    "nethiz": [
+        {"customer_no": "NH-100042", "note_tr": "aktif abonelik"},
+        {"customer_no": "NH-100017", "note_tr": "kurulum bekliyor"},
+        {"customer_no": "NH-100083", "note_tr": "ödeme beklemede"},
+        {"customer_no": "NH-100005", "note_tr": "askıya alınmış"},
+    ],
+}
+
+
 @app.get("/login")
 def login_page(request: Request):
-    return templates.TemplateResponse(request, "login.html", {})
+    identifier = (
+        state.tenant_config.tenant.customer_identifier if state.tenant_config is not None else None
+    )
+    tenant_name = state.tenant_config.tenant_name if state.tenant_config is not None else ""
+    examples = _DEMO_EXAMPLE_CUSTOMERS.get(tenant_name)
+    if not examples and identifier is not None:
+        examples = [{"customer_no": identifier.example, "note_tr": "örnek"}]
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {
+            "identifier_label_tr": identifier.label_tr if identifier else "Müşteri numarası",
+            "identifier_example": identifier.example if identifier else "",
+            # The HTML `pattern` attribute is implicitly anchored, so the tenant's anchors
+            # must come off or the field never validates.
+            "identifier_html_pattern": (
+                identifier.pattern.lstrip("^").rstrip("$") if identifier else ""
+            ),
+            "example_customers": examples or [],
+        },
+    )
 
 
 # --------------------------------------------------------------------------------------

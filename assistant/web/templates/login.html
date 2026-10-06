@@ -28,13 +28,13 @@
       </p>
 
       <form id="login-form" class="nh-login__form" data-testid="login-form" autocomplete="off">
-        <label for="customer_no">Müşteri numarası</label>
+        <label for="customer_no">{{ identifier_label_tr }}</label>
         <input type="text"
                id="customer_no"
                name="customer_no"
                data-testid="customer-no-input"
-               placeholder="NH-100042"
-               pattern="NH-[0-9]{6}"
+               placeholder="{{ identifier_example }}"
+               pattern="{{ identifier_html_pattern }}"
                autocomplete="off"
                required />
         <div id="login-error" class="nh-login__error" data-testid="login-error" role="alert" hidden></div>
@@ -46,10 +46,9 @@
       <div class="nh-login__examples">
         <span class="nh-login__examples-label">Demo için örnek müşteriler:</span>
         <ul class="nh-login__example-list" data-testid="example-customers">
-          <li><button type="button" class="nh-login__example-btn" data-customer-no="NH-100042" data-testid="example-customer">NH-100042 <small>aktif abonelik</small></button></li>
-          <li><button type="button" class="nh-login__example-btn" data-customer-no="NH-100017" data-testid="example-customer">NH-100017 <small>kurulum bekliyor</small></button></li>
-          <li><button type="button" class="nh-login__example-btn" data-customer-no="NH-100083" data-testid="example-customer">NH-100083 <small>ödeme beklemede</small></button></li>
-          <li><button type="button" class="nh-login__example-btn" data-customer-no="NH-100005" data-testid="example-customer">NH-100005 <small>askıya alınmış</small></button></li>
+          {% for example in example_customers %}
+          <li><button type="button" class="nh-login__example-btn" data-customer-no="{{ example.customer_no }}" data-testid="example-customer">{{ example.customer_no }} <small>{{ example.note_tr }}</small></button></li>
+          {% endfor %}
         </ul>
       </div>
     </div>

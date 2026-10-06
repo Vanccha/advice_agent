@@ -54,7 +54,11 @@ def _budget_component(
     if price > budget * (1 + tolerance):
         return 0.0, None, True
     if price <= budget:
-        return 1.0, templates["budget_ok"].format(monthly_price_try=_money(price)), False
+        # Graded, not binary: a package at half the budget must score better than one that
+        # spends all of it, otherwise `budget_fit`'s weight has nothing to act on and a
+        # tenant that wants price-first advice cannot express it (1.0 down to 0.5).
+        score = 1.0 - 0.5 * (price / budget)
+        return score, templates["budget_ok"].format(monthly_price_try=_money(price)), False
     # over budget but within the 15% tolerance band
     overage_ratio = (price - budget) / (budget * tolerance) if tolerance else 1.0
     score = max(0.0, 1.0 - overage_ratio)

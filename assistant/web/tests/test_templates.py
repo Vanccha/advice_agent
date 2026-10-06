@@ -37,8 +37,29 @@ def render(jinja_env: Environment, name: str, **context) -> str:
 # --------------------------------------------------------------------------------------
 
 
+# The login form belongs to the product, not to one customer, so every customer-specific
+# string on it arrives as context. These fixtures stand in for two different tenant files.
+NETHIZ_LOGIN_CONTEXT = {
+    "identifier_label_tr": "Müşteri numarası",
+    "identifier_example": "NH-100042",
+    "identifier_html_pattern": r"NH-\d{6}",
+    "example_customers": [
+        {"customer_no": "NH-100042", "note_tr": "aktif abonelik"},
+        {"customer_no": "NH-100017", "note_tr": "kurulum bekliyor"},
+        {"customer_no": "NH-100083", "note_tr": "ödeme beklemede"},
+    ],
+}
+
+OTHER_TENANT_LOGIN_CONTEXT = {
+    "identifier_label_tr": "Abone numarası",
+    "identifier_example": "OR-2045118",
+    "identifier_html_pattern": "OR-[0-9]{7}",
+    "example_customers": [{"customer_no": "OR-2045118", "note_tr": "örnek"}],
+}
+
+
 def test_login_page_has_turkish_labels_and_demo_disclaimer(jinja_env):
-    html = render(jinja_env, "login.html")
+    html = render(jinja_env, "login.html", **NETHIZ_LOGIN_CONTEXT)
 
     assert "Müşteri numarası" in html
     assert "demo" in html.lower()
@@ -48,7 +69,7 @@ def test_login_page_has_turkish_labels_and_demo_disclaimer(jinja_env):
 
 
 def test_login_page_has_required_ids_and_example_customers(jinja_env):
-    html = render(jinja_env, "login.html")
+    html = render(jinja_env, "login.html", **NETHIZ_LOGIN_CONTEXT)
 
     assert 'id="login-form"' in html
     assert 'data-testid="login-form"' in html
@@ -62,6 +83,19 @@ def test_login_page_has_required_ids_and_example_customers(jinja_env):
     example_customer_nos = re.findall(r'data-customer-no="(NH-\d{6})"', html)
     assert len(example_customer_nos) >= 3
     assert "NH-100042" in example_customer_nos
+
+
+def test_login_page_is_tenant_driven_not_hardcoded(jinja_env):
+    """Rendered for a different tenant, the page must carry that tenant's identifier —
+    label, placeholder, input pattern and demo shortcuts — and none of NetHiz's."""
+    html = render(jinja_env, "login.html", **OTHER_TENANT_LOGIN_CONTEXT)
+
+    assert "Abone numarası" in html
+    assert "Müşteri numarası" not in html
+    assert 'placeholder="OR-2045118"' in html
+    assert 'pattern="OR-[0-9]{7}"' in html
+    assert 'data-customer-no="OR-2045118"' in html
+    assert "NH-" not in html
 
 
 # --------------------------------------------------------------------------------------
