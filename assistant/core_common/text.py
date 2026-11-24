@@ -1,6 +1,13 @@
 """Small user-facing text formatting helpers (British English, GBP).
 
-Import as: ``from core_common.text import format_money, format_date``.
+Where this sits: ``core_common``; pure functions called by modes, recommendation and tickets
+whenever a number or date goes into customer-facing text.
+
+Key ideas:
+- Format in one place so every reply shows money and dates the same way.
+- Dates are formatted by hand (not ``strftime``) so output does not depend on the OS locale.
+
+Read next: ``recommendation/engine.py`` (a typical caller).
 """
 from __future__ import annotations
 

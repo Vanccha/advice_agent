@@ -61,7 +61,7 @@ company/monitoring/   prometheus.yml, rules.yml, alertmanager.yml
 company/chaos/        failure injection CLI (make chaos SCENARIO=...)
 integrations/common/  http client, read-only db access, ToolResult envelope
 integrations/mcp_*/   one MCP server per company system
-assistant/core_common/     shared types, settings, tenant-config loader, assistant DB models
+assistant/core_common/     shared types, settings, tenant-config models + loader, assistant DB models
                       (named core_common, not common: the boundary test forbids the
                        top-level import name `common` inside assistant/)
 assistant/policy/     authority engine (policy.yaml interpreter)
@@ -69,10 +69,10 @@ assistant/recommendation/  deterministic package scoring (no LLM)
 assistant/privacy/    UK GDPR masking
 assistant/audit/      hash-chained, append-only audit log
 assistant/decision/   DecisionService interface (llm_structured | typesafe_jev stub)
-assistant/llm/        LLMProvider interface (openai_agents | anthropic | scripted)
+assistant/llm/        LLMProvider interface (openai_agents | anthropic | scripted) + *_mapping.py wire helpers
 assistant/modes/      explicit state machine: router / advisory / diagnostic / action
 assistant/tickets/    structured ticket builder
-assistant/mcp_gateway/  MCP client gateway + action runner (named mcp_gateway, NOT mcp:
+assistant/mcp_gateway/  MCP client gateway + fake + tool_audit + action runner (named mcp_gateway, NOT mcp:
                       a package called `mcp` would shadow the installed MCP client SDK)
 assistant/observability/  Langfuse + OTel wrapper (no-op when disabled)
 assistant/api/, assistant/web/   HTTP API + embedded chat widget

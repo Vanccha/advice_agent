@@ -1,9 +1,17 @@
-"""The only legal path from "the model wants to do X" to "X happened" (contracts §4.6).
+"""``ActionExecutor``: the only legal path from "the model wants X" to "X happened".
 
-There is no code path that calls the injected `action_runner` without `PolicyEngine.check()`
-having allowed it first — `execute()` always checks policy before anything else.
+Where this sits: ``policy`` package. ``modes.action`` (via ``mcp_gateway.action_runner``) calls
+``execute()``; it calls ``PolicyEngine.check``, the ``AuditLog`` and the injected action runner.
 
-Import as: ``from policy.executor import ActionExecutor, PolicyDenied, ConfirmationRequired``.
+Key ideas:
+- Enforcement by construction: there is no code path that calls the action runner without a
+  prior policy check, and every check is written to the audit log.
+- Two refusal exceptions, so callers can tell them apart: ``PolicyDenied`` (never) and
+  ``ConfirmationRequired`` (allowed once the customer approves).
+- Denials and confirmations are recorded as ``ActionRecord`` rows too, not only successes.
+
+Read next: ``policy/engine.py``, ``audit/log.py``, ``mcp_gateway/action_runner.py``.
+See: docs/contracts.md Â§4.6.
 """
 from __future__ import annotations
 
@@ -35,6 +43,15 @@ class ConfirmationRequired(Exception):
 
 
 class ActionExecutor:
+    """Runs actions only after policy allows them, auditing every step.
+
+    Args:
+        policy_engine: decides allow / deny / needs-confirmation.
+        audit_log: receives a record for the policy check and for the outcome.
+        action_runner: the injected callable that actually performs the action (in
+            production it calls the company API through the MCP gateway).
+    """
+
     def __init__(self, policy_engine: PolicyEngine, audit_log: Any, action_runner: ActionRunner) -> None:
         self._policy_engine = policy_engine
         self._audit_log = audit_log

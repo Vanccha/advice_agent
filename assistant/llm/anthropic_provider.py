@@ -1,9 +1,19 @@
-"""Alternate `LLMProvider` (contracts §8: `LLM_PROVIDER=anthropic`) over the `anthropic`
-SDK. Model comes from `ANTHROPIC_MODEL`, key from `ANTHROPIC_API_KEY`.
+"""Alternate ``LLMProvider`` (``LLM_PROVIDER=anthropic``) over the ``anthropic`` SDK.
 
-Same import-time-safety contract as `llm.openai_agents`: importing this module never
-requires network/credentials; only constructing `AnthropicProvider` does, and it fails
-with a clear `ProviderConfigError` when the key is missing or empty.
+Where this sits: ``llm`` package; selected by ``llm.factory.get_provider`` and wrapped in
+``MaskingProvider``. Message/tool translation lives in ``llm/anthropic_mapping.py``.
+Model comes from ``ANTHROPIC_MODEL``, key from ``ANTHROPIC_API_KEY``.
+
+Key ideas:
+- Same seam as every provider: callers see ``LLMProvider``, not Anthropic types.
+- Structured output without a native mode: force one tool call whose input schema is the
+  Pydantic model's JSON schema, then validate the tool input back into that model.
+- The tool-calling loop is the caller's job; ``run_tool_step`` performs exactly ONE step.
+- Import safety: importing never needs credentials or network; only constructing the class
+  does, and it raises ``ProviderConfigError`` when the key is missing.
+
+Read next: ``llm/anthropic_mapping.py``, ``llm/openai_agents.py`` (the default provider).
+See: docs/contracts.md §8.
 """
 from __future__ import annotations
 
@@ -12,13 +22,18 @@ from typing import Any, Sequence, TypeVar
 from pydantic import BaseModel
 
 from core_common.settings import get_settings
+from llm.anthropic_mapping import (
+    anthropic_agent_messages,
+    anthropic_messages,
+    anthropic_tool_specs,
+    parse_anthropic_tool_step,
+)
 from llm.base import (
     AgentMessage,
     ChatMessage,
     ProviderConfigError,
     ProviderError,
     ProviderHealth,
-    ToolCall,
     ToolDefinition,
     ToolStep,
 )
@@ -29,6 +44,8 @@ DEFAULT_MODEL = "claude-sonnet-4-5"
 
 
 class AnthropicProvider:
+    """``LLMProvider`` backed by the Anthropic Messages API."""
+
     name = "anthropic"
 
     def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
@@ -58,7 +75,7 @@ class AnthropicProvider:
             response = self._client.messages.create(
                 model=self.model,
                 system=system,
-                messages=_anthropic_messages(messages),
+                messages=anthropic_messages(messages),
                 max_tokens=max_tokens or 1024,
                 temperature=temperature,
             )
@@ -74,9 +91,7 @@ class AnthropicProvider:
         schema: type[TModel],
         temperature: float = 0.0,
     ) -> TModel:
-        # Anthropic has no native structured-output mode; force a single tool call whose
-        # input schema is the Pydantic model's JSON schema, then validate the tool's
-        # input arguments back into that model.
+        # Forcing a tool call is how Anthropic returns schema-shaped data (no native mode).
         tool_name = f"emit_{schema.__name__.lower()}"
         tool = {
             "name": tool_name,
@@ -87,7 +102,7 @@ class AnthropicProvider:
             response = self._client.messages.create(
                 model=self.model,
                 system=system,
-                messages=_anthropic_messages(messages),
+                messages=anthropic_messages(messages),
                 max_tokens=1024,
                 temperature=temperature,
                 tools=[tool],
@@ -132,60 +147,3 @@ class AnthropicProvider:
             return ProviderHealth(ok=True, provider=self.name, model=self.model)
         except Exception as exc:  # pragma: no cover - depends on live infra
             return ProviderHealth(ok=False, provider=self.name, model=self.model, detail=str(exc))
-
-
-def _anthropic_messages(messages: Sequence[ChatMessage]) -> list[dict[str, str]]:
-    # Anthropic's `system` is a separate top-level parameter; only user/assistant turns
-    # go in `messages`.
-    return [{"role": m.role, "content": m.content} for m in messages if m.role != "system"]
-
-
-def anthropic_tool_specs(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
-    return [
-        {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-        for t in tools
-    ]
-
-
-def anthropic_agent_messages(messages: Sequence[AgentMessage]) -> list[dict[str, Any]]:
-    """Maps tool-loop messages to the Messages API: assistant tool calls become `tool_use`
-    blocks, and consecutive tool results are folded into ONE user message of `tool_result`
-    blocks (the API requires the results to follow the tool_use turn in a single user turn)."""
-    out: list[dict[str, Any]] = []
-    for m in messages:
-        if m.role == "tool":
-            block = {"type": "tool_result", "tool_use_id": m.tool_call_id, "content": m.content}
-            last = out[-1] if out else None
-            if (
-                last is not None
-                and last["role"] == "user"
-                and isinstance(last["content"], list)
-                and last["content"]
-                and last["content"][0].get("type") == "tool_result"
-            ):
-                last["content"].append(block)
-            else:
-                out.append({"role": "user", "content": [block]})
-        elif m.role == "assistant" and m.tool_calls:
-            blocks: list[dict[str, Any]] = []
-            if m.content:
-                blocks.append({"type": "text", "text": m.content})
-            blocks.extend(
-                {"type": "tool_use", "id": c.id, "name": c.name, "input": c.arguments}
-                for c in m.tool_calls
-            )
-            out.append({"role": "assistant", "content": blocks})
-        else:
-            out.append({"role": m.role, "content": m.content})
-    return out
-
-
-def parse_anthropic_tool_step(response: Any) -> ToolStep:
-    calls: list[ToolCall] = []
-    texts: list[str] = []
-    for block in getattr(response, "content", None) or []:
-        if block.type == "tool_use":
-            calls.append(ToolCall(id=block.id, name=block.name, arguments=dict(block.input or {})))
-        elif block.type == "text":
-            texts.append(block.text)
-    return ToolStep(tool_calls=calls, text="".join(texts) or None)

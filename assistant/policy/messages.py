@@ -1,9 +1,15 @@
-"""Reason-code → customer-facing sentence fallback table (contracts §4.6).
+"""Reason-code to customer-facing sentence table.
 
-Used by `PolicyEngine` whenever `policy.yaml` does not already carry an explicit `reason_en`
-for the situation (e.g. a generic condition failure, an unknown action, a rate limit hit).
-When the policy file *does* provide `reason_en` (the four hard-denied actions, and any
-`on_condition_fail.reason_en` an operator adds later), that value always wins.
+Where this sits: ``policy`` package; used by ``PolicyEngine`` whenever ``policy.yaml`` does not
+carry its own ``reason_en`` for the situation (unknown action, generic condition failure,
+rate limit). A ``reason_en`` written in the YAML always wins.
+
+Key ideas:
+- Stable machine codes (``reason_code``) for logic and audit; readable English only at the edge.
+- Safe default: an unknown code falls back to the generic "conditions not met" sentence.
+
+Read next: ``policy/engine.py``.
+See: docs/contracts.md Â§4.6.
 """
 from __future__ import annotations
 

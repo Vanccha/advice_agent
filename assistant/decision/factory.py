@@ -1,11 +1,18 @@
-"""`get_decision_service()` selects a `DecisionService` implementation by
-`DECISION_SERVICE` (contracts §4.5: `llm_structured | typesafe_jev`).
+"""``get_decision_service()``: choose a ``DecisionService`` by ``DECISION_SERVICE``.
 
-Import as: ``from decision.factory import get_decision_service``.
+Where this sits: ``decision`` package; called at start-up by ``api``/evals with an already
+guarded ``LLMProvider``. Values: ``llm_structured`` (default) or ``typesafe_jev`` (stub).
+
+Key ideas:
+- Factory keyed by configuration: no ``if name == ...`` scattered through callers.
+- Unknown names fail loudly at start-up rather than at the first customer turn.
+
+Read next: ``decision/llm_structured.py``.
+See: docs/contracts.md Â§4.5.
 """
 from __future__ import annotations
 
-from core_common.config import TenantConfig
+from core_common.config_models import TenantConfig
 from core_common.settings import AssistantSettings, get_settings
 from decision.base import DecisionService
 from decision.llm_structured import LLMStructuredDecisionService

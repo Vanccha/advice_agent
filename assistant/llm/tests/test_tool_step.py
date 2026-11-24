@@ -7,14 +7,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from llm.anthropic_provider import (
-    AnthropicProvider,
-    anthropic_agent_messages,
-    parse_anthropic_tool_step,
-)
+from llm.anthropic_mapping import anthropic_agent_messages, parse_anthropic_tool_step
+from llm.anthropic_provider import AnthropicProvider
 from llm.base import AgentMessage, ProviderError, ToolCall, ToolDefinition, ToolStep
 from llm.guard import MaskingProvider, PIILeakError
-from llm.openai_agents import OpenAIAgentsProvider, openai_chat_messages, parse_openai_tool_step
+from llm.openai_agents import OpenAIAgentsProvider
+from llm.openai_mapping import openai_chat_messages, parse_openai_tool_step
 from llm.scripted import ScriptedProvider, ScriptedRule, UnscriptedPromptError
 
 TOOL = ToolDefinition(

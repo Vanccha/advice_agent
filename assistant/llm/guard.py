@@ -1,8 +1,16 @@
-"""The PII boundary (contracts §4.7): unmasked personal data must never reach a model
-provider. `factory.get_provider()` always hands out a provider wrapped in
-`MaskingProvider` — nothing downstream ever holds an unwrapped provider.
+"""``MaskingProvider``: the last line of defence against PII reaching a model vendor.
 
-Import as: ``from llm.guard import MaskingProvider, PIILeakError``.
+Where this sits: ``llm`` package. ``factory.get_provider()`` wraps every real provider in it,
+so nothing downstream ever holds an unwrapped provider. It calls ``privacy.masking``.
+
+Key ideas:
+- Mask before egress: callers mask data first; this wrapper is the backstop that refuses to
+  send if anything slipped through.
+- Decorator pattern: same ``LLMProvider`` interface in and out, so the guard is invisible to callers.
+- Fail closed: on detection it raises ``PIILeakError`` and never calls the inner provider.
+
+Read next: ``privacy/masking.py``.
+See: docs/contracts.md Â§4.7.
 """
 from __future__ import annotations
 

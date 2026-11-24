@@ -1,14 +1,16 @@
-"""Ticket-specific bridge onto `privacy.masking` (contracts §4.1 / §4.7).
+"""Ticket-specific masking: the bridge from a ticket payload to ``privacy.masking``.
 
-The structured ticket payload's `requester` object uses the field names `name`/`contact`
-(not the generic `full_name`/`phone`/`email` names `privacy.masking.mask_payload` keys
-off of), so those two fields are masked explicitly here. Everything else in the ticket
-(subject, body, evidence, attempted steps, ...) then goes through the generic
-`privacy.masking.mask_payload` sweep, which keeps the tenant's `pii.allow_unmasked` field
-names (`customer_no`, `subscription_id`, `ticket_key`, `region_code`, `package_code`)
-intact and free-text-masks any stray PII anywhere else in the payload.
+Where this sits: ``tickets`` package; only ``tickets.builder`` calls ``mask_ticket_payload``.
 
-Import as: ``from tickets.masking_rules import mask_ticket_payload``.
+Key ideas:
+- Field names differ per payload: the ticket's ``requester`` uses ``name`` / ``contact``, which
+  the generic ``mask_payload`` does not know, so those two are masked explicitly first.
+- Everything else (subject, body, evidence, steps) goes through the generic sweep, which keeps
+  allow-listed ids (``customer_no`` ...) and masks stray PII in free text.
+- The requester's name is also passed as a known name, so it is caught inside the body text.
+
+Read next: ``privacy/masking.py``, ``tickets/builder.py``.
+See: docs/contracts.md §4.1, §4.7.
 """
 from __future__ import annotations
 
@@ -19,14 +21,17 @@ from privacy.masking import DEFAULT_ALLOW_UNMASKED, mask_email_value, mask_full_
 
 
 def mask_requester_contact(raw_contact: str) -> str:
-    """`contact` is either a phone or an email; detect which and mask with the matching
-    rule (contracts §4.7: phone -> `+44 7*** *** *NN`, email -> `a***@d***.com`)."""
+    """Mask a `contact`, which is either an e-mail or a phone number.
+
+    Contracts §4.7: phone -> `+44 7*** *** *NN`, email -> `a***@d***.com`.
+    """
     if EMAIL_RE.fullmatch(raw_contact.strip()):
         return mask_email_value(raw_contact)
     return mask_phone_value(raw_contact)
 
 
 def mask_requester_name(raw_name: str) -> str:
+    """`Ann Lee` -> `A** L**`."""
     return mask_full_name_value(raw_name)
 
 
@@ -36,8 +41,11 @@ def mask_ticket_payload(
     allow_unmasked: frozenset[str] | set[str] | None = None,
     extra_names: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Mask a full ticket payload dict (contracts §4.1 shape) before it is validated into
-    a `tickets.builder.StructuredTicket` / sent to the ticketing adapter."""
+    """Mask a full ticket payload dict (contracts §4.1 shape).
+
+    Called before the dict is validated into a `StructuredTicket` or sent to the ticketing
+    adapter; returns a new dict and leaves the input untouched.
+    """
     payload = dict(payload)
     requester = dict(payload.get("requester") or {})
 

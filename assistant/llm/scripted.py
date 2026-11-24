@@ -1,18 +1,18 @@
-"""Deterministic `LLMProvider` with no network access whatsoever (contracts §8:
-`EVAL_MODE=scripted`, and the default provider for `make eval` / tests).
+"""Deterministic ``LLMProvider`` with no network access (``EVAL_MODE=scripted``, the test default).
 
-Driven by a small fixture mapping: each `ScriptedRule` matches the *last user message*
-(regex search, or an exact match when `exact=True`) and supplies a canned reply
-(`complete`) and/or a canned structured payload per schema name (`structured`).
+Where this sits: ``llm`` package; selected by ``LLM_PROVIDER=scripted`` and used directly by
+unit tests and ``evals/``. Fixtures are ``ScriptedRule`` entries matched against the last
+user message (regex, or exact string when ``exact=True``).
 
-A prompt that matches nothing always raises `UnscriptedPromptError` naming the unmatched
-text — evaluation/test gaps must be loud, never silently papered over with a made-up
-default. `record=True` additionally collects every unmatched prompt into
-`self.unmatched_prompts` (still raising each time) so a test/eval harness that catches the
-exception per turn can report the *full* set of missing fixtures at the end of a run
-instead of only the first one.
+Key ideas:
+- Test double behind the same seam: real code paths run end to end without a model.
+- Loud gaps: a prompt that matches nothing raises ``UnscriptedPromptError``; it never
+  returns a made-up default. ``record=True`` also collects every unmatched prompt so a
+  harness can report all missing fixtures at the end of a run.
+- ``tool_script`` plays a fixed sequence of tool calls, one step per assistant tool turn.
 
-Import as: ``from llm.scripted import ScriptedProvider, ScriptedRule, UnscriptedPromptError``.
+Read next: ``llm/base.py``, ``llm/tests/test_scripted.py``.
+See: docs/contracts.md Â§8.
 """
 from __future__ import annotations
 

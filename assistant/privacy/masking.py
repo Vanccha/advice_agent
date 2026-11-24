@@ -1,10 +1,21 @@
-"""UK GDPR masking at the process boundary (contracts §4.7).
+"""UK GDPR masking at the process boundary: mask before anything leaves the assistant.
 
-Everything that leaves the assistant process for a model provider, a trace, or a ticket
-goes through here first. Masking of free text is regex/validator-driven (`detectors.py`);
-masking of structured payloads is field-name-driven, never a guess at arbitrary words.
+Where this sits: ``privacy`` package. Called by ``modes`` before building a model prompt, by
+``tickets`` and ``observability`` before writing out, and by ``llm.guard`` and ``audit.log``
+as a backstop. It uses the finders in ``detectors.py``. The file has three parts: value
+renderers, free-text masking (``mask_text``) and structured masking (``mask_payload``, driven
+by field names); they stay together because they share the same renderers.
 
-Import as: ``from privacy.masking import mask_text, mask_payload, unmask, assert_no_pii``.
+Key ideas:
+- Mask before egress: model providers, traces and tickets only ever see masked data.
+- Two strategies: regex/validator-driven for free text, field-name-driven for structured
+  payloads. Neither guesses at arbitrary words.
+- Allow-list of IDs that must stay readable (``customer_no`` ...): a masked ticket key is
+  useless to a department agent.
+- ``assert_no_pii`` is the fail-closed backstop that raises ``PIILeakError`` instead of leaking.
+
+Read next: ``privacy/detectors.py``, ``llm/guard.py``.
+See: docs/contracts.md Â§4.7.
 """
 from __future__ import annotations
 
@@ -22,12 +33,12 @@ from privacy.detectors import (
     find_phones,
 )
 
-# --------------------------------------------------------------------------------------
-# Result types
-# --------------------------------------------------------------------------------------
+# --- Result types ------------------------------------------------------------
 
 
 class MaskResult(BaseModel):
+    """Masked text plus `masked value -> original`, so a reply can be unmasked later."""
+
     model_config = ConfigDict(frozen=True)
 
     masked: str
@@ -38,8 +49,8 @@ class PIILeakError(ValueError):
     """Raised by `assert_no_pii` when raw PII is found where only masked data is allowed."""
 
 
-# Field names considered PII in a structured payload (contracts §4.6 `pii.mask_before_model`,
-# minus "address" which is handled together with its `district`/`city` siblings below).
+# Field names treated as PII in a structured payload (contracts §4.6 `pii.mask_before_model`).
+# "address" is special: it is replaced by its `district`/`city` siblings when present.
 DEFAULT_PII_FIELD_NAMES = frozenset(
     {"national_id", "phone", "email", "iban", "card_number", "full_name", "address", "address_line"}
 )
@@ -51,9 +62,7 @@ DEFAULT_ALLOW_UNMASKED = frozenset(
 )
 
 
-# --------------------------------------------------------------------------------------
-# Per-type mask renderers
-# --------------------------------------------------------------------------------------
+# --- Per-type mask renderers -------------------------------------------------
 
 
 def mask_national_id_value() -> str:
@@ -91,15 +100,14 @@ def mask_full_name_value(raw: str) -> str:
     return " ".join(masked_words)
 
 
-# --------------------------------------------------------------------------------------
-# Free-text masking
-# --------------------------------------------------------------------------------------
+# --- Free-text masking -------------------------------------------------------
 
 _Finder = Callable[[str], list[tuple[int, int, str]]]
 _Masker = Callable[[str, str], str]
 
 
 def _apply_masker(text: str, finder: _Finder, masker: _Masker) -> tuple[str, dict[str, str]]:
+    """Replace every span `finder` reports with `masker(...)`; returns text and the mapping."""
     spans = finder(text)
     if not spans:
         return text, {}
@@ -120,8 +128,11 @@ def _apply_masker(text: str, finder: _Finder, masker: _Masker) -> tuple[str, dic
 
 
 def mask_text(text: str, names: list[str] | None = None) -> MaskResult:
-    """Mask every detectable PII pattern in free text. `names` is an optional explicit
-    list of known full names to redact (never a pattern guess)."""
+    """Mask every detectable PII pattern in free text.
+
+    `names` is an optional explicit list of known full names to redact (never a pattern
+    guess). The returned mapping lets the caller `unmask` text that comes back later.
+    """
     mapping: dict[str, str] = {}
     current = text
 
@@ -157,15 +168,14 @@ def unmask(text: str, mapping: dict[str, str]) -> str:
     return result
 
 
-# --------------------------------------------------------------------------------------
-# Structured payload masking
-# --------------------------------------------------------------------------------------
+# --- Structured payload masking ----------------------------------------------
 
 
 def _mask_scalar_field(key: str, value: Any, node: dict[str, Any]) -> Any:
-    """Returns the masked value for a recognised PII field name, or ``None`` when `key` is
-    not a recognised PII field name (including when `value` is not a plain string — in that
-    case the caller recurses into it instead)."""
+    """Masked value for a recognised PII field name, else ``None``.
+
+    ``None`` also covers non-string values, in which case the caller recurses into them.
+    """
     if not isinstance(value, str):
         return None
     lower_key = key.lower()
@@ -188,10 +198,11 @@ def _mask_scalar_field(key: str, value: Any, node: dict[str, Any]) -> Any:
         if district and city:
             return f"{district}, {city}"
         return "<address hidden>"
-    return None  # not a recognised PII field name
+    return None
 
 
 def _mask_node(node: Any, allow_unmasked: frozenset[str], names: list[str]) -> Any:
+    """Recursively mask a payload: by field name first, `mask_text` for other strings."""
     if isinstance(node, dict):
         result: dict[str, Any] = {}
         for key, value in node.items():
@@ -227,12 +238,11 @@ def mask_payload(
     return _mask_node(obj, allow, names or [])
 
 
-# --------------------------------------------------------------------------------------
-# Leak guard
-# --------------------------------------------------------------------------------------
+# --- Leak guard --------------------------------------------------------------
 
 
 def _iter_strings(node: Any) -> Any:
+    """Yield every string nested anywhere inside dicts, lists and tuples."""
     if isinstance(node, str):
         yield node
     elif isinstance(node, dict):
@@ -246,8 +256,9 @@ def _iter_strings(node: Any) -> Any:
 def assert_no_pii(obj: Any) -> None:
     """Raise `PIILeakError` if anything in `obj` still looks like raw PII.
 
-    Used as a guard at the audit-log boundary: evidence handed to `AuditLog.append()` must
-    already be masked.
+    The fail-closed backstop used at the model boundary (`llm.guard`) and the audit-log
+    boundary (`AuditLog.append`): data handed over must already be masked. Names are not
+    checked here, since they can only be found with an explicit list.
     """
     for text in _iter_strings(obj):
         if (

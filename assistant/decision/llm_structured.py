@@ -1,13 +1,20 @@
-"""Default `DecisionService` (contracts §4.5: `DECISION_SERVICE=llm_structured`).
+"""Default ``DecisionService`` (``DECISION_SERVICE=llm_structured``): one structured LLM call per decision.
 
-One structured-output call per decision, each with a tight, English system
-prompt, returning the enum value plus a calibrated confidence and a rationale. The
-returned value is always validated against the target enum — an out-of-enum answer (or a
-failed provider call) becomes a confidence-0 `Decision`, never an exception that kills the
-turn; the caller (typically via `decision.fallback.apply_confidence_floor`) is responsible
-for escalating on low confidence.
+Where this sits: ``decision`` package. Built by ``decision.factory`` around an already
+PII-guarded ``LLMProvider``; called by ``modes``. It calls ``provider.structured()`` only.
 
-Import as: ``from decision.llm_structured import LLMStructuredDecisionService``.
+Key ideas:
+- Structured output: each call returns ``value``, ``confidence`` and ``rationale`` as a
+  Pydantic object, not prose to be parsed.
+- Enum validation: the returned ``value`` is checked against the target enum. An
+  out-of-enum answer or a failed provider call becomes a confidence-0 ``Decision`` with a safe
+  default, never an exception that kills the turn.
+- The service reports confidence; escalating on low confidence is the caller's job
+  (``decision.fallback``).
+- ``triage()`` asks for three decisions in one round-trip but validates each field on its own.
+
+Read next: ``decision/fallback.py``, ``llm/base.py``.
+See: docs/contracts.md Â§4.5.
 """
 from __future__ import annotations
 
@@ -20,9 +27,16 @@ from decision.base import DecisionContext
 from llm.base import ChatMessage, LLMProvider
 
 
+# --- Schemas the model must fill -------------------------------------------
+
+
 class _RawDecision(BaseModel):
-    """What we ask the model to return for every decision call — kept identical in shape
-    across the four decisions so the prompts stay simple and comparable."""
+    """What we ask the model to return for every decision call.
+
+    Identical in shape across the four decisions so the prompts stay simple and comparable.
+    ``value`` is a plain string here and validated against the enum afterwards, so a wrong
+    label does not fail schema parsing.
+    """
 
     value: str
     confidence: float = Field(ge=0.0, le=1.0)
@@ -46,8 +60,11 @@ class _IssueTypeResult(_RawDecision):
 
 
 class _TriageField(BaseModel):
-    """One field of the combined triage answer. Deliberately lenient (no confidence
-    bounds): a bad field must be rejected per field, never fail the whole schema."""
+    """One field of the combined triage answer.
+
+    Deliberately lenient (no confidence bounds): a bad field must be rejected per field,
+    never fail the whole schema. Confidence is clamped to [0, 1] after parsing.
+    """
 
     value: str
     confidence: float
@@ -59,6 +76,8 @@ class _TriageResult(BaseModel):
     priority: _TriageField
     department: _TriageField
 
+
+# --- Prompts ---------------------------------------------------------------
 
 _INTENT_SYSTEM = (
     "You are an intent classifier for a telecom ISP's customer support assistant. "
@@ -122,7 +141,14 @@ _TRIAGE_SYSTEM = (
 )
 
 
+# --- Service ---------------------------------------------------------------
+
+
 def _build_messages(ctx: DecisionContext) -> list[ChatMessage]:
+    """Turn the masked history plus known facts into chat turns ending on a user turn.
+
+    Some providers reject a conversation that ends on an assistant turn, hence the padding.
+    """
     messages: list[ChatMessage] = [
         ChatMessage(role=turn.get("role", "user"), content=turn.get("content", ""))
         for turn in ctx.history
@@ -147,7 +173,10 @@ def _build_messages(ctx: DecisionContext) -> list[ChatMessage]:
 
 
 class LLMStructuredDecisionService:
-    """Wraps any `LLMProvider` (already PII-guarded by `llm.factory.get_provider`)."""
+    """Implements ``DecisionService`` on top of any ``LLMProvider``.
+
+    The provider is expected to be PII-guarded already (``llm.factory.get_provider``).
+    """
 
     def __init__(self, provider: LLMProvider) -> None:
         self._provider = provider
@@ -166,7 +195,7 @@ class LLMStructuredDecisionService:
             result = self._provider.structured(
                 system=system_prompt, messages=messages, schema=result_schema, temperature=0.0
             )
-        except Exception as exc:  # the turn must survive a provider failure
+        except Exception as exc:  # a provider outage degrades to "unsure", it must not crash the turn
             return Decision(
                 value=invalid_fallback,
                 confidence=0.0,
@@ -247,7 +276,7 @@ class LLMStructuredDecisionService:
             result = self._provider.structured(
                 system=_TRIAGE_SYSTEM, messages=_build_messages(ctx), schema=_TriageResult, temperature=0.0
             )
-        except Exception as exc:  # the turn must survive a provider failure
+        except Exception as exc:  # a provider outage degrades to "unsure", it must not crash the turn
             failed = {
                 name: Decision(
                     value=fallback,
