@@ -1,7 +1,18 @@
-"""`build_server(...)` — the one way every MCP server in this layer is built,
-so `mcp-core`, `mcp-payment`, `mcp-ticketing`, `mcp-monitoring` and
-`mcp-notification` all expose the same shape: `GET /health`, `GET /metrics`
-and the MCP streamable-HTTP endpoint mounted at `POST /mcp`.
+"""`build_server(...)`: the one way every MCP server in this layer is built.
+
+Where this sits: called once at the bottom of each adapter's `main.py`. The
+result is a FastAPI app served by uvicorn.
+
+Key ideas:
+- MCP server exposes tools with JSON schemas over streamable HTTP at
+  `POST /mcp`; the same app also serves plain `GET /health` and `GET /metrics`
+  so ordinary ops tooling works on it.
+- A uniform shape across all five adapters means one health check, one
+  scrape config and one client in the assistant.
+- Route order matters: the MCP app is mounted at "/" as a catch-all, so any
+  extra plain-HTTP route must be registered before the mount.
+
+Read next: `tool_spec.py` (how tools are registered) and any `*/app/main.py`.
 """
 from __future__ import annotations
 
@@ -25,13 +36,13 @@ def build_server(
 ) -> FastAPI:
     """Build the FastAPI app for one MCP server.
 
-    `tools_registrar(mcp)` is called once, before the streamable-HTTP ASGI app
-    is built, to register every tool via `common.tool_spec.register_tool`.
+    `tools_registrar(mcp)` is called once, before the streamable-HTTP ASGI app is
+    built, to register every tool via `common.tool_spec.register_tool`.
 
-    `extra_routes` carries any plain (non-MCP) HTTP endpoints the adapter needs —
-    `mcp-monitoring`'s Alertmanager receiver, for instance. It is included *before*
-    the MCP app is mounted at "/", because that mount is a catch-all: anything
-    registered after it is unreachable.
+    `extra_routes` carries any plain (non-MCP) HTTP endpoints the adapter needs
+    (the monitoring adapter's Alertmanager receiver, for instance). It is
+    included before the MCP app is mounted at "/", because that mount is a
+    catch-all: anything registered after it would be unreachable.
     """
     mcp = MCPServer(name=name, version=version)
     tools_registrar(mcp)

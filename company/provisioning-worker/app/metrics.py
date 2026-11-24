@@ -1,3 +1,10 @@
+"""Prometheus metrics for the worker: jobs by status, stuck gauge, durations, sweeps.
+
+Where this sits: scraped via `/metrics`; the `StuckProvisioningJobs` alert reads
+`netswift_provisioning_jobs_stuck`.
+
+Read next: `company/monitoring/rules.yml`.
+"""
 from __future__ import annotations
 
 from prometheus_client import Counter, Gauge, Histogram

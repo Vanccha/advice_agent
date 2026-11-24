@@ -1,3 +1,14 @@
+"""Base environment-driven settings every NetSwift service shares.
+
+Where this sits: services subclass `CompanySettings` for their own variables.
+
+Key ideas:
+- Twelve-factor configuration: hosts, ports and credentials come from the
+  environment, never from code.
+- Settings are cached (`lru_cache`) so the environment is read once.
+
+Read next: `db.py`.
+"""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -36,4 +47,5 @@ class CompanySettings(BaseSettings):
 
 @lru_cache
 def base_settings() -> CompanySettings:
+    """Cached shared settings instance."""
     return CompanySettings()

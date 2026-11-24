@@ -1,3 +1,14 @@
+"""Customer notification resend endpoint.
+
+Where this sits: called by the CRM and partner integrations
+(`notifications:resend`).
+
+Key ideas:
+- Resend cooldown: repeats within `resend_cooldown_seconds` are refused
+  (`RESEND_COOLDOWN`), so a retry loop cannot spam a customer.
+
+Read next: `packages.py`.
+"""
 from __future__ import annotations
 
 from datetime import timedelta

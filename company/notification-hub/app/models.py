@@ -1,3 +1,14 @@
+"""SQLAlchemy models for the `notify` schema: channels and messages.
+
+Where this sits: the hub's own database.
+
+Key ideas:
+- `external_ref` lets a sender tie a message to its own record (a ticket key,
+  an alert fingerprint).
+- Severity is limited to a fixed set by a check constraint.
+
+Read next: `routers/api.py`.
+"""
 from __future__ import annotations
 
 from datetime import datetime

@@ -1,3 +1,15 @@
+{#-
+Single ticket page: details, history, comments and the status form.
+
+Where this sits: rendered by `agent_ticket_detail` in routers/ui.py; posts back to
+the comment and status routes there.
+
+Key ideas:
+- The status buttons offered come from the allowed-transitions table, so the page
+  never offers a move the service would refuse.
+
+Read next: routers/ui.py.
+-#}
 {% extends "base.html" %}
 {% block title %}{{ ticket.ticket_key }} — NetSwift Service Desk{% endblock %}
 {% block content %}

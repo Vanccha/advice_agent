@@ -1,7 +1,12 @@
 """`mcp-payment` entrypoint: `uvicorn app.main:app`.
 
-Exposes the 4 tools listed for `mcp-payment` in docs/contracts.md §3 over MCP
-streamable HTTP at `POST /mcp`, plus `GET /health` and `GET /metrics`.
+Where this sits: process entry point of the `mcp-payment` container.
+
+Key ideas:
+- MCP server exposes tools with JSON schemas: the four tools in
+  docs/contracts.md section 3 at `POST /mcp`, plus `/health` and `/metrics`.
+
+Read next: `tools.py`.
 """
 from __future__ import annotations
 

@@ -1,4 +1,16 @@
-"""`mcp-ticketing` tools (docs/contracts.md §3)."""
+"""`mcp-ticketing` tools (docs/contracts.md section 3).
+
+Where this sits: registered by `main.py`; calls the ticketing service's REST API.
+
+Key ideas:
+- Idempotency keys: ticket creation sends the caller's `external_ref`, so a
+  retry after a timeout returns the same ticket instead of opening a duplicate.
+- Only transport failures are retried; an HTTP error response is a real answer.
+- The payload builder forwards only fields the caller actually set, so the
+  company API applies its own defaults for the rest.
+
+Read next: `models.py`.
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -106,6 +118,7 @@ async def _post_ticket(payload: dict[str, Any]) -> tuple[ToolResult[Any], bool]:
 
 
 async def handle_create_structured_ticket(inp: CreateStructuredTicketInput) -> ToolResult[Any]:
+    """Create a structured ticket; idempotent on `external_ref`."""
     payload = _build_ticket_payload(inp)
     result, already_existed = await _post_ticket(payload)
     if not result.ok:
@@ -115,6 +128,7 @@ async def handle_create_structured_ticket(inp: CreateStructuredTicketInput) -> T
 
 
 async def handle_get_ticket(inp: GetTicketInput) -> ToolResult[Any]:
+    """Fetch one ticket with comments and status history."""
     result = await ticketing_api_client().get(f"/api/v1/tickets/{inp.ticket_key}", SOURCE_TICKETING)
     if not result.ok:
         return result
@@ -122,6 +136,7 @@ async def handle_get_ticket(inp: GetTicketInput) -> ToolResult[Any]:
 
 
 async def handle_list_customer_tickets(inp: ListCustomerTicketsInput) -> ToolResult[Any]:
+    """List a customer's tickets, optionally by status."""
     params: dict[str, Any] = {
         "customer_no": inp.customer_no,
         "limit": inp.limit,
@@ -138,6 +153,7 @@ async def handle_list_customer_tickets(inp: ListCustomerTicketsInput) -> ToolRes
 
 
 async def handle_find_tickets_by_incident(inp: FindTicketsByIncidentInput) -> ToolResult[Any]:
+    """Find the tickets already opened for an incident, to avoid duplicates."""
     params = {"incident_ref": inp.incident_no, "limit": inp.limit, "offset": inp.offset}
     result = await ticketing_api_client().get("/api/v1/tickets", SOURCE_TICKETING, params=params)
     if not result.ok:
@@ -148,6 +164,7 @@ async def handle_find_tickets_by_incident(inp: FindTicketsByIncidentInput) -> To
 
 
 async def handle_add_ticket_comment(inp: AddTicketCommentInput) -> ToolResult[Any]:
+    """Add a comment to an existing ticket."""
     payload = {
         "author": inp.author,
         "author_type": "api_client",

@@ -1,3 +1,7 @@
+"""Notification hub settings: database name and the API key clients must send.
+
+Read next: `routers/api.py`.
+"""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -18,4 +22,5 @@ class NotificationHubSettings(CompanySettings):
 
 @lru_cache
 def get_settings() -> NotificationHubSettings:
+    """Cached notification-hub settings."""
     return NotificationHubSettings()

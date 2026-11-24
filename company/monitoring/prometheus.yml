@@ -1,3 +1,16 @@
+# Prometheus scrape configuration for the company stack.
+#
+# Where this sits: loaded by the Prometheus container; scrapes every service's
+# /metrics endpoint and evaluates rules.yml, sending firing alerts to Alertmanager.
+#
+# Key ideas:
+# - Pull-based monitoring: Prometheus fetches metrics from each service on a
+#   fixed interval, so a service that stops answering is itself a signal (`up == 0`).
+# - One job per service, named exactly like the service, so alert rules can select
+#   with `up{job="..."}`.
+#
+# Read next: rules.yml.
+
 global:
   scrape_interval: 10s
   evaluation_interval: 10s

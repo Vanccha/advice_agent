@@ -1,3 +1,17 @@
+"""The chaos command line: one command per scenario, plus `status` and `reset`.
+
+Where this sits: entrypoint of the chaos container (`python -m chaos.cli`);
+delegates all real work to `scenarios/`.
+
+Key ideas:
+- Dry run: `--dry-run` prints what would change and writes nothing, so an
+  operator can check the target before breaking it.
+- `--json` makes the output machine-readable for scripts and tests.
+- Each command follows the same flow: pick a victim, show the plan, apply,
+  and print what behaviour the support tooling is expected to show.
+
+Read next: `scenarios/__init__.py`.
+"""
 from __future__ import annotations
 
 import json as json_module
@@ -26,6 +40,7 @@ JSON_OPTION = typer.Option(False, "--json", help="Machine-readable JSON output."
 
 
 class ChaosContext:
+    """Options shared by every command: target customer or region, dry run, output format."""
     def __init__(self, customer: str | None, region: str | None, dry_run: bool, json_output: bool) -> None:
         self.customer = customer
         self.region = region
@@ -80,9 +95,7 @@ def _outcome_lines(outcome: sc.ScenarioOutcome) -> list[str]:
     return lines
 
 
-# ---------------------------------------------------------------------------
-# a) stuck_provisioning
-# ---------------------------------------------------------------------------
+# --- a) stuck_provisioning ------------------------------------------------
 
 
 @app.command("stuck_provisioning", help="Freeze a provisioning job mid-run (CHAOS_HOLD marker).")
@@ -138,9 +151,7 @@ def cmd_stuck_provisioning(
     _echo(cctx, asdict(outcome), _outcome_lines(outcome))
 
 
-# ---------------------------------------------------------------------------
-# b) paid_not_active
-# ---------------------------------------------------------------------------
+# --- b) paid_not_active ---------------------------------------------------
 
 
 @app.command("paid_not_active", help="Payment succeeded but no provisioning job was queued.")
@@ -193,9 +204,7 @@ def cmd_paid_not_active(
     _echo(cctx, asdict(outcome), _outcome_lines(outcome))
 
 
-# ---------------------------------------------------------------------------
-# c) regional_outage
-# ---------------------------------------------------------------------------
+# --- c) regional_outage ---------------------------------------------------
 
 
 @app.command("regional_outage", help="Open a critical regional incident, link every active subscriber.")
@@ -224,9 +233,7 @@ def cmd_regional_outage(
     _echo(cctx, asdict(outcome), _outcome_lines(outcome))
 
 
-# ---------------------------------------------------------------------------
-# d) double_charge
-# ---------------------------------------------------------------------------
+# --- d) double_charge -----------------------------------------------------
 
 
 @app.command("double_charge", help="Create a duplicate succeeded charge ~4 minutes after the original.")
@@ -257,9 +264,7 @@ def cmd_double_charge(
     _echo(cctx, asdict(outcome), _outcome_lines(outcome))
 
 
-# ---------------------------------------------------------------------------
-# e) missed_installation
-# ---------------------------------------------------------------------------
+# --- e) missed_installation -----------------------------------------------
 
 
 @app.command("missed_installation", help="Mark yesterday's installation appointment as missed.")
@@ -288,9 +293,7 @@ def cmd_missed_installation(
     _echo(cctx, asdict(outcome), _outcome_lines(outcome))
 
 
-# ---------------------------------------------------------------------------
-# f) payment_down
-# ---------------------------------------------------------------------------
+# --- f) payment_down ------------------------------------------------------
 
 
 @app.command("payment_down", help="Flip the PSP outage control flag on.")
@@ -312,9 +315,7 @@ def cmd_payment_down(
     _echo(cctx, asdict(outcome), _outcome_lines(outcome))
 
 
-# ---------------------------------------------------------------------------
-# status
-# ---------------------------------------------------------------------------
+# --- status ---------------------------------------------------------------
 
 
 @app.command("status", help="Show which chaos scenarios are currently active.")
@@ -365,9 +366,7 @@ def cmd_status(json_output: bool = JSON_OPTION) -> None:
             typer.echo(f"      {r}")
 
 
-# ---------------------------------------------------------------------------
-# reset
-# ---------------------------------------------------------------------------
+# --- reset ----------------------------------------------------------------
 
 
 @app.command("reset", help="Undo every chaos scenario and restore normal control flags.")

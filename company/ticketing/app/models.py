@@ -1,3 +1,15 @@
+"""SQLAlchemy models for the `tkt` schema: departments, tickets, comments, history, webhooks.
+
+Where this sits: the ticketing service's own database, separate from core-api's.
+
+Key ideas:
+- Every status change is a `StatusHistory` row (who, when, from, to): the
+  ticket row shows the present, the history shows how it got there.
+- Webhook deliveries are stored per attempt, which makes delivery debugging a
+  query instead of a log hunt.
+
+Read next: `services.py`.
+"""
 from __future__ import annotations
 
 from datetime import datetime

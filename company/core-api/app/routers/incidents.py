@@ -1,3 +1,10 @@
+"""Network incident endpoints.
+
+Where this sits: read by the CRM and partners (`incidents:read`); incidents are
+linked to affected subscriptions.
+
+Read next: `notifications.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query

@@ -1,6 +1,16 @@
-"""`mcp-monitoring` MCP tools (docs/contracts.md §3). The plain HTTP
-`/webhooks/alertmanager` endpoint lives in `app.webhooks`, not here — it is
+"""`mcp-monitoring` MCP tools (docs/contracts.md section 3).
+
+Where this sits: registered by `main.py`; queries Prometheus and Alertmanager.
+The plain HTTP `/webhooks/alertmanager` endpoint lives in `webhooks.py`: it is
 not an MCP tool.
+
+Key ideas:
+- Diagnostics do not fail when the monitored thing is down: an unreachable
+  Prometheus yields `ok=True, prometheus_reachable=False`.
+- `up` only proves `/metrics` answered, so firing alerts are merged in to
+  catch services that are alive but refusing business traffic.
+
+Read next: `webhooks.py`.
 """
 from __future__ import annotations
 
@@ -169,6 +179,7 @@ async def handle_query_metric(inp: QueryMetricInput) -> ToolResult[Any]:
 
 
 async def handle_list_active_alerts(inp: ListActiveAlertsInput) -> ToolResult[Any]:
+    """Alerts currently firing, from Alertmanager."""
     try:
         response = await alertmanager_client().get("/api/v2/alerts", params={"active": "true"})
     except httpx.HTTPError as exc:

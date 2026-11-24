@@ -1,3 +1,16 @@
+{#-
+Page frame for the department agent panel.
+
+Where this sits: extended by agent_list.html and agent_detail.html, rendered by
+routers/ui.py; styles come from /static/style.css.
+
+Key ideas:
+- Template inheritance: the sidebar and page chrome live here once, and child
+  pages fill the `title` and `content` blocks.
+- Server-rendered HTML with no build step.
+
+Read next: agent_list.html.
+-#}
 <!DOCTYPE html>
 <html lang="en">
 <head>

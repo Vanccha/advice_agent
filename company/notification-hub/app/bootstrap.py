@@ -1,3 +1,15 @@
+"""Idempotent startup: schema, tables and the seeded channel list.
+
+Where this sits: called from the app's startup hook (and again by tests that
+assert idempotency).
+
+Key ideas:
+- Channel slugs are the stable identifiers other services post to; display
+  names can change and are refreshed on each boot.
+- Safe to run repeatedly: existing channels are updated, never duplicated.
+
+Read next: `models.py`.
+"""
 from __future__ import annotations
 
 import logging
@@ -22,11 +34,7 @@ CHANNEL_SEEDS: list[tuple[str, str, str]] = [
 
 
 def run_bootstrap() -> None:
-    """Idempotent startup: wait for DB, create schema/tables, seed channels.
-
-    Safe to call more than once (used directly by on_startup, and again by tests
-    that assert idempotency).
-    """
+    """Wait for the database, create schema and tables, upsert the seeded channels."""
     settings = get_settings()
     engine = make_engine(settings.database_url)
     try:

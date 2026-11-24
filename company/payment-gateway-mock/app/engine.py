@@ -1,3 +1,17 @@
+"""The simulated processor: charges, refunds and control flags.
+
+Where this sits: called by `routers/charges.py` and `routers/control.py`; the
+outage middleware reads flags from here.
+
+Key ideas:
+- Idempotency keys: creating a charge with a known key returns the original,
+  so a client retrying after a timeout never charges twice.
+- Failure injection: a charge fails when a failure code is forced or
+  randomly at `failure_rate` (optionally after added latency), always with a realistic failure code; a full outage is handled by `outage.py`.
+- Refunds cannot exceed what was charged minus earlier refunds.
+
+Read next: `routers/charges.py`.
+"""
 from __future__ import annotations
 
 import random
@@ -37,14 +51,17 @@ DEFAULT_FLAGS = {
 
 
 def new_charge_ref() -> str:
+    """Opaque public reference for a charge (`ch_...`)."""
     return f"ch_{uuid.uuid4().hex[:20]}"
 
 
 def new_refund_ref() -> str:
+    """Opaque public reference for a refund (`rf_...`)."""
     return f"rf_{uuid.uuid4().hex[:20]}"
 
 
 def last4_from_token(card_token: str | None) -> str | None:
+    """Derive the displayed last four digits from a card token (simulated)."""
     if not card_token:
         return None
     digits = "".join(ch for ch in card_token if ch.isdigit())
@@ -54,6 +71,7 @@ def last4_from_token(card_token: str | None) -> str | None:
 
 
 def get_control_flags(session: Session) -> dict:
+    """Current control flags, defaults filled in for missing keys."""
     flags = dict(DEFAULT_FLAGS)
     for row in session.execute(select(ControlFlag)).scalars():
         flags[row.key] = row.value
@@ -61,6 +79,7 @@ def get_control_flags(session: Session) -> dict:
 
 
 def set_control_flags(session: Session, updates: dict) -> dict:
+    """Persist the given flags and return the full set."""
     for key, value in updates.items():
         if value is None and key != "force_failure_code":
             continue
@@ -75,10 +94,12 @@ def set_control_flags(session: Session, updates: dict) -> dict:
 
 
 def is_outage(session: Session) -> bool:
+    """True while the outage flag is on."""
     return bool(get_control_flags(session).get("outage", False))
 
 
 def find_by_idempotency_key(session: Session, idempotency_key: str) -> Charge | None:
+    """The charge already created for this key, if any."""
     return session.execute(
         select(Charge).where(Charge.idempotency_key == idempotency_key)
     ).scalar_one_or_none()
@@ -95,7 +116,7 @@ def create_charge(
     idempotency_key: str,
     callback_url: str | None,
 ) -> tuple[Charge, bool]:
-    """Returns (charge, created). created=False means an existing charge was replayed."""
+    """Create a charge, idempotently, deciding success or failure from the control flags."""
     existing = find_by_idempotency_key(session, idempotency_key)
     if existing is not None:
         return existing, False
@@ -141,6 +162,7 @@ def create_charge(
 
 
 def get_charge_by_ref(session: Session, charge_ref: str) -> Charge:
+    """Load a charge or raise `NotFound`."""
     charge = session.execute(
         select(Charge).where(Charge.charge_ref == charge_ref)
     ).scalar_one_or_none()
@@ -157,6 +179,7 @@ def list_charges(
     limit: int,
     offset: int,
 ) -> tuple[list[Charge], int]:
+    """Filtered, paginated charge listing; returns (items, total)."""
     stmt = select(Charge)
     if customer_ref:
         stmt = stmt.where(Charge.customer_ref == customer_ref)
@@ -169,6 +192,7 @@ def list_charges(
 
 
 def total_refunded(session: Session, charge_id: int) -> Decimal:
+    """Sum already refunded against a charge."""
     rows = session.execute(
         select(Refund).where(Refund.charge_id == charge_id, Refund.status == "completed")
     ).scalars()
@@ -178,6 +202,7 @@ def total_refunded(session: Session, charge_id: int) -> Decimal:
 def refund_charge(
     session: Session, charge: Charge, *, amount_gbp: float, reason: str | None
 ) -> Refund:
+    """Refund part or all of a charge, never beyond the remaining amount."""
     if charge.status == "refunded":
         raise Conflict("ALREADY_REFUNDED", f"Charge '{charge.charge_ref}' is already fully refunded.")
     if charge.status not in ("succeeded", "partially_refunded"):

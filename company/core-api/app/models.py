@@ -1,3 +1,16 @@
+"""SQLAlchemy models for the `core` schema.
+
+Where this sits: the company's data model; tables are created from these
+classes at startup and exposed to outsiders only through `diag` views.
+
+Key ideas:
+- Money is `Numeric` (never float) and always GBP.
+- Idempotency keys are unique columns (payments, credits), so the database
+  itself prevents a repeated request from creating a second row.
+- Check constraints keep bad data out at the lowest level.
+
+Read next: `bootstrap.py` (the views over these tables).
+"""
 from __future__ import annotations
 
 from datetime import date, datetime

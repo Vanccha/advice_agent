@@ -1,3 +1,15 @@
+"""Outgoing signed webhooks from the gateway to core-api.
+
+Where this sits: run as a background task after a charge or refund changes
+status.
+
+Key ideas:
+- Webhook signing: HMAC-SHA256 over the exact body bytes lets the receiver
+  verify the sender.
+- Every delivery attempt is stored, so failures are inspectable.
+
+Read next: `core-api/app/routers/webhooks.py`, the receiver.
+"""
 from __future__ import annotations
 
 import logging
@@ -20,6 +32,7 @@ RETRY_DELAY_SECONDS = 2.0
 
 
 def build_event_payload(event: str, charge: Charge) -> dict[str, Any]:
+    """Build the webhook body for a charge event."""
     return {
         "event": event,
         "charge_ref": charge.charge_ref,
@@ -64,11 +77,7 @@ def deliver_webhook(
     charge_id: int,
     payload: dict[str, Any],
 ) -> None:
-    """Attempt delivery up to MAX_ATTEMPTS times, RETRY_DELAY_SECONDS apart.
-
-    Designed to run as a FastAPI background task: it must never raise, so the
-    request path that scheduled it is never affected by delivery outcomes.
-    """
+    """Send a signed webhook to core-api, recording every attempt."""
     target_url = settings.core_webhook_url
     headers = {
         "Content-Type": "application/json",

@@ -1,3 +1,18 @@
+"""Idempotent startup: schemas, tables, diagnostic views, grants and seed data.
+
+Where this sits: called from `main.py`'s startup hook on every boot.
+
+Key ideas:
+- Diagnostic views are the read-only surface for outside readers. Views hide
+  internals (no national id, address or card secrets) and give outsiders a
+  stable contract even if the tables change.
+- The read-only role is enforced by the database: all rights on schema `core`
+  are revoked from it and only `SELECT` on schema `diag` is granted.
+- Everything here is safe to run repeatedly (`IF NOT EXISTS`,
+  `CREATE OR REPLACE`), because containers restart at any time.
+
+Read next: `seed.py`.
+"""
 from __future__ import annotations
 
 import logging

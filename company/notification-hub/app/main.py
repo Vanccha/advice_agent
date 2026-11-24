@@ -1,3 +1,9 @@
+"""Notification hub entrypoint: builds the app, mounts static files and routers.
+
+Where this sits: `uvicorn app.main:app` in the notification-hub container.
+
+Read next: `routers/api.py`.
+"""
 from __future__ import annotations
 
 from pathlib import Path

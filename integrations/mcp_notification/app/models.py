@@ -1,5 +1,10 @@
-"""Pydantic input/output models for every `mcp-notification` tool
-(docs/contracts.md §3, §1.4, §2.6)."""
+"""Pydantic input/output models for the `mcp-notification` tools (docs/contracts.md section 3).
+
+Where this sits: imported by `tools.py`; the models are the source of each
+tool's JSON schema.
+
+Read next: `tools.py`.
+"""
 from __future__ import annotations
 
 from typing import Any, Literal, Optional
@@ -23,9 +28,7 @@ class MessageDetail(BaseModel):
     created_at: str
 
 
-# --------------------------------------------------------------------------
-# post_department_message
-# --------------------------------------------------------------------------
+# --- post_department_message ----------------------------------------------
 
 
 class PostDepartmentMessageInput(BaseModel):
@@ -41,9 +44,7 @@ class PostDepartmentMessageOutput(BaseModel):
     message: MessageDetail
 
 
-# --------------------------------------------------------------------------
-# list_channel_messages
-# --------------------------------------------------------------------------
+# --- list_channel_messages ------------------------------------------------
 
 
 class ListChannelMessagesInput(BaseModel):

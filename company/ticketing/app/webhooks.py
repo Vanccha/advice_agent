@@ -1,3 +1,18 @@
+"""Outgoing signed webhooks with retries.
+
+Where this sits: run as a background task after a ticket event; calls each
+subscriber URL.
+
+Key ideas:
+- Webhook signing: the body is signed with HMAC-SHA256 in `X-Webhook-Signature`,
+  so a receiver can prove the call came from us and was not altered.
+- Retries with a cap: up to `MAX_ATTEMPTS` per subscriber, with every attempt
+  stored, so persistent failure is visible and bounded.
+- The delivery task never raises: one broken subscriber must not break
+  others or the API request.
+
+Read next: `metrics_gauges.py`.
+"""
 from __future__ import annotations
 
 import json
@@ -27,7 +42,7 @@ def build_webhook_payload(
     new_status: str | None = None,
     comment: str | None = None,
 ) -> dict:
-    """Build the outgoing payload, shape per docs/contracts.md §2.5."""
+    """Build the outgoing payload (shape in docs/contracts.md section 2.5)."""
     return {
         "event": event,
         "ticket_key": ticket.ticket_key,
@@ -58,8 +73,8 @@ def _deliver_once(target_url: str, secret: str, body: bytes) -> tuple[int | None
 def deliver_event(session_factory: sessionmaker[Session], ticket_id: int, event: str, payload: dict) -> None:
     """Attempt delivery to every active subscription for `event`, recording every attempt.
 
-    Runs as a FastAPI background task. Must never raise: a failing subscriber must never
-    fail the API request that triggered it.
+    Runs as a FastAPI background task and must never raise: a failing subscriber
+    must not fail the API request that triggered it.
     """
     body = json.dumps(payload, sort_keys=True).encode("utf-8")
     session = session_factory()

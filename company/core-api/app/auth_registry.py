@@ -1,3 +1,16 @@
+"""The API keys core-api accepts and the scopes each key carries.
+
+Where this sits: read by every router through `require_scope(..., get_registry())`.
+
+Key ideas:
+- API-key scopes: the CRM key may do nearly everything (including
+  `billing:refund`), while the partner key gets only reads, a provisioning
+  retry, credits and ticket writes. A refund attempted with the partner key
+  is refused by the company API itself (`SCOPE_DENIED`), not by the caller.
+- Least privilege: grant the smallest scope set that lets a client do its job.
+
+Read next: `routers/billing.py`, where the refund scope is enforced.
+"""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -20,6 +33,7 @@ PARTNER_SCOPES = {
 
 @lru_cache
 def get_registry() -> ApiKeyRegistry:
+    """Build (once) the key registry from the environment-provided keys."""
     settings = get_settings()
     registry = ApiKeyRegistry()
     registry.register(settings.core_api_key_crm, "netswift-crm", CRM_SCOPES)

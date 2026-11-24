@@ -1,3 +1,7 @@
+"""Gateway settings: database, API key, default failure rate and the core webhook URL.
+
+Read next: `bootstrap.py`.
+"""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -6,7 +10,7 @@ from shared.settings import CompanySettings
 
 
 class Settings(CompanySettings):
-    """Settings for the payment-gateway-mock (PSP simulator) service."""
+    """Settings for the payment gateway simulator."""
 
     service_name: str = "payment-gateway"
     service_version: str = "1.0.0"
@@ -20,4 +24,5 @@ class Settings(CompanySettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Cached gateway settings."""
     return Settings()

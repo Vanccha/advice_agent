@@ -1,3 +1,19 @@
+# Prometheus alert rules: what counts as an incident, and which department owns it.
+#
+# Where this sits: loaded by Prometheus (see prometheus.yml); firing alerts go to
+# Alertmanager, which routes them (see alertmanager.yml).
+#
+# Key ideas:
+# - Alert rules route to departments: each rule carries a `department` label
+#   (TECHNICAL_INFRA, BILLING, SUBSCRIPTION_OPS, FIELD_INSTALL), which the
+#   notification hub maps to a channel.
+# - `for:` is a debounce: the condition must hold that long before the alert
+#   fires, so a blip does not page anyone.
+# - Rules read business gauges (stuck jobs, open incidents) as well as `up`,
+#   because a service can be reachable and still broken.
+#
+# Read next: alertmanager.yml.
+
 groups:
   - name: netswift-alerts
     rules:

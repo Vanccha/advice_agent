@@ -1,3 +1,20 @@
+"""Receiver for Alertmanager webhooks; turns alerts into channel messages.
+
+Where this sits: called by Alertmanager for every firing or resolved alert
+(company/monitoring/alertmanager.yml).
+
+Key ideas:
+- Prometheus alert rules route to departments: the `department` label on the
+  alert picks the channel, with `ops-general` as the fallback for unknown or
+  missing departments.
+- Resolved alerts become informational messages, so the channel shows the
+  whole story.
+- Unauthenticated by design (see the note on the route): Alertmanager cannot
+  send custom headers here, the endpoint is only reachable on the internal
+  network, and it can only append a message.
+
+Read next: `company/monitoring/rules.yml`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -23,6 +40,7 @@ DEFAULT_CHANNEL = "ops-general"
 
 
 class AlertmanagerAlert(BaseModel):
+    """One alert from the Alertmanager webhook body; unknown fields are ignored."""
     model_config = ConfigDict(extra="ignore")
 
     status: str = "firing"
@@ -49,6 +67,7 @@ class AlertmanagerPayload(BaseModel):
 # mutating company action — it only ever appends an informational channel message.
 @router.post("/alertmanager", status_code=202)
 def receive_alert(payload: AlertmanagerPayload, session: Session = Depends(get_session)) -> dict:
+    """Turn every alert in the batch into a message on its department channel."""
     posted = 0
     for alert in payload.alerts:
         department = alert.labels.get("department", "")

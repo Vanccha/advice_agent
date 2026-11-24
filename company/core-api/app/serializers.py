@@ -1,3 +1,14 @@
+"""Functions that turn ORM rows into the JSON the API returns.
+
+Where this sits: used by every router.
+
+Key ideas:
+- The API shape is decided here, not by the table shape: money becomes a
+  float GBP amount and timestamps become `...Z` strings.
+- Sensitive columns are simply never copied into the output.
+
+Read next: `routers/subscriptions.py`.
+"""
 from __future__ import annotations
 
 from shared.clock import isoformat
@@ -13,6 +24,7 @@ from app.models import (
 
 
 def customer_out(customer: Customer) -> dict:
+    """Customer JSON; deliberately omits the national id and address line."""
     return {
         "id": customer.id,
         "customer_no": customer.customer_no,
@@ -30,6 +42,7 @@ def customer_out(customer: Customer) -> dict:
 
 
 def subscription_out(sub: Subscription) -> dict:
+    """Subscription JSON."""
     return {
         "id": sub.id,
         "customer_id": sub.customer_id,
@@ -48,6 +61,7 @@ def subscription_out(sub: Subscription) -> dict:
 
 
 def payment_out(payment: Payment) -> dict:
+    """Payment JSON; never includes card data."""
     return {
         "id": payment.id,
         "subscription_id": payment.subscription_id,
@@ -65,6 +79,7 @@ def payment_out(payment: Payment) -> dict:
 
 
 def job_out(job: ProvisioningJob) -> dict:
+    """Provisioning job JSON."""
     return {
         "id": job.id,
         "subscription_id": job.subscription_id,
@@ -85,6 +100,7 @@ def job_out(job: ProvisioningJob) -> dict:
 
 
 def appointment_out(appt: InstallationAppointment) -> dict:
+    """Installation appointment JSON."""
     return {
         "id": appt.id,
         "subscription_id": appt.subscription_id,
@@ -99,6 +115,7 @@ def appointment_out(appt: InstallationAppointment) -> dict:
 
 
 def incident_out(inc: NetworkIncident) -> dict:
+    """Network incident JSON."""
     return {
         "id": inc.id,
         "incident_no": inc.incident_no,
@@ -117,6 +134,7 @@ def incident_out(inc: NetworkIncident) -> dict:
 
 
 def package_out(pkg) -> dict:
+    """Package JSON."""
     return {
         "id": pkg.id,
         "code": pkg.code,
@@ -137,6 +155,7 @@ def package_out(pkg) -> dict:
 
 
 def region_out(region) -> dict:
+    """Region JSON."""
     return {
         "code": region.code,
         "name": region.name,

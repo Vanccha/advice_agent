@@ -1,3 +1,16 @@
+"""Business gauges exported on `/metrics` (stuck jobs, open incidents, missed appointments).
+
+Where this sits: refreshed by the middleware in `main.py` on each scrape;
+Prometheus alert rules (company/monitoring/rules.yml) read these series.
+
+Key ideas:
+- Metrics describe business health, not just HTTP health: a service can
+  answer requests perfectly while jobs pile up stuck.
+- Every status label is always emitted (zero if none) so a series never
+  disappears and alerts do not flap on missing data.
+
+Read next: `company/monitoring/rules.yml`.
+"""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -28,6 +41,7 @@ ALL_SEVERITIES = ("minor", "major", "critical")
 
 
 def refresh_gauges(session: Session) -> None:
+    """Recompute every business gauge from the database."""
     stuck = session.scalar(
         select(func.count()).select_from(ProvisioningJob).where(ProvisioningJob.status == "stuck")
     ) or 0

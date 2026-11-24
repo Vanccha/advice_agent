@@ -1,3 +1,16 @@
+"""Prometheus request metrics and the `/metrics` endpoint every service exposes.
+
+Where this sits: installed by `create_app`; scraped by Prometheus
+(company/monitoring/prometheus.yml); alert rules read these series.
+
+Key ideas:
+- Labels use the route template (`/v1/customers/{id}`), not the raw URL, to
+  keep label cardinality bounded.
+- Counter plus histogram per request gives rate, error ratio and latency
+  percentiles with no per-endpoint code.
+
+Read next: `company/monitoring/rules.yml`.
+"""
 from __future__ import annotations
 
 import time
@@ -22,10 +35,12 @@ router = APIRouter()
 
 @router.get("/metrics", include_in_schema=False)
 def metrics() -> Response:
+    """Prometheus text exposition of every registered metric."""
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 def install_metrics(app: FastAPI, service_name: str) -> None:
+    """Mount `/metrics` and add the middleware that counts and times every request."""
     app.include_router(router)
 
     @app.middleware("http")

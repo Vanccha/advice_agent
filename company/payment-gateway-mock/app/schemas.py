@@ -1,3 +1,7 @@
+"""Pydantic request and response models for the gateway API.
+
+Read next: `routers/charges.py`.
+"""
 from __future__ import annotations
 
 from typing import Literal

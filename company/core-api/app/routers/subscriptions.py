@@ -1,3 +1,17 @@
+"""Subscription endpoints: create, read, pay and move through the lifecycle.
+
+Where this sits: the busiest router; `create_payment` calls the payment gateway
+and, on success, queues a provisioning job.
+
+Key ideas:
+- Idempotent payment endpoint: the same `idempotency_key` returns the
+  existing payment, so client retries are safe.
+- If the gateway is down the pending payment row is committed before the
+  error is raised, so the attempt remains visible for diagnosis.
+- Status changes only via `lifecycle.transition`.
+
+Read next: `lifecycle.py`, `webhooks.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -135,6 +149,7 @@ def get_subscription(subscription_id: int, db: Session = Depends(get_db)) -> dic
 def create_payment(
     subscription_id: int, body: PaymentCreate, db: Session = Depends(get_db)
 ) -> dict:
+    """Charge for a subscription, idempotently, and queue provisioning on success."""
     sub = _get_subscription_or_404(db, subscription_id)
 
     existing = db.scalar(
@@ -231,6 +246,7 @@ def list_subscription_payments(subscription_id: int, db: Session = Depends(get_d
 def apply_transition(
     subscription_id: int, body: TransitionRequest, db: Session = Depends(get_db)
 ) -> dict:
+    """Move a subscription to a new status via the state machine."""
     sub = _get_subscription_or_404(db, subscription_id)
     assert_transition(sub.status, body.to_status)
     transition(db, sub, body.to_status, actor="csr", reason=body.reason)
@@ -245,6 +261,7 @@ def apply_transition(
 def cancel_subscription(
     subscription_id: int, body: CancelRequest, db: Session = Depends(get_db)
 ) -> dict:
+    """Cancel a subscription (allowed from any non-cancelled status)."""
     sub = _get_subscription_or_404(db, subscription_id)
     transition(db, sub, "cancelled", actor="csr", reason=body.reason)
     sub.cancellation_reason = body.reason

@@ -1,3 +1,9 @@
+"""Customer endpoints: create, list and fetch.
+
+Where this sits: called by the CRM; read scopes also allow partner reads.
+
+Read next: `subscriptions.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
