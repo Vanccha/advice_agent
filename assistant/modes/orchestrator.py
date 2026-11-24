@@ -488,8 +488,16 @@ class Orchestrator:
                     return Mode.CLOSING, _StepOutcome(
                         reply_en="Please sign in (with your customer number) first so that I can diagnose the problem."
                     )
-                diagnosis_obj = diagnostic.run_diagnosis(ctx, customer_no)
-                state["diagnosis"] = diagnosis_obj.model_dump(mode="json")
+                reused = None
+                if investigation.has_open_investigation(state) and state.get("diagnosis"):
+                    # Continuation of an open investigation: the checklist already ran and
+                    # found nothing; reuse it instead of spending the turn budget again.
+                    reused = Diagnosis.model_validate(state["diagnosis"])
+                if reused is not None and reused.root_cause == diagnostic.ROOT_CAUSE_NO_ISSUE_FOUND:
+                    diagnosis_obj = reused
+                else:
+                    diagnosis_obj = diagnostic.run_diagnosis(ctx, customer_no)
+                    state["diagnosis"] = diagnosis_obj.model_dump(mode="json")
                 if diagnosis_obj.root_cause == diagnostic.ROOT_CAUSE_NO_ISSUE_FOUND:
                     # The checklist found no known pattern: read what the customer actually
                     # wrote (bounded, read-only, audited). It either asks one question and

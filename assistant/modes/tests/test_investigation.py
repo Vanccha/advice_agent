@@ -307,3 +307,59 @@ def test_known_root_causes_never_reach_the_investigation(tenant_config, session_
     )
     assert result.diagnosis["root_cause"] == "stuck_provisioning"
     assert any(name == "retry_provisioning_job" for name, _ in gateway.calls_made)
+
+
+# -- follow-up fixes: no duplicated question, no checklist re-run, no repeated question ------
+
+
+def test_question_is_not_duplicated_when_the_model_put_it_in_the_reply_too(tenant_config, session_factory) -> None:
+    question = "Does it affect wifi, cable or both?"
+    rules = [
+        _intent(
+            r"slow in the evenings",
+            tool_script=[[_submit(
+                "needs_more_info",
+                customer_reply_en=f"Your line looks healthy. {question} Please tell me.",
+                clarifying_question_en=question,
+            )]],
+        )
+    ]
+    orch, _ = _orch(tenant_config, session_factory, rules)
+    result = orch.handle_message(conversation_id=None, customer_no=CUSTOMER, message=SLOW)
+    assert result.reply_en.count("?") == 1
+    assert result.reply_en.count("wifi, cable or both") == 1
+    assert result.reply_en.startswith("Your line looks healthy.")
+
+
+def test_follow_up_turn_reuses_the_checklist_diagnosis(tenant_config, session_factory) -> None:
+    rules = [
+        _intent(r"slow in the evenings", tool_script=[[_ask()]]),
+        ScriptedRule(match=r"every evening", tool_script=[[_submit("escalate")]]),
+    ]
+    orch, gateway = _orch(tenant_config, session_factory, rules)
+    first = orch.handle_message(conversation_id=None, customer_no=CUSTOMER, message=SLOW)
+    checklist_calls = len(gateway.calls_made)
+    assert checklist_calls >= 7
+    second = orch.handle_message(conversation_id=first.conversation_id, customer_no=CUSTOMER, message=FOLLOW_UP)
+    assert second.mode == Mode.ESCALATED.value
+    later = [name for name, _ in gateway.calls_made[checklist_calls:]]
+    assert "get_subscription_status" not in later and "get_service_health" not in later
+    assert later == ["find_customer", "create_structured_ticket"] or later == ["create_structured_ticket"]
+
+
+def test_continuation_prompt_lists_prior_questions_and_forbids_repeats(tenant_config, session_factory) -> None:
+    rules = [_intent(r"slow", tool_script=[[_ask("Does it affect wifi, cable or both?")]])]
+    recorder = _RecordingProvider(rules)
+    orch, _ = _orch(tenant_config, session_factory, rules, provider=recorder)
+    first = orch.handle_message(conversation_id=None, customer_no=CUSTOMER, message=SLOW)
+    orch.handle_message(conversation_id=first.conversation_id, customer_no=CUSTOMER, message="slow on both wifi and cable")
+    system_turn1, system_turn2 = recorder.seen[0][0], recorder.seen[1][0]
+    assert "follow-up" not in system_turn1
+    assert "NEVER ask a question already asked" in system_turn2
+    assert "wifi, cable or both" in system_turn2
+    assert "Your previous summary" in system_turn2
+    assert "LAST round" not in system_turn2
+
+    # third message is the last allowed round (max_clarification_rounds=2): conclude, don't ask
+    orch.handle_message(conversation_id=first.conversation_id, customer_no=CUSTOMER, message="slow again")
+    assert "LAST round" in recorder.seen[2][0]
