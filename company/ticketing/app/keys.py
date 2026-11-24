@@ -1,3 +1,14 @@
+"""Human-readable ticket keys (`TKT-<year>-<5 digits>`).
+
+Where this sits: called by `services.create_ticket`.
+
+Key ideas:
+- Use a database sequence for unique numbers: `nextval` is atomic and never
+  blocks, so two concurrent requests cannot receive the same key, which a
+  "read the max and add one" approach cannot guarantee.
+
+Read next: `services.py`.
+"""
 from __future__ import annotations
 
 from sqlalchemy import text

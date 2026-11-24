@@ -1,3 +1,13 @@
+"""Server-rendered channel UI: channel list and message stream.
+
+Where this sits: opened in a browser by staff; reads the same tables as the API.
+
+Key ideas:
+- Jinja2 templates and no build step.
+- Helpers format timestamps and initials on the server.
+
+Read next: `templates/base.html`.
+"""
 from __future__ import annotations
 
 import json

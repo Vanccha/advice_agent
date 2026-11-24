@@ -1,13 +1,16 @@
-"""Process-wide dependencies for the `mcp-monitoring` server: settings and
-plain `httpx.AsyncClient`s for Prometheus and Alertmanager.
+"""Process-wide dependencies for the `mcp-monitoring` server: settings and plain httpx clients.
 
-`mcp-monitoring` carries no company API key (docs/contracts.md §3: "no
-company key — reads Prometheus/Alertmanager"), so, unlike every other
-adapter's `deps.py`, these clients are bare `httpx.AsyncClient`s rather than
-`common.http.CompanyApiClient` — there's no `X-API-Key` to attach and
-Prometheus/Alertmanager's own response shapes (`{"status":"success"|"error",
-"data":{...}}`, the Alertmanager v2 alert list) don't match the company
-REST error envelope `CompanyApiClient` is built to unpack.
+Where this sits: imported by `tools.py` and `webhooks.py`.
+
+Key ideas:
+- This adapter has no company API key (it reads Prometheus/Alertmanager), so
+  its clients are bare `httpx.AsyncClient`s, not `CompanyApiClient`:
+  Prometheus and Alertmanager use their own response shapes, not the company
+  error envelope.
+- Clients are rebuilt when the event loop changes (httpx clients are bound to
+  the loop that created them).
+
+Read next: `tools.py`.
 """
 from __future__ import annotations
 
@@ -21,6 +24,7 @@ from common.settings import AdapterSettings, get_settings
 
 @lru_cache
 def settings() -> AdapterSettings:
+    """Cached adapter settings."""
     return get_settings()
 
 

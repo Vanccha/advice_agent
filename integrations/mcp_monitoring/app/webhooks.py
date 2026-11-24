@@ -1,11 +1,16 @@
-"""`POST /webhooks/alertmanager` — a plain HTTP endpoint, not an MCP tool
-(docs/contracts.md §3, §2.7).
+"""`POST /webhooks/alertmanager`: receive company alerts, normalise and forward them.
 
-Receives the real Alertmanager webhook payload, normalizes each alert to the
-shape the assistant expects, and forwards it to `ASSISTANT_ALERT_WEBHOOK_URL`.
-The assistant container may not exist yet (or may be down), so a forwarding
-failure is logged and counted, never raised — Alertmanager always gets a 2xx
-back from this endpoint so it does not spin retrying a webhook that "fails".
+Where this sits: called by the company's Alertmanager; calls the assistant's
+alert webhook (URL from configuration).
+
+Key ideas:
+- Plain HTTP endpoint, not an MCP tool (docs/contracts.md sections 3 and 2.7).
+- Never fail the sender: a forwarding failure is logged and counted, and
+  Alertmanager always gets a 2xx so it does not retry-storm a webhook.
+- Signed webhooks: the forwarded body is signed with HMAC-SHA256 over exactly
+  the bytes sent (`X-Webhook-Signature`), so the receiver can verify origin.
+
+Read next: `models.py` for the payload shapes.
 """
 from __future__ import annotations
 
@@ -34,6 +39,7 @@ ALERT_FORWARDS_TOTAL = Counter(
 
 
 def normalize_alert(alert: AlertmanagerWebhookAlert) -> NormalizedAlert:
+    """Flatten one Alertmanager alert into the shape the receiver expects, with safe defaults for missing labels."""
     labels = alert.labels or {}
     annotations = alert.annotations or {}
     return NormalizedAlert(
@@ -83,6 +89,7 @@ async def forward_alert(normalized: NormalizedAlert) -> bool:
 
 @router.post("/webhooks/alertmanager")
 async def receive_alertmanager_webhook(payload: AlertmanagerWebhookPayload) -> dict[str, Any]:
+    """Forward every alert in the batch; always answers 2xx so Alertmanager does not retry."""
     results = []
     for alert in payload.alerts:
         normalized = normalize_alert(alert)

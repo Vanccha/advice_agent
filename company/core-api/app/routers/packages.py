@@ -1,3 +1,9 @@
+"""Public package catalogue endpoints.
+
+Where this sits: reference data used to quote and sell plans.
+
+Read next: `regions.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query

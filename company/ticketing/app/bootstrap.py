@@ -1,3 +1,17 @@
+"""Idempotent startup: schema, tables, ticket-key sequence, departments, default webhooks.
+
+Where this sits: run from the app's startup hook on every boot.
+
+Key ideas:
+- Reference data is upserted (`ON CONFLICT DO UPDATE`), so a restart repairs
+  or updates it instead of failing or duplicating it.
+- Departments are the routing table: each owns an email and a channel slug in
+  the notification hub.
+- Default webhook subscriptions come from configuration, so the same code
+  runs with different receivers per environment.
+
+Read next: `keys.py`.
+"""
 from __future__ import annotations
 
 import logging
@@ -24,7 +38,7 @@ DEFAULT_WEBHOOK_EVENTS = ["ticket.created", "ticket.status_changed", "ticket.com
 
 
 def run_bootstrap(engine: Engine, settings: TicketingSettings) -> None:
-    """Idempotent startup: wait for DB, create schema/tables, seed reference data."""
+    """Idempotent startup: wait for DB, create schema/tables, upsert reference data."""
     wait_for_database(engine)
 
     with engine.begin() as conn:

@@ -1,3 +1,14 @@
+"""Pydantic request and response models for the ticketing API.
+
+Where this sits: used by `routers/api.py`; validated before handlers run.
+
+Key ideas:
+- A structured ticket payload (requester, evidence, steps already tried)
+  lets the receiving department act without asking the customer again.
+- Response models are an allow-list: only declared fields leave the service.
+
+Read next: `routers/api.py`.
+"""
 from __future__ import annotations
 
 from datetime import datetime

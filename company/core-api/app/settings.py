@@ -1,3 +1,13 @@
+"""core-api settings: keys, credit limits, upstream URLs.
+
+Where this sits: read through `get_settings()`.
+
+Key ideas:
+- Business limits are settings (`credit_max_per_request_gbp`,
+  `resend_cooldown_seconds`), so policy changes need no code change.
+
+Read next: `auth_registry.py`.
+"""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -30,4 +40,5 @@ class CoreApiSettings(CompanySettings):
 
 @lru_cache
 def get_settings() -> CoreApiSettings:
+    """Cached core-api settings."""
     return CoreApiSettings()

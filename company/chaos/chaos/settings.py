@@ -1,3 +1,7 @@
+"""Chaos tool settings: two database connections and two HTTP upstreams.
+
+Read next: `db.py`.
+"""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -30,4 +34,5 @@ class ChaosSettings(CompanySettings):
 
 @lru_cache
 def get_settings() -> ChaosSettings:
+    """Cached chaos settings."""
     return ChaosSettings()

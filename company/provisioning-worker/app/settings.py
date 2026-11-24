@@ -1,3 +1,7 @@
+"""Worker settings: polling interval, simulated work time, success rate, stuck threshold.
+
+Read next: `worker.py`.
+"""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -21,4 +25,5 @@ class WorkerSettings(CompanySettings):
 
 @lru_cache
 def get_settings() -> WorkerSettings:
+    """Cached worker settings."""
     return WorkerSettings()

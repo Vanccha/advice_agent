@@ -1,3 +1,16 @@
+"""Client for the payment gateway (card processor) used by core-api.
+
+Where this sits: called by the payment and refund routes; calls the payment
+gateway simulator over REST.
+
+Key ideas:
+- Anti-corruption layer: the processor's responses and errors are translated
+  into core-api's own error vocabulary (`UPSTREAM_UNAVAILABLE`, `REFUND_FAILED`).
+- Idempotency keys travel with every charge, so a retried request cannot charge
+  a customer twice.
+
+Read next: `routers/subscriptions.py` (`create_payment`).
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -29,6 +42,7 @@ class PaymentClient:
         card_token: str | None,
         idempotency_key: str,
     ) -> dict[str, Any]:
+        """Charge a customer; the idempotency key makes a retry return the same charge."""
         body = {
             "amount_gbp": float(amount_gbp),
             "currency": "GBP",
@@ -64,6 +78,7 @@ class PaymentClient:
         return response.json()
 
     def refund(self, *, charge_ref: str, amount_gbp: float, reason: str) -> dict[str, Any]:
+        """Ask the gateway to refund part or all of a charge."""
         try:
             response = self._client.post(
                 f"/psp/v1/charges/{charge_ref}/refunds",

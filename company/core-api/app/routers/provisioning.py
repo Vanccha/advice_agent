@@ -1,3 +1,14 @@
+"""Provisioning job endpoints: list, retry and enqueue.
+
+Where this sits: jobs are executed by the separate provisioning worker; this
+router only changes their state in the shared table.
+
+Key ideas:
+- The API never provisions anything itself: it queues work, a worker does it.
+  That is why a job can sit `stuck` while the API stays healthy.
+
+Read next: `company/provisioning-worker/app/worker.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query

@@ -1,3 +1,18 @@
+"""The subscription state machine: which status may follow which.
+
+Where this sits: called by routers and the webhook handler; every status
+change goes through `transition`.
+
+Key ideas:
+- State transitions as an explicit table: `ALLOWED_TRANSITIONS` is data, so
+  the rules can be read, tested and changed in one place, and an illegal move
+  fails with `ILLEGAL_TRANSITION` (409) instead of corrupting state.
+- Audit trail: each change also writes a `SubscriptionEvent` (who, why,
+  from, to) in the same transaction, which is what the diagnostic timeline
+  view reads.
+
+Read next: `routers/subscriptions.py`.
+"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -24,6 +39,7 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
 
 
 def assert_transition(from_status: str, to_status: str) -> None:
+    """Raise `ILLEGAL_TRANSITION` (409) unless `to_status` may follow `from_status`."""
     allowed = ALLOWED_TRANSITIONS.get(from_status, set())
     if to_status not in allowed:
         raise Conflict(

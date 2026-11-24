@@ -1,11 +1,25 @@
-"""Pydantic input/output models for every `mcp-core` tool (docs/contracts.md §3).
+"""Pydantic input/output models for every `mcp-core` tool (docs/contracts.md section 3).
 
-Input models keep every field optional where the company's own data model
-allows more than one way to look something up (e.g. `find_customer` by
-customer_no/phone/email); the "give me at least one" business rule is
-enforced in the tool handler (returning `fail("INVALID_INPUT", ...)`), not in
-the model, so a bad combination never raises — it comes back as a normal
-`ToolResult`.
+Where this sits: imported by `tools_read.py` and `tools_write.py`; the models
+are the source of each tool's JSON schema.
+
+Key ideas:
+- The models are the tool contract: renaming a field here changes what the
+  assistant sees, so changes go through docs/contracts.md first.
+- Business rules such as "give at least one identifier" are enforced in the
+  handler (returning `fail("INVALID_INPUT", ...)`), not in the model, so a
+  bad combination comes back as a normal `ToolResult` instead of a raised
+  validation error.
+- Output models deliberately omit sensitive fields (no `national_id`): what
+  is not in the model cannot leak.
+
+Table of contents (one section per tool): find_customer, get_subscription_status,
+get_subscription_timeline, get_provisioning_status, get_installation_status,
+get_modem_status, incidents, list_packages, get_notification_history,
+get_region_health, then the write tools (retry/enqueue provisioning, resend
+notification, outage credit, refund, reschedule).
+
+Read next: `tools_read.py`.
 """
 from __future__ import annotations
 
@@ -13,9 +27,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-# --------------------------------------------------------------------------
-# find_customer
-# --------------------------------------------------------------------------
+# --- find_customer --------------------------------------------------------
 
 
 class FindCustomerInput(BaseModel):
@@ -40,9 +52,7 @@ class FindCustomerOutput(BaseModel):
     customers: list[CustomerSummary]
 
 
-# --------------------------------------------------------------------------
-# get_subscription_status
-# --------------------------------------------------------------------------
+# --- get_subscription_status ----------------------------------------------
 
 
 class GetSubscriptionStatusInput(BaseModel):
@@ -68,9 +78,7 @@ class GetSubscriptionStatusOutput(BaseModel):
     subscriptions: list[SubscriptionStatus]
 
 
-# --------------------------------------------------------------------------
-# get_subscription_timeline
-# --------------------------------------------------------------------------
+# --- get_subscription_timeline --------------------------------------------
 
 
 class GetSubscriptionTimelineInput(BaseModel):
@@ -92,9 +100,7 @@ class GetSubscriptionTimelineOutput(BaseModel):
     events: list[TimelineEvent]
 
 
-# --------------------------------------------------------------------------
-# get_provisioning_status
-# --------------------------------------------------------------------------
+# --- get_provisioning_status ----------------------------------------------
 
 
 class GetProvisioningStatusInput(BaseModel):
@@ -123,9 +129,7 @@ class GetProvisioningStatusOutput(BaseModel):
     jobs: list[ProvisioningJobStatus]
 
 
-# --------------------------------------------------------------------------
-# get_installation_status
-# --------------------------------------------------------------------------
+# --- get_installation_status ----------------------------------------------
 
 
 class GetInstallationStatusInput(BaseModel):
@@ -148,9 +152,7 @@ class GetInstallationStatusOutput(BaseModel):
     appointments: list[InstallationStatus]
 
 
-# --------------------------------------------------------------------------
-# get_modem_status
-# --------------------------------------------------------------------------
+# --- get_modem_status -----------------------------------------------------
 
 
 class GetModemStatusInput(BaseModel):
@@ -171,9 +173,7 @@ class GetModemStatusOutput(BaseModel):
     modems: list[ModemStatus]
 
 
-# --------------------------------------------------------------------------
-# get_active_incidents_for_region
-# --------------------------------------------------------------------------
+# --- get_active_incidents_for_region --------------------------------------
 
 
 class GetActiveIncidentsForRegionInput(BaseModel):
@@ -196,9 +196,7 @@ class GetActiveIncidentsForRegionOutput(BaseModel):
     incidents: list[IncidentSummary]
 
 
-# --------------------------------------------------------------------------
-# get_incident_detail
-# --------------------------------------------------------------------------
+# --- get_incident_detail --------------------------------------------------
 
 
 class GetIncidentDetailInput(BaseModel):
@@ -228,9 +226,7 @@ class GetIncidentDetailOutput(BaseModel):
     incident: Optional[IncidentDetail] = None
 
 
-# --------------------------------------------------------------------------
-# list_packages (core REST GET /v1/packages — no diag view exists)
-# --------------------------------------------------------------------------
+# --- list_packages (core REST GET /v1/packages — no diag view exists) -----
 
 
 class ListPackagesInput(BaseModel):
@@ -265,9 +261,7 @@ class ListPackagesOutput(BaseModel):
     total: int
 
 
-# --------------------------------------------------------------------------
-# get_notification_history
-# --------------------------------------------------------------------------
+# --- get_notification_history ---------------------------------------------
 
 
 class GetNotificationHistoryInput(BaseModel):
@@ -288,9 +282,7 @@ class GetNotificationHistoryOutput(BaseModel):
     notifications: list[NotificationLogEntry]
 
 
-# --------------------------------------------------------------------------
-# get_region_health
-# --------------------------------------------------------------------------
+# --- get_region_health ----------------------------------------------------
 
 
 class GetRegionHealthInput(BaseModel):
@@ -310,9 +302,7 @@ class GetRegionHealthOutput(BaseModel):
     regions: list[RegionHealth]
 
 
-# --------------------------------------------------------------------------
-# retry_provisioning_job (mutating, core REST, scope provisioning:retry)
-# --------------------------------------------------------------------------
+# --- retry_provisioning_job (mutating, core REST, scope provisioning:retry) ----
 
 
 class RetryProvisioningJobInput(BaseModel):
@@ -339,9 +329,7 @@ class EnqueueProvisioningJobOutput(BaseModel):
     max_attempts: int
 
 
-# --------------------------------------------------------------------------
-# resend_activation_notification (mutating, core REST, scope notifications:resend)
-# --------------------------------------------------------------------------
+# --- resend_activation_notification (mutating, core REST, scope notifications:resend) ----
 
 
 class ResendActivationNotificationInput(BaseModel):
@@ -359,9 +347,7 @@ class ResendActivationNotificationOutput(BaseModel):
     sent_at: Optional[str] = None
 
 
-# --------------------------------------------------------------------------
-# apply_outage_credit (mutating, core REST, scope credits:write)
-# --------------------------------------------------------------------------
+# --- apply_outage_credit (mutating, core REST, scope credits:write) -------
 
 
 class ApplyOutageCreditInput(BaseModel):

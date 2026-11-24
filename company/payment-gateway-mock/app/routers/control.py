@@ -1,3 +1,13 @@
+"""Operator control endpoint: read and set failure rate, latency, forced failure code, outage.
+
+Where this sits: used by the chaos tooling and by operators (scope `psp:access`).
+
+Key ideas:
+- Only the fields present in the request change (`exclude_unset`), so one
+  switch can be flipped without disturbing the others.
+
+Read next: `outage.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -22,6 +32,7 @@ def _to_response(flags: dict) -> ControlFlagsResponse:
 
 
 def build_router(session_factory: sessionmaker, settings: Settings, registry: ApiKeyRegistry) -> APIRouter:
+    """Build the control router with its dependencies injected."""
     router = APIRouter(prefix="/psp/v1", tags=["control"])
     require_key = require_scope("psp:access", registry)
 

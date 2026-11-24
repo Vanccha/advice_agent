@@ -1,3 +1,14 @@
+"""Posts ticket events to the notification hub's department channels.
+
+Where this sits: called by `services.py`; calls notification-hub over REST.
+
+Key ideas:
+- Best-effort side effect: the hub may be down, so every error is swallowed and
+  logged and can never fail the ticket request.
+- Priority maps to message severity, so urgent tickets look urgent in chat.
+
+Read next: `webhooks.py`.
+"""
 from __future__ import annotations
 
 import logging
@@ -35,8 +46,8 @@ def notify_department_channel(
 ) -> None:
     """Post a short message to the notification hub.
 
-    The notification hub may be down or absent entirely; this must never fail the
-    caller's request, so every error is swallowed and logged.
+    Must never fail the caller's request: the hub may be down, so every error is
+    swallowed and logged.
     """
     client = ServiceClient(
         base_url=settings.notification_api_base_url,
@@ -61,6 +72,7 @@ def notify_department_channel(
 
 
 def notify_ticket_created(settings: TicketingSettings, ticket) -> None:
+    """Announce a new ticket in its department's channel."""
     channel_slug = CHANNEL_BY_DEPARTMENT.get(ticket.department)
     if not channel_slug:
         return
@@ -76,6 +88,7 @@ def notify_ticket_created(settings: TicketingSettings, ticket) -> None:
 
 
 def notify_ticket_resolved(settings: TicketingSettings, ticket) -> None:
+    """Announce a resolved ticket in its department's channel."""
     channel_slug = CHANNEL_BY_DEPARTMENT.get(ticket.department)
     if not channel_slug:
         return

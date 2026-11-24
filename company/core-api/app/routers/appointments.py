@@ -1,3 +1,10 @@
+"""Installation appointments: list and reschedule.
+
+Where this sits: called by the CRM (reschedule needs `appointments:write`, which
+the partner key lacks).
+
+Read next: `incidents.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query

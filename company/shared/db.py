@@ -1,3 +1,18 @@
+"""SQLAlchemy engine, session and idempotent-DDL helpers shared by every service.
+
+Where this sits: each service's `db.py` builds its own engine from these
+helpers; every service owns its own database.
+
+Key ideas:
+- Unit of work: `session_scope` commits on success and rolls back on any
+  failure, so a request never leaves half a change behind.
+- `pool_pre_ping` detects connections killed by a database restart before
+  they are handed to a request.
+- Startup DDL must be idempotent (safe to run on every boot) because
+  containers restart at any time.
+
+Read next: `settings.py`.
+"""
 from __future__ import annotations
 
 from collections.abc import Generator, Iterable
@@ -14,6 +29,7 @@ class Base(DeclarativeBase):
 
 
 def make_engine(database_url: str, **kwargs: object) -> Engine:
+    """Build a pooled engine that pings connections before use."""
     return create_engine(
         database_url,
         pool_pre_ping=True,
@@ -25,6 +41,7 @@ def make_engine(database_url: str, **kwargs: object) -> Engine:
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:
+    """Session factory with explicit flushing and objects that stay usable after commit."""
     return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
 
 
@@ -43,6 +60,7 @@ def session_scope(factory: sessionmaker[Session]) -> Generator[Session, None, No
 
 
 def wait_for_database(engine: Engine, attempts: int = 30, delay: float = 1.0) -> None:
+    """Block until the database answers, so startup survives the container start-order race."""
     import time
 
     last: Exception | None = None
@@ -68,5 +86,6 @@ def execute_sql_statements(engine: Engine, statements: Iterable[str]) -> None:
 
 
 def execute_sql_file(engine: Engine, path: Path) -> None:
+    """Run a file of `;`-separated idempotent statements."""
     sql = path.read_text(encoding="utf-8")
     execute_sql_statements(engine, sql.split(";\n"))

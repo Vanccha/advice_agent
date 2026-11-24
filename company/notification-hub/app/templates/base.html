@@ -1,3 +1,14 @@
+{#-
+Page frame for the notification hub UI.
+
+Where this sits: extended by index.html and channel.html, rendered by routers/ui.py.
+
+Key ideas:
+- Template inheritance: child pages fill named blocks (title, content, and an
+  optional `refresh` block for auto-reloading pages).
+
+Read next: index.html.
+-#}
 <!DOCTYPE html>
 <html lang="en">
 <head>

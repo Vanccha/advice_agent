@@ -1,3 +1,15 @@
+"""core-api entrypoint: builds the app and mounts every router.
+
+Where this sits: `uvicorn app.main:app` in the core-api container.
+
+Key ideas:
+- The app comes from `shared.app_factory.create_app`, so it inherits health,
+  metrics and the error envelope.
+- Gauges that need a database query (stuck jobs, open incidents) are refreshed
+  only when `/metrics` is scraped, so they cost nothing between scrapes.
+
+Read next: `routers/`.
+"""
 from __future__ import annotations
 
 from fastapi import Request

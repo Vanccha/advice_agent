@@ -1,12 +1,20 @@
-"""Read-only access to the company's `diag.*` views via the `readonly_diag`
-role (docs/contracts.md §1, §3).
+"""Read-only access to the company's `diag.*` views through the `readonly_diag` role.
 
-PostgreSQL already refuses `readonly_diag` anything but `SELECT` on schema
-`diag` (no rights at all on schema `core`). This module enforces the same
-rule in code, before a statement ever reaches the driver: every session is
-opened with `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`, and
-`assert_read_only_statement` rejects anything whose first keyword isn't
-`SELECT`/`WITH`.
+Where this sits: called by adapter tools that answer diagnostic questions
+(docs/contracts.md section 1 and 3); talks to the company Postgres directly.
+
+Key ideas:
+- The read-only rule is enforced by the database, not by code: PostgreSQL
+  itself gives `readonly_diag` only `SELECT` on schema `diag` and nothing on
+  schema `core`. Code is a second belt, never the only one.
+- Defence in depth: every session is opened with
+  `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`, and
+  `assert_read_only_statement` rejects anything whose first keyword is not
+  `SELECT`/`WITH` before a statement reaches the driver.
+- Views are a stable contract: adapters query `diag.*` views, never the
+  company's internal tables, so the company can refactor its schema freely.
+
+Read next: `http.py` (the write path) and `mcp_core/app/diag.py` (the caller).
 """
 from __future__ import annotations
 
@@ -27,8 +35,11 @@ _engines: dict[str, Engine] = {}
 
 
 class ReadOnlyViolation(Exception):
-    """Raised when a statement other than SELECT/WITH is attempted against the
-    diagnostic database. Raised in Python, before the driver ever sees it."""
+    """Raised when a statement other than SELECT/WITH is attempted.
+
+    Raised in Python before the driver sees the statement; the database would
+    refuse it anyway, this just fails faster with a clearer message.
+    """
 
 
 def _first_keyword(sql: str) -> str:
@@ -65,7 +76,10 @@ def assert_read_only_statement(sql: str) -> None:
 
 
 def get_engine(database_url: str) -> Engine:
-    """Return a process-wide cached engine for `database_url`."""
+    """Return a process-wide cached engine for `database_url`.
+
+    Cached by DSN so every tool in one process shares one connection pool.
+    """
     engine = _engines.get(database_url)
     if engine is None:
         # local import keeps `create_engine` easy to monkeypatch/mock in tests
@@ -78,8 +92,11 @@ def get_engine(database_url: str) -> Engine:
 
 @contextmanager
 def read_only_session(database_url: str) -> Iterator[Session]:
-    """A SQLAlchemy session whose transaction is marked READ ONLY at the
-    Postgres level for its whole lifetime."""
+    """A SQLAlchemy session whose transaction is READ ONLY at the Postgres level.
+
+    The session is rolled back, never committed: nothing here should ever need a
+    commit, and a rollback guarantees no state is left behind.
+    """
     engine = get_engine(database_url)
     session_factory = sessionmaker(bind=engine, future=True)
     session = session_factory()
@@ -92,7 +109,11 @@ def read_only_session(database_url: str) -> Iterator[Session]:
 
 
 def fetch_all(database_url: str, sql: str, params: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
-    """Run a SELECT/WITH statement and return JSON-safe dict rows."""
+    """Run a SELECT/WITH statement and return JSON-safe dict rows.
+
+    Parameters are always bound (`:name`), never string-formatted, so tool input
+    cannot become SQL.
+    """
     assert_read_only_statement(sql)
     with read_only_session(database_url) as session:
         result = session.execute(text(sql), params or {})

@@ -1,3 +1,18 @@
+"""Middleware that makes the whole gateway answer 503 while an outage is switched on.
+
+Where this sits: installed by `main.py` in front of every route.
+
+Key ideas:
+- Chaos / failure injection: a real outage is simulated at the HTTP layer,
+  including `/health` returning 503, so health checks and alerts behave as
+  they would in production.
+- The control endpoint and `/metrics` stay reachable, otherwise operators
+  could not switch the outage off and monitoring would go blind.
+- If the flag lookup itself fails, assume no outage: a broken guard must not
+  take the service down.
+
+Read next: `routers/control.py`.
+"""
 from __future__ import annotations
 
 import logging
@@ -23,6 +38,7 @@ def install_outage_guard(
     service_name: str,
     service_version: str,
 ) -> None:
+    """Install the middleware that answers 503 during an outage (except for control and metrics)."""
     @app.middleware("http")
     async def _outage_guard(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]

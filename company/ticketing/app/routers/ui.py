@@ -1,3 +1,16 @@
+"""The department agent web panel (`/agent`): server-rendered tickets and actions.
+
+Where this sits: opened in a browser by department staff; reuses the same
+service functions as the API.
+
+Key ideas:
+- Server-rendered Jinja2 plus plain forms: no build step, and the UI cannot
+  do anything the service layer does not allow.
+- Status buttons come from `ALLOWED_TRANSITIONS`, so the panel and API never
+  disagree about legal moves.
+
+Read next: `templates/base.html`.
+"""
 from __future__ import annotations
 
 from pathlib import Path

@@ -9,6 +9,22 @@ one out to two receivers (`continue: true` on both, see `alertmanager.yml`):
 2. **`integration-webhook`** — the company's own configured third-party integration
    endpoint (deployment configuration, see the comment in `alertmanager.yml`).
 
+## Where this sits and what to learn
+
+Every company service exposes `/metrics`; Prometheus pulls them, `rules.yml` decides what
+counts as an incident, and Alertmanager decides who hears about it. Key ideas:
+
+- **Pull-based monitoring.** A service that stops answering is itself a signal (`up == 0`).
+- **Alert rules route to departments.** Each rule's `department` label picks the channel in
+  `notification-hub`; unknown departments fall back to `ops-general`.
+- **Business gauges, not just uptime.** Rules also read gauges such as stuck provisioning
+  jobs and open incidents, because a service can be reachable and still broken.
+- **Fan-out with `continue: true`.** Without it, the first matching route would swallow the
+  alert and the second receiver would never hear it.
+
+Read next: `rules.yml`, then `alertmanager.yml`, then
+`company/notification-hub/app/routers/alertmanager.py` (the receiver).
+
 ## Alerts (`rules.yml`)
 
 | Alert | Meaning | Department / channel | `for` |

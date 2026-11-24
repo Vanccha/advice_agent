@@ -1,8 +1,16 @@
 """`mcp-core` entrypoint: `uvicorn app.main:app`.
 
-Exposes the 11 read-only and 5 mutating tools listed for `mcp-core` in
-docs/contracts.md §3 over MCP streamable HTTP at `POST /mcp`, plus `GET
-/health` and `GET /metrics`.
+Where this sits: the process entry point of the `mcp-core` container; the
+assistant connects to it over MCP streamable HTTP.
+
+Key ideas:
+- MCP server exposes tools with JSON schemas: 11 read-only and 5 mutating
+  tools (docs/contracts.md section 3) at `POST /mcp`, plus `GET /health` and
+  `GET /metrics`.
+- All wiring lives in `common.server.build_server`; this file only lists
+  which tools to register.
+
+Read next: `tools_read.py`, `tools_write.py`.
 """
 from __future__ import annotations
 
@@ -16,6 +24,7 @@ from .tools_write import register_write_tools
 
 
 def register_tools(mcp: Any) -> None:
+    """Register every `mcp-core` tool on the MCP server."""
     register_read_tools(mcp)
     register_write_tools(mcp)
 

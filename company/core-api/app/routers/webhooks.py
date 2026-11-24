@@ -1,3 +1,17 @@
+"""Payment gateway webhook receiver.
+
+Where this sits: called by the payment gateway when a charge changes status
+after the original request returned.
+
+Key ideas:
+- Idempotent webhooks: an unknown `charge_ref` is acknowledged and ignored,
+  and a repeated success does not queue a second provisioning job because the
+  subscription has already moved past the payment states.
+- The webhook is authenticated with a shared secret header, since it is not
+  an API-key client.
+
+Read next: `subscriptions.py`.
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -38,6 +52,7 @@ def payment_webhook(
     db: Session = Depends(get_db),
     x_webhook_secret: str | None = Header(default=None),
 ) -> dict[str, Any]:
+    """Apply a gateway status update to a payment, idempotently."""
     _verify_secret(x_webhook_secret)
 
     payment = db.scalar(select(Payment).where(Payment.charge_ref == body.charge_ref))

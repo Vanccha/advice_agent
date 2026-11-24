@@ -1,6 +1,17 @@
-"""Process-wide dependencies for the `mcp-notification` server: settings and
-the one `CompanyApiClient` pointed at notification-hub with `NOTIFY_API_KEY`
-(falling back to `COMPANY_API_KEY` for consistency with the other adapters).
+"""Process-wide dependencies for the `mcp-notification` server: settings and the one `CompanyApiClient` pointed at notification-hub.
+
+Where this sits: imported by this adapter's tools; builds clients lazily so
+importing the module never touches the network.
+
+Key ideas:
+- Dependency access through small functions (`settings()`, a client getter)
+  keeps tools easy to test: tests monkeypatch the getter, not global state.
+- `NOTIFY_API_KEY` is used when set and falls back to `COMPANY_API_KEY`.
+- httpx's `AsyncClient` is bound to the event loop it was created on, so the
+  getter rebuilds the client when the running loop changes (matters for test
+  suites that create a loop per test; uvicorn has exactly one).
+
+Read next: `tools.py` in this package.
 """
 from __future__ import annotations
 
@@ -14,6 +25,7 @@ from common.settings import AdapterSettings, get_settings
 
 @lru_cache
 def settings() -> AdapterSettings:
+    """Cached adapter settings."""
     return get_settings()
 
 

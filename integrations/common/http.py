@@ -1,15 +1,22 @@
-"""`CompanyApiClient` — the only way this integration layer ever writes
-anything. Every mutating tool goes through here with the `partner-integration`
-service-account key (`X-API-Key`); SQL writes are impossible by construction
-(see `readonly_db.py`).
+"""`CompanyApiClient`: the only way the integration layer ever writes anything.
 
-Responsibilities:
-- attach `X-API-Key: <COMPANY_API_KEY>` to every request;
-- retry only on connection-level failures (refused connection, DNS, connect
-  timeout) — never on an application-level 4xx/5xx, since those are
-  meaningful answers (e.g. `409 ILLEGAL_TRANSITION`), not transient faults;
-- map the company's error envelope `{"error": {"code","message","details"}}`
-  into `ToolResult.fail(...)`, preserving the company's own error code.
+Where this sits: used by every adapter's `deps.py`. Calls a company REST API
+with a service-account key (`X-API-Key`) and returns a `ToolResult`, never an
+exception.
+
+Key ideas:
+- Writes go through the company's own API, so the company's rules (scopes,
+  state machines, idempotency) always apply; SQL writes are impossible by
+  construction (see `readonly_db.py`).
+- Retry only on connection-level failures (refused, DNS, connect timeout).
+  An application-level 4xx/5xx is a meaningful answer (for example
+  `409 ILLEGAL_TRANSITION`), not a transient fault, so retrying it would hide
+  information and could repeat a side effect.
+- Anti-corruption: the company error envelope
+  `{"error": {"code","message","details"}}` is mapped to `ToolResult.fail(...)`
+  and the company's own error code is preserved verbatim.
+
+Read next: `result.py` for the envelope, `tool_spec.py` for how handlers use it.
 """
 from __future__ import annotations
 
@@ -29,7 +36,11 @@ _RETRYABLE_EXCEPTIONS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTim
 
 
 class CompanyApiClient:
-    """Thin async httpx wrapper around one company REST base URL."""
+    """Thin async httpx wrapper around one company REST base URL.
+
+    One instance per adapter (see its `deps.py`). It carries the API key on every
+    request so individual tools never handle credentials.
+    """
 
     def __init__(
         self,
@@ -50,6 +61,7 @@ class CompanyApiClient:
         self._client = httpx.AsyncClient(base_url=self._base_url, timeout=timeout, headers=headers)
 
     async def aclose(self) -> None:
+        """Close the underlying connection pool."""
         await self._client.aclose()
 
     async def __aenter__(self) -> "CompanyApiClient":
@@ -133,16 +145,20 @@ class CompanyApiClient:
         return fail(code, message, source, **details)
 
     async def get(self, path: str, source: Source, *, params: Optional[dict[str, Any]] = None) -> ToolResult[Any]:
+        """GET `path`; always returns a `ToolResult`."""
         return await self.call("GET", path, source, params=params)
 
     async def post(self, path: str, source: Source, *, json: Optional[dict[str, Any]] = None) -> ToolResult[Any]:
+        """POST `json` to `path`; always returns a `ToolResult`."""
         return await self.call("POST", path, source, json=json)
 
     async def patch(self, path: str, source: Source, *, json: Optional[dict[str, Any]] = None) -> ToolResult[Any]:
+        """PATCH `json` to `path`; always returns a `ToolResult`."""
         return await self.call("PATCH", path, source, json=json)
 
 
 def _safe_json(response: httpx.Response) -> Any:
+    """Parse a JSON body, tolerating empty or non-JSON responses (returns None)."""
     if not response.content:
         return None
     try:

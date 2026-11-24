@@ -1,6 +1,17 @@
 #!/bin/bash
-# Creates the four NetSwift databases and the read-only diagnostic role.
-# Runs once, on first start of an empty data directory.
+# Creates the company databases and the read-only diagnostic role.
+#
+# Where this sits: mounted into the Postgres container's init directory; runs
+# once, on first start of an empty data directory, before any service boots.
+#
+# Key ideas:
+# - Read-only DB role enforced by the database: `readonly_diag` can log in but has
+#   no rights on schema `core`; core-api's bootstrap later grants it SELECT on the
+#   `diag` views only.
+# - Idempotent: each statement checks before creating, so re-running is harmless.
+# - Passwords come from environment variables, never from this file.
+#
+# Read next: ../core-api/app/bootstrap.py (views and grants).
 set -e
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-SQL

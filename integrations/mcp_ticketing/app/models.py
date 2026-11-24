@@ -1,11 +1,18 @@
-"""Pydantic input/output models for every `mcp-ticketing` tool
-(docs/contracts.md §3, §1.3 for the `tkt` schema, §4.1 for the full
-structured-ticket payload).
+"""Pydantic input/output models for every `mcp-ticketing` tool (docs/contracts.md section 3 and 4.1).
 
-`create_structured_ticket` accepts the complete §4.1 payload as flat
-top-level fields (nested only where the payload itself is nested:
-`requester`, `evidence`, `attempted_steps`) so nothing the assistant sends is
-silently dropped before it reaches `POST /api/v1/tickets`.
+Where this sits: imported by `tools.py`; the models are the source of each
+tool's JSON schema and mirror the ticketing API's structured ticket payload.
+
+Key ideas:
+- A structured ticket (requester, evidence, attempted steps) lets the receiving
+  department act without asking the customer again.
+- Models are the contract; change docs/contracts.md first.
+
+Table of contents: shared shapes (requester, evidence, comments, detail,
+summary), create_structured_ticket, get_ticket, list_customer_tickets,
+find_tickets_by_incident, add_ticket_comment.
+
+Read next: `tools.py`.
 """
 from __future__ import annotations
 
@@ -31,9 +38,7 @@ TicketSource = Literal["web", "phone", "api", "monitoring"]
 AuthorType = Literal["agent", "api_client", "system", "customer"]
 
 
-# --------------------------------------------------------------------------
-# shared nested shapes (§4.1)
-# --------------------------------------------------------------------------
+# --- shared nested shapes (§4.1) ------------------------------------------
 
 
 class RequesterInput(BaseModel):
@@ -122,9 +127,7 @@ class TicketSummary(BaseModel):
     resolved_at: Optional[str] = None
 
 
-# --------------------------------------------------------------------------
-# create_structured_ticket
-# --------------------------------------------------------------------------
+# --- create_structured_ticket ---------------------------------------------
 
 
 class CreateStructuredTicketInput(BaseModel):
@@ -156,9 +159,7 @@ class CreateStructuredTicketOutput(BaseModel):
     )
 
 
-# --------------------------------------------------------------------------
-# get_ticket
-# --------------------------------------------------------------------------
+# --- get_ticket -----------------------------------------------------------
 
 
 class GetTicketInput(BaseModel):
@@ -169,9 +170,7 @@ class GetTicketOutput(BaseModel):
     ticket: TicketDetail
 
 
-# --------------------------------------------------------------------------
-# list_customer_tickets
-# --------------------------------------------------------------------------
+# --- list_customer_tickets ------------------------------------------------
 
 
 class ListCustomerTicketsInput(BaseModel):
@@ -188,9 +187,7 @@ class ListCustomerTicketsOutput(BaseModel):
     total: int
 
 
-# --------------------------------------------------------------------------
-# find_tickets_by_incident
-# --------------------------------------------------------------------------
+# --- find_tickets_by_incident ---------------------------------------------
 
 
 class FindTicketsByIncidentInput(BaseModel):
@@ -204,9 +201,7 @@ class FindTicketsByIncidentOutput(BaseModel):
     total: int
 
 
-# --------------------------------------------------------------------------
-# add_ticket_comment
-# --------------------------------------------------------------------------
+# --- add_ticket_comment ---------------------------------------------------
 
 
 class AddTicketCommentInput(BaseModel):

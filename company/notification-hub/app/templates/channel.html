@@ -1,3 +1,14 @@
+{#-
+Channel stream page: the messages of one channel.
+
+Where this sits: rendered by routers/ui.py; extends base.html.
+
+Key ideas:
+- The page reloads itself every few seconds through the `refresh` block, a
+  simple alternative to websockets for a demo-scale live view.
+
+Read next: routers/ui.py.
+-#}
 {% extends "base.html" %}
 {% block refresh %}<meta http-equiv="refresh" content="5">{% endblock %}
 {% block title %}{{ channel.display_name }} — NetSwift Notification Hub{% endblock %}

@@ -1,9 +1,16 @@
-"""Fake-but-realistic UK customer data.
+"""Fake-but-realistic UK customer data for seeding and chaos scenarios.
 
-Every value here is deliberately impossible to belong to a real person:
-National Insurance numbers use prefixes HMRC never allocates, phone numbers come from
-Ofcom's range reserved for drama (07700 900000-900999), e-mails use the reserved `.test`
-TLD and addresses carry fictional street names.
+Where this sits: used by core-api's seed and the chaos tool to create customers.
+
+Key ideas:
+- Safe by construction: every value is deliberately impossible to belong to a
+  real person. National Insurance numbers use prefixes HMRC never allocates,
+  phone numbers come from Ofcom's range reserved for drama (07700 900000-900999),
+  e-mails use the reserved `.test` TLD and addresses carry fictional street names.
+- Fake data is generated, never copied from production, so demos and tests
+  cannot leak personal data.
+
+Read next: `core-api/app/seed.py`.
 """
 from __future__ import annotations
 

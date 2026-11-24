@@ -1,3 +1,15 @@
+"""Prometheus metrics for ticketing: tickets by status, open tickets per department, webhook outcomes.
+
+Where this sits: updated by `services.py` and `webhooks.py`; scraped via `/metrics`.
+
+Key ideas:
+- Counters count events; the open-tickets gauge is recomputed from the database
+  so it stays correct after restarts.
+- Webhook failures are exposed as a metric because a silent subscriber is
+  otherwise invisible.
+
+Read next: `company/monitoring/rules.yml`.
+"""
 from __future__ import annotations
 
 from prometheus_client import Counter, Gauge
@@ -27,10 +39,12 @@ WEBHOOK_DELIVERIES_TOTAL = Counter(
 
 
 def record_ticket_event(department: str, status: str) -> None:
+    """Count a ticket created or moved into a status."""
     TICKETS_TOTAL.labels(department=department, status=status).inc()
 
 
 def record_webhook_delivery_result(result: str) -> None:
+    """Count one finished webhook delivery (`success` or `failure`)."""
     WEBHOOK_DELIVERIES_TOTAL.labels(result=result).inc()
 
 
