@@ -19,6 +19,6 @@ router = APIRouter(tags=["regions"])
 
 
 @router.get("/v1/regions", dependencies=[Depends(require_scope("incidents:read", get_registry()))])
-def list_regions(db: Session = Depends(get_db)) -> dict:
+def list_regions(db: Session = Depends(get_db, scope="function")) -> dict:
     rows = db.scalars(select(Region).order_by(Region.code)).all()
     return {"items": [region_out(r) for r in rows], "total": len(rows)}

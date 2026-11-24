@@ -35,7 +35,7 @@ def list_appointments(
     team_code: str | None = Query(default=None),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> dict:
     stmt = select(InstallationAppointment)
     if subscription_id is not None:
@@ -55,7 +55,7 @@ def list_appointments(
     dependencies=[Depends(require_scope("appointments:write", get_registry()))],
 )
 def reschedule_appointment(
-    appointment_id: int, body: RescheduleRequest, db: Session = Depends(get_db)
+    appointment_id: int, body: RescheduleRequest, db: Session = Depends(get_db, scope="function")
 ) -> dict:
     appt = db.get(InstallationAppointment, appointment_id)
     if appt is None:

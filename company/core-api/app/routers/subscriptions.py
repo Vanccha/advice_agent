@@ -54,7 +54,7 @@ def _get_subscription_or_404(db: Session, subscription_id: int) -> Subscription:
     status_code=201,
     dependencies=[Depends(require_scope("subscriptions:write", get_registry()))],
 )
-def create_subscription(body: SubscriptionCreate, db: Session = Depends(get_db)) -> dict:
+def create_subscription(body: SubscriptionCreate, db: Session = Depends(get_db, scope="function")) -> dict:
     customer = db.scalar(select(Customer).where(Customer.customer_no == body.customer_no))
     if customer is None:
         raise NotFound("CUSTOMER_NOT_FOUND", f"Customer '{body.customer_no}' not found.")
@@ -99,7 +99,7 @@ def list_subscriptions(
     region_code: str | None = Query(default=None),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> dict:
     stmt = select(Subscription).join(Customer, Customer.id == Subscription.customer_id)
     if customer_no:
@@ -116,7 +116,7 @@ def list_subscriptions(
     "/v1/subscriptions/{subscription_id}",
     dependencies=[Depends(require_scope("subscriptions:read", get_registry()))],
 )
-def get_subscription(subscription_id: int, db: Session = Depends(get_db)) -> dict:
+def get_subscription(subscription_id: int, db: Session = Depends(get_db, scope="function")) -> dict:
     sub = _get_subscription_or_404(db, subscription_id)
     payload = subscription_out(sub)
 
@@ -147,7 +147,7 @@ def get_subscription(subscription_id: int, db: Session = Depends(get_db)) -> dic
     dependencies=[Depends(require_scope("payments:write", get_registry()))],
 )
 def create_payment(
-    subscription_id: int, body: PaymentCreate, db: Session = Depends(get_db)
+    subscription_id: int, body: PaymentCreate, db: Session = Depends(get_db, scope="function")
 ) -> dict:
     """Charge for a subscription, idempotently, and queue provisioning on success."""
     sub = _get_subscription_or_404(db, subscription_id)
@@ -229,7 +229,7 @@ def create_payment(
     "/v1/subscriptions/{subscription_id}/payments",
     dependencies=[Depends(require_scope("payments:read", get_registry()))],
 )
-def list_subscription_payments(subscription_id: int, db: Session = Depends(get_db)) -> dict:
+def list_subscription_payments(subscription_id: int, db: Session = Depends(get_db, scope="function")) -> dict:
     _get_subscription_or_404(db, subscription_id)
     rows = db.scalars(
         select(Payment)
@@ -244,7 +244,7 @@ def list_subscription_payments(subscription_id: int, db: Session = Depends(get_d
     dependencies=[Depends(require_scope("subscriptions:write", get_registry()))],
 )
 def apply_transition(
-    subscription_id: int, body: TransitionRequest, db: Session = Depends(get_db)
+    subscription_id: int, body: TransitionRequest, db: Session = Depends(get_db, scope="function")
 ) -> dict:
     """Move a subscription to a new status via the state machine."""
     sub = _get_subscription_or_404(db, subscription_id)
@@ -259,7 +259,7 @@ def apply_transition(
     dependencies=[Depends(require_scope("subscriptions:write", get_registry()))],
 )
 def cancel_subscription(
-    subscription_id: int, body: CancelRequest, db: Session = Depends(get_db)
+    subscription_id: int, body: CancelRequest, db: Session = Depends(get_db, scope="function")
 ) -> dict:
     """Cancel a subscription (allowed from any non-cancelled status)."""
     sub = _get_subscription_or_404(db, subscription_id)

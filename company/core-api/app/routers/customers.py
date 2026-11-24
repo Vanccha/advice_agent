@@ -37,7 +37,7 @@ def _next_customer_no(db: Session) -> str:
     status_code=201,
     dependencies=[Depends(require_scope("customers:write", get_registry()))],
 )
-def create_customer(body: CustomerCreate, db: Session = Depends(get_db)) -> dict:
+def create_customer(body: CustomerCreate, db: Session = Depends(get_db, scope="function")) -> dict:
     customer = Customer(
         customer_no=_next_customer_no(db),
         full_name=body.full_name,
@@ -67,7 +67,7 @@ def list_customers(
     region_code: str | None = Query(default=None),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> dict:
     stmt = select(Customer)
     if customer_no:
@@ -86,7 +86,7 @@ def list_customers(
     "/v1/customers/{customer_no}",
     dependencies=[Depends(require_scope("customers:read", get_registry()))],
 )
-def get_customer(customer_no: str, db: Session = Depends(get_db)) -> dict:
+def get_customer(customer_no: str, db: Session = Depends(get_db, scope="function")) -> dict:
     customer = db.scalar(select(Customer).where(Customer.customer_no == customer_no))
     if customer is None:
         raise NotFound("CUSTOMER_NOT_FOUND", f"Customer '{customer_no}' not found.")

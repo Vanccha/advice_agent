@@ -49,7 +49,7 @@ def _verify_secret(x_webhook_secret: str | None) -> None:
 @router.post("/v1/webhooks/payment")
 def payment_webhook(
     body: PaymentWebhookBody,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     x_webhook_secret: str | None = Header(default=None),
 ) -> dict[str, Any]:
     """Apply a gateway status update to a payment, idempotently."""

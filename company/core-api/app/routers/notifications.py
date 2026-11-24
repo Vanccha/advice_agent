@@ -35,7 +35,7 @@ router = APIRouter(tags=["notifications"])
     status_code=201,
     dependencies=[Depends(require_scope("notifications:resend", get_registry()))],
 )
-def resend_notification(body: NotificationResendRequest, db: Session = Depends(get_db)) -> dict:
+def resend_notification(body: NotificationResendRequest, db: Session = Depends(get_db, scope="function")) -> dict:
     customer = db.scalar(select(Customer).where(Customer.customer_no == body.customer_no))
     if customer is None:
         raise NotFound("CUSTOMER_NOT_FOUND", f"Customer '{body.customer_no}' not found.")

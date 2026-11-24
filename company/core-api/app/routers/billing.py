@@ -36,7 +36,7 @@ router = APIRouter(tags=["billing"])
 def create_refund(
     body: RefundRequest,
     principal: Principal = Depends(require_scope("billing:refund", get_registry())),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> dict:
     """Refund a payment through the gateway; requires the `billing:refund` scope."""
     payment = db.get(Payment, body.payment_id)
@@ -94,7 +94,7 @@ def create_refund(
 def create_credit(
     body: CreditRequest,
     principal: Principal = Depends(require_scope("credits:write", get_registry())),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> dict:
     """Grant a capped, idempotent goodwill credit; requires `credits:write`."""
     settings = get_settings()
