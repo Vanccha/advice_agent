@@ -1,10 +1,21 @@
-"""Table-driven state machine (contracts §4.3): ``ROUTER -> {ADVISORY, DIAGNOSTIC,
-STATUS_QUERY} -> ACTION -> CLOSING``, plus ``AWAITING_APPROVAL`` and ``ESCALATED``.
+"""The explicit conversation state machine: which mode may follow which, and the hard limits.
 
-This module holds only the transition table and limit enforcement — no business logic.
-An illegal transition raises ``IllegalTransition`` rather than being silently allowed.
+Where this sits: owned by `Orchestrator`, consulted by `modes.dispatch` for every mode
+change. Pure logic: no I/O, no model, no database.
+
+Key ideas:
+- Explicit state machine: the legal moves are a table (`ALLOWED_TRANSITIONS`), not
+  `if` statements scattered over handlers, so the whole conversation flow is reviewable
+  in one screen.
+- Fail loudly: an illegal move raises `IllegalTransition` (a bug in a handler) instead of
+  being silently accepted.
+- Limits from `policy.yaml` are enforced here, in code, so no prompt can talk its way past
+  them.
+
+Read next: modes/dispatch.py, modes/router.py.
 
 Import as: ``from modes.machine import StateMachine, IllegalTransition, LimitExceeded``.
+See: docs/contracts.md §4.3.
 """
 from __future__ import annotations
 
@@ -66,10 +77,12 @@ class StateMachine:
         return target
 
     def can_transition(self, current: Mode, target: Mode) -> bool:
+        """Non-raising check, for callers that pick between alternative targets."""
         return target in ALLOWED_TRANSITIONS.get(current, frozenset())
 
-    # -- limits -----------------------------------------------------------------------
-
+    # --- Limits ---------------------------------------------------------------------
+    # The three checks raise at ``>= limit`` (not ``>``): the limit is the number of calls
+    # allowed, so reaching it means the next one would be over budget.
     def check_tool_calls(self, used: int) -> None:
         if used >= self.limits.max_tool_calls_per_turn:
             raise LimitExceeded("max_tool_calls_per_turn", self.limits.max_tool_calls_per_turn)

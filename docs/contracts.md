@@ -552,6 +552,14 @@ The audit endpoint may return a bare array or `{steps:[…]}`; each step is read
 
 ### 4.3 Modes (explicit state machine, `assistant/modes/machine.py`)
 
+Code layout (`assistant/modes/`): `orchestrator.py` is the public facade (`Orchestrator`,
+`TurnResult`; turn lifecycle only); `dispatch.py` routes a turn through the mode handlers;
+`conversation_store.py` persists state and messages; `approvals.py` resolves pending approvals;
+`events.py` handles ticket-status webhooks and monitoring alerts; `state.py` holds the typed
+`ConversationState` (the JSON in `asst.conversations.state`: unknown keys are ignored and
+missing keys defaulted, so older rows still load); `replies.py` is the catalogue of fixed
+customer-facing sentences (the seam for translations).
+
 Tool calls are scoped per turn: the startup `ToolGateway` is a shared root (adapter config +
 discovered catalog); the orchestrator calls `gateway.for_turn(conversation_id)` for every turn
 (message, approval, alert), giving each its own `conversation_id` (tool-call audit entries land

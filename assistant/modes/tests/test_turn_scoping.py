@@ -31,8 +31,8 @@ def test_turns_have_independent_call_budgets(tenant_config, session_factory) -> 
     gateway = make_gateway(max_calls_per_turn=3)
     orch = build_orchestrator(tenant_config, session_factory, gateway=gateway)
 
-    ctx_a = orch._build_ctx("conv-a", "NS-100001")
-    ctx_b = orch._build_ctx("conv-b", "NS-100001")
+    ctx_a = orch.build_ctx("conv-a", "NS-100001")
+    ctx_b = orch.build_ctx("conv-b", "NS-100001")
     assert ctx_a.gateway is not ctx_b.gateway
     assert ctx_a.gateway.conversation_id == "conv-a"
     assert ctx_b.gateway.conversation_id == "conv-b"
@@ -42,7 +42,7 @@ def test_turns_have_independent_call_budgets(tenant_config, session_factory) -> 
     # A's budget is spent; B is unaffected, and a new turn for A starts fresh.
     ctx_b.gateway.call_sync("find_customer", {"customer_no": "NS-100001"})
     assert ctx_b.gateway._calls_this_turn == 1
-    assert orch._build_ctx("conv-a").gateway._calls_this_turn == 0
+    assert orch.build_ctx("conv-a").gateway._calls_this_turn == 0
     # The shared root records every call but its own budget is never consumed.
     assert gateway._calls_this_turn == 0
     assert len(gateway.calls_made) == 4
