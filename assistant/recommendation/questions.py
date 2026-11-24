@@ -1,6 +1,16 @@
-"""Fixed question bank for ADVISORY mode (contracts §4.3: 3-5 questions).
+"""Fixed question bank for ADVISORY mode: what to ask, in what order, and when to stop.
 
-Import as: ``from recommendation.questions import QUESTIONS, next_question, profile_is_complete``.
+Where this sits: ``recommendation`` package. ``modes.advisory`` calls ``next_question`` and
+``profile_is_complete`` after each customer answer; ``AdvisoryProfile`` is in ``core_common.types``.
+
+Key ideas:
+- Fixed questions, not model-invented ones: the dialogue is predictable and testable, and the
+  model only extracts answers into the profile.
+- Order is the data: ``QUESTIONS`` order is the order the customer is asked in.
+- Early exit: the profile counts as complete once usage, size and budget are known.
+
+Read next: ``recommendation/engine.py``.
+See: docs/contracts.md §4.3.
 """
 from __future__ import annotations
 
@@ -10,6 +20,8 @@ from core_common.types import AdvisoryProfile
 
 
 class Question(BaseModel):
+    """One question the assistant can ask, tied to the `AdvisoryProfile` field it fills."""
+
     model_config = ConfigDict(frozen=True)
 
     field: str
@@ -54,7 +66,9 @@ QUESTIONS: list[Question] = [
     ),
 ]
 
+
 def _is_missing(profile: AdvisoryProfile, field: str) -> bool:
+    """Unanswered means empty list for `usage`, `None` for every other field."""
     value = getattr(profile, field)
     if field == "usage":
         return not value
@@ -70,12 +84,12 @@ def next_question(profile: AdvisoryProfile) -> Question | None:
 
 
 def profile_is_complete(profile: AdvisoryProfile) -> bool:
-    """Complete once at least three dimensions are known: usage, a household/device count,
-    and budget (contracts §4.3: "at most 3-5 questions" covering usage, household/device
-    count, budget and commitment preference). Commitment preference stays optional. The
-    hard cap is enforced separately by the caller via
-    ``policy.yaml: limits.max_questions_advisory`` — reaching it with budget (or anything
-    else) still unknown just means recommending with what is known, not a bug here."""
+    """True once usage, a household/device count and budget are known.
+
+    Commitment preference stays optional. The hard cap on questions is enforced by the caller
+    through ``policy.yaml: limits.max_questions_advisory``; hitting it with something still
+    unknown just means recommending with what is known.
+    """
     if not profile.usage:
         return False
     has_size = profile.device_count is not None or profile.household_size is not None

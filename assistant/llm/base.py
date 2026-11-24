@@ -1,12 +1,19 @@
-"""The provider seam: every model call in the assistant goes through this `Protocol`
-(contracts §8: `LLM_PROVIDER ∈ {openai_agents, anthropic, scripted}`).
+"""The provider seam: the ``LLMProvider`` Protocol and the neutral types around it.
 
-Import as: ``from llm.base import ChatMessage, LLMProvider, ProviderHealth, ProviderError,
-ProviderConfigError``.
+Where this sits: bottom of the ``llm`` package. Every model call in the assistant goes
+through this Protocol; ``decision`` and ``modes`` call it, the vendor modules implement it,
+``factory.get_provider()`` selects one and wraps it in ``guard.MaskingProvider``.
+Nothing here does I/O.
 
-Nothing here does I/O. Concrete providers live in sibling modules
-(`openai_agents.py`, `anthropic_provider.py`, `scripted.py`); `factory.get_provider()`
-selects one and wraps it in the PII guard (`guard.MaskingProvider`) before handing it out.
+Key ideas:
+- Provider seam / dependency inversion: callers depend on this interface, never on OpenAI or
+  Anthropic types, so a vendor can be swapped by changing ``LLM_PROVIDER``.
+- Structured output: ``structured()`` returns a validated Pydantic object, not free text.
+- Tool calling loop is the caller's job: ``run_tool_step()`` is exactly ONE model step; the
+  caller runs the tools (through policy and audit) and calls again.
+
+Read next: ``llm/factory.py``, ``llm/guard.py``, ``llm/scripted.py``.
+See: docs/contracts.md Â§8.
 """
 from __future__ import annotations
 
@@ -18,6 +25,8 @@ TModel = TypeVar("TModel", bound=BaseModel)
 
 
 class ChatMessage(BaseModel):
+    """One plain chat turn (no tools). Content must already be masked."""
+
     model_config = ConfigDict(frozen=True)
 
     role: Literal["system", "user", "assistant"]
@@ -73,6 +82,8 @@ class ToolStep(BaseModel):
 
 
 class ProviderHealth(BaseModel):
+    """Result of `LLMProvider.health()`: reachable and configured, or why not."""
+
     model_config = ConfigDict(frozen=True)
 
     ok: bool

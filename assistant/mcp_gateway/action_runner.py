@@ -1,9 +1,18 @@
-"""`make_action_runner(gateway)`: wires `policy.executor.ActionExecutor`'s
-`action_runner` callback to a tool gateway, so neither the modes layer nor the API layer
-needs to know which MCP tool backs which policy action name (contracts §4.6).
+"""Connect the policy executor to the tool gateway: policy action name -> MCP tool.
 
-Import as: ``from mcp_gateway.action_runner import make_action_runner, ACTION_TOOL_MAP,
-UnmappedActionError``.
+Where this sits: ``mcp_gateway`` package. ``make_action_runner(gateway)`` produces the
+``action_runner`` callback that ``policy.executor.ActionExecutor`` runs after policy allows an
+action, so neither ``modes`` nor ``api`` need to know which MCP tool backs which action.
+
+Key ideas:
+- Policy decides, this only maps: by the time the runner is called, ``PolicyEngine`` has
+  already allowed the action.
+- Explicit allow-list mapping: an action with no entry raises ``UnmappedActionError`` instead
+  of guessing a tool name.
+- Graceful degradation: an unreachable adapter comes back as an ``ok=False`` result dict.
+
+Read next: ``policy/executor.py``, ``mcp_gateway/gateway.py``.
+See: docs/contracts.md §3, §4.6.
 """
 from __future__ import annotations
 
@@ -17,43 +26,39 @@ class _CallableGateway(Protocol):
 
 
 # Policy action name (`config/tenants/*/policy.yaml` `actions.*`) -> MCP tool name
-# (contracts §3). Only actions whose policy entry has `allowed: true` need an entry: a
-# denied action never reaches `ActionExecutor`'s `action_runner` at all — `PolicyEngine
-# .check()` stops it first (contracts §4.6), so e.g. `issue_refund`/`change_package`/
-# `reschedule_installation`/`repair_infrastructure`/`cancel_subscription` are correctly
-# absent here.
+# (contracts §3). Only actions with `allowed: true` need an entry: a denied action never
+# reaches the runner because `PolicyEngine.check()` stops it first (contracts §4.6), so
+# e.g. `issue_refund` or `cancel_subscription` are correctly absent.
 ACTION_TOOL_MAP: dict[str, str] = {
     "retry_provisioning_job": "retry_provisioning_job",
     "enqueue_provisioning_job": "enqueue_provisioning_job",
     "resend_activation_notification": "resend_activation_notification",
     "apply_outage_credit": "apply_outage_credit",
     "send_department_message": "post_department_message",
-    # NOTE — reported gap, not fixed here (outside this agent's owned directories):
 }
 
 
 class UnmappedActionError(RuntimeError):
-    """A policy-allowed action has no known MCP tool to run it (a contract/config gap,
-    not a runtime/network failure — see the `ACTION_TOOL_MAP` note above)."""
+    """A policy-allowed action has no MCP tool to run it.
+
+    A configuration gap (policy allows something nobody wired up), not a network failure.
+    """
 
     def __init__(self, action_name: str) -> None:
         super().__init__(
             f"no MCP tool mapping for policy action '{action_name}' — see "
-            "mcp.action_runner.ACTION_TOOL_MAP"
+            "mcp_gateway.action_runner.ACTION_TOOL_MAP"
         )
         self.action_name = action_name
 
 
 def make_action_runner(gateway: _CallableGateway):
-    """Returns a sync `ActionRunner` (`policy.executor.ActionRunner =
-    Callable[[str, dict], dict]`) ready to pass to
-    `ActionExecutor(policy_engine, audit_log, action_runner=make_action_runner(gateway))`.
+    """Return a sync `ActionRunner` to pass to `ActionExecutor(..., action_runner=...)`.
 
-    Never raises for an unreachable adapter — the gateway's own
-    `ok=False, error_code="ADAPTER_UNAVAILABLE"` outcome is returned (as a plain dict) like
-    any other result; the caller decides whether that means "treat as failed, escalate".
-    Raises `UnmappedActionError` only when `action_name` has no entry in `ACTION_TOOL_MAP`
-    at all (a configuration gap `PolicyEngine` already allowed through).
+    Never raises for an unreachable adapter: the gateway's `ok=False,
+    error_code="ADAPTER_UNAVAILABLE"` outcome comes back as a plain dict like any other
+    result, and the caller decides whether to escalate. Raises `UnmappedActionError` only
+    when `action_name` has no entry in `ACTION_TOOL_MAP`.
     """
 
     def _run(action_name: str, params: dict[str, Any]) -> dict[str, Any]:

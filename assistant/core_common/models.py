@@ -1,7 +1,15 @@
-"""SQLAlchemy 2.0 ORM models for schema `asst` (contracts §1.5).
+"""SQLAlchemy 2.0 ORM models for the ``asst`` schema.
 
-Other agents (decision/modes/api layers) import these directly, e.g.
-``from core_common.models import Conversation, AuditEntryRow``.
+Where this sits: ``core_common``. Imported by ``db.py`` (table creation), ``audit.log``,
+``tickets.client`` and ``modes``; for example ``from core_common.models import Conversation``.
+
+Key ideas:
+- Typed ``Mapped[...]`` columns: the table definition doubles as documentation.
+- JSON columns are ``jsonb`` on Postgres and plain JSON on SQLite, so tests need no Postgres.
+- ``AuditEntryRow.created_at`` is a string on purpose (it is part of the hashed payload).
+
+Read next: ``core_common/db.py``, ``audit/log.py``.
+See: docs/contracts.md Â§1.5.
 """
 from __future__ import annotations
 
@@ -16,14 +24,17 @@ JSONType = JSONB().with_variant(JSON(), "sqlite")
 
 
 def _utcnow() -> dt.datetime:
+    """Timezone-aware UTC now, the default for every `created_at` column."""
     return dt.datetime.now(dt.timezone.utc)
 
 
 class Base(DeclarativeBase):
-    pass
+    """Declarative base shared by every table in the `asst` schema."""
 
 
 class Conversation(Base):
+    """One chat conversation and its state-machine state."""
+
     __tablename__ = "conversations"
     __table_args__ = {"schema": "asst"}
 
@@ -41,6 +52,8 @@ class Conversation(Base):
 
 
 class Message(Base):
+    """One chat turn as shown to the customer; `masked` says whether `content` was masked."""
+
     __tablename__ = "messages"
     __table_args__ = {"schema": "asst"}
 
@@ -74,14 +87,16 @@ class AuditEntryRow(Base):
     tool_output_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
     prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     entry_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    # Stored as an ISO-8601 string (not DateTime) deliberately: this value is part of the
-    # hashed payload, and must read back byte-for-byte identical to what was hashed on
-    # insert. A DateTime column round-trips through driver-specific parsing (notably under
-    # SQLite) that can alter formatting and silently break `verify_chain`.
+    # An ISO-8601 string, not DateTime, on purpose: the value is part of the hashed payload and
+    # must read back byte-for-byte as hashed. A DateTime column round-trips through
+    # driver-specific parsing (notably SQLite) that can change the format and silently break
+    # `verify_chain`.
     created_at: Mapped[str] = mapped_column(String, nullable=False)
 
 
 class ActionRecord(Base):
+    """Every action attempt, including denied or unconfirmed ones (`executed` says which)."""
+
     __tablename__ = "action_records"
     __table_args__ = {"schema": "asst"}
 
@@ -97,6 +112,8 @@ class ActionRecord(Base):
 
 
 class TicketLink(Base):
+    """Links a conversation to a ticket and tracks which status the customer was last told."""
+
     __tablename__ = "ticket_links"
     __table_args__ = {"schema": "asst"}
 
@@ -113,6 +130,8 @@ class TicketLink(Base):
 
 
 class PendingApproval(Base):
+    """An irreversible action waiting for the customer to confirm or decline."""
+
     __tablename__ = "pending_approvals"
     __table_args__ = {"schema": "asst"}
 
@@ -127,6 +146,8 @@ class PendingApproval(Base):
 
 
 class AlertEvent(Base):
+    """A monitoring alert received by the webhook, with whether it was handled."""
+
     __tablename__ = "alert_events"
     __table_args__ = {"schema": "asst"}
 
@@ -142,6 +163,7 @@ class AlertEvent(Base):
     handling_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+# Every ORM table, for code that needs to iterate them (tests, maintenance scripts).
 ALL_TABLES = (
     Conversation,
     Message,

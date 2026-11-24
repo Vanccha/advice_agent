@@ -1,7 +1,17 @@
-"""`DecisionService` Protocol (contracts §4.5) — replaceable judgement.
+"""The ``DecisionService`` Protocol and the context every decision call receives.
 
-Import as: ``from decision.base import DecisionService, DecisionContext``.
-`Decision[T]` itself is reused unchanged from `core_common.types` (never redefined here).
+Where this sits: ``decision`` package, bottom layer. ``modes`` call a ``DecisionService``;
+``llm_structured`` and ``typesafe_jev`` implement it; ``factory`` picks one.
+
+Key ideas:
+- Replaceable judgement: the model only classifies. Authority (what may happen) stays in
+  ``policy``, so swapping the decision model cannot widen what the assistant is allowed to do.
+- Every answer is a ``Decision[T]`` (value, confidence, rationale, model); callers apply a
+  confidence floor instead of trusting the value blindly.
+- Context is already masked: this layer sits downstream of the PII boundary.
+
+Read next: ``decision/llm_structured.py``, ``decision/fallback.py``.
+See: docs/contracts.md Â§4.5.
 """
 from __future__ import annotations
 

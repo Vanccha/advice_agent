@@ -1,10 +1,17 @@
-"""Documented stub for an external "TypeSafe JEV" decision model (contracts §4.5:
-`DECISION_SERVICE=typesafe_jev`). Not a real implementation — selectable today so the
-interface boundary and config switch exist before a real adapter is built; every method
-raises `NotImplementedError` describing exactly what a real adapter must accept and
-return to be plugged in.
+"""Documented stub for an external "TypeSafe JEV" decision model (``DECISION_SERVICE=typesafe_jev``).
 
-Import as: ``from decision.typesafe_jev import TypeSafeJevDecisionService``.
+Where this sits: ``decision`` package; selectable through ``decision.factory`` so the
+interface boundary and config switch exist before a real adapter does. Every method raises
+``NotImplementedError`` carrying ``ADAPTER_CONTRACT``, which says exactly what a real adapter
+must accept and return.
+
+Key ideas:
+- Interface first: the Protocol in ``base.py`` is the contract; implementations are replaceable.
+- Calibrated confidence: an adapter that does not know must say so with low confidence, not
+  guess high.
+
+Read next: ``decision/base.py``.
+See: docs/contracts.md Â§4.5.
 """
 from __future__ import annotations
 

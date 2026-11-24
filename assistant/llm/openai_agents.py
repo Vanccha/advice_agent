@@ -1,19 +1,39 @@
-"""Default `LLMProvider` (contracts §8: `LLM_PROVIDER=openai_agents`).
+"""Default ``LLMProvider`` (``LLM_PROVIDER=openai_agents``): OpenAI behind the provider seam.
 
-Uses the OpenAI Agents SDK (`agents` package, from `openai-agents`) for `complete()` (the
-agentic path) and the plain `openai` client's structured-output parsing for `structured()`.
-Model comes from `LLM_MODEL`, key from `OPENAI_API_KEY`.
+Where this sits: ``llm`` package. Chosen by ``llm.factory.get_provider`` and then wrapped in
+``MaskingProvider``; called by ``decision`` (structured), ``modes`` (complete, run_tool_step).
+Wire-format helpers live in ``llm/openai_mapping.py``.
 
-Importing this module must never require network access or a valid key — only
-*constructing* `OpenAIAgentsProvider` does, and it fails with a clear, actionable
-`ProviderConfigError` rather than a bare `KeyError`/`AssertionError` from a third-party SDK.
-The `agents` and `openai` packages themselves are imported lazily (inside methods/__init__),
-so a broken optional dependency cannot break importing `llm.factory` for code paths that
-select a different provider.
+Which client does what (the class name is historical; read this before judging it):
+- ``complete()``       uses the Agents SDK ``Runner`` (package ``agents``). One agent, no
+                       tools, one run: the SDK adds nothing here beyond the model call.
+- ``structured()``     uses the plain ``openai`` client, because ``chat.completions.parse``
+                       validates the reply against a Pydantic model directly.
+- ``run_tool_step()``  uses the plain ``openai`` client on purpose. ``Runner`` would execute
+                       tools by itself; this assistant must run, police and audit every tool
+                       call in its own loop (policy engine, audit log), so the provider only
+                       reports what the model asked for.
+
+Key ideas:
+- Provider seam / dependency inversion: the rest of the code depends on ``LLMProvider``
+  (``llm/base.py``), never on OpenAI types.
+- Structured output: the schema is passed to the API, the parsed model comes back.
+- The tool-calling loop is the caller's job; this class performs exactly ONE step.
+- Import safety: importing this module needs no key or network. The ``openai`` and
+  ``agents`` packages are imported lazily, and a missing key fails in the constructor with
+  an actionable ``ProviderConfigError``.
+
+Moving fully to one client: to use only the plain ``openai`` client, reimplement
+``complete()`` as one ``chat.completions.create`` call (delete the ``agents`` import and the
+``openai-agents`` dependency). To use only the Agents SDK, ``structured()`` becomes
+``Agent(output_type=schema)`` and ``run_tool_step()`` needs the SDK's tool-call hooks so
+that every call still passes through the policy engine; that is the harder direction.
+
+Read next: ``llm/openai_mapping.py``, ``llm/base.py``, ``llm/guard.py``.
+See: docs/contracts.md §8.
 """
 from __future__ import annotations
 
-import json
 from typing import Any, Sequence, TypeVar
 
 from pydantic import BaseModel
@@ -25,10 +45,10 @@ from llm.base import (
     ProviderConfigError,
     ProviderError,
     ProviderHealth,
-    ToolCall,
     ToolDefinition,
     ToolStep,
 )
+from llm.openai_mapping import openai_chat_messages, openai_tool_specs, parse_openai_tool_step
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
@@ -36,6 +56,8 @@ DEFAULT_MODEL = "gpt-4.1-mini"
 
 
 class OpenAIAgentsProvider:
+    """``LLMProvider`` backed by OpenAI (see the module header for which client each method uses)."""
+
     name = "openai_agents"
 
     def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
@@ -62,6 +84,7 @@ class OpenAIAgentsProvider:
         temperature: float = 0.2,
         max_tokens: int | None = None,
     ) -> str:
+        """Free-text reply through the Agents SDK ``Runner`` (an agent without tools)."""
         from agents import Agent, ModelSettings, Runner  # lazy
 
         agent = Agent(
@@ -86,6 +109,7 @@ class OpenAIAgentsProvider:
         schema: type[TModel],
         temperature: float = 0.0,
     ) -> TModel:
+        """Structured output via the plain client's ``chat.completions.parse``."""
         chat_messages = [{"role": "system", "content": system}] + [
             {"role": m.role, "content": m.content} for m in messages
         ]
@@ -114,8 +138,11 @@ class OpenAIAgentsProvider:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> ToolStep:
-        """One Chat Completions call with function tools. Deliberately NOT routed through
-        the Agents SDK `Runner`: the assistant's own loop executes (and audits) every tool."""
+        """One Chat Completions call with function tools.
+
+        Deliberately NOT routed through the Agents SDK ``Runner``: the assistant's own loop
+        executes (and audits) every tool.
+        """
         kwargs: dict[str, Any] = {
             "model": self.model,
             "temperature": temperature,
@@ -140,66 +167,9 @@ class OpenAIAgentsProvider:
 
 
 def _render_messages_as_input(messages: Sequence[ChatMessage]) -> str:
-    """The Agents SDK's `Runner.run_sync` takes either a single string or a structured
-    input-item list; a flattened transcript is sufficient here since system instructions
-    are carried separately via `Agent.instructions`."""
+    """Flatten the transcript to one string for ``Runner.run_sync``.
+
+    Enough here because the system prompt travels separately as ``Agent.instructions``.
+    """
     lines = [f"{m.role}: {m.content}" for m in messages]
     return "\n".join(lines) if lines else "(empty conversation)"
-
-
-def openai_tool_specs(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": t.name,
-                "description": t.description,
-                "parameters": t.input_schema,
-            },
-        }
-        for t in tools
-    ]
-
-
-def openai_chat_messages(system: str, messages: Sequence[AgentMessage]) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = [{"role": "system", "content": system}]
-    for m in messages:
-        if m.role == "tool":
-            out.append({"role": "tool", "tool_call_id": m.tool_call_id, "content": m.content})
-        elif m.role == "assistant" and m.tool_calls:
-            out.append(
-                {
-                    "role": "assistant",
-                    "content": m.content or None,
-                    "tool_calls": [
-                        {
-                            "id": c.id,
-                            "type": "function",
-                            "function": {"name": c.name, "arguments": json.dumps(c.arguments)},
-                        }
-                        for c in m.tool_calls
-                    ],
-                }
-            )
-        else:
-            out.append({"role": m.role, "content": m.content})
-    return out
-
-
-def parse_openai_tool_step(response: Any) -> ToolStep:
-    try:
-        message = response.choices[0].message
-    except (AttributeError, IndexError, TypeError) as exc:
-        raise ProviderError("openai_agents: tool step response had no choices") from exc
-    calls: list[ToolCall] = []
-    for raw in getattr(message, "tool_calls", None) or []:
-        try:
-            arguments = json.loads(raw.function.arguments or "{}")
-        except json.JSONDecodeError as exc:
-            raise ProviderError(
-                f"openai_agents: tool call {raw.function.name!r} had unparseable arguments"
-            ) from exc
-        if not isinstance(arguments, dict):
-            raise ProviderError("openai_agents: tool call arguments were not a JSON object")
-        calls.append(ToolCall(id=raw.id, name=raw.function.name, arguments=arguments))
-    return ToolStep(tool_calls=calls, text=getattr(message, "content", None) or None)
