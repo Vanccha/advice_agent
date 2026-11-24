@@ -189,8 +189,7 @@ Run `make chaos-reset` after each scenario.
 
 `config/tenants/_example/` is not an empty template but a working second customer: a
 different account number format (`OR-2045118`), different department names, a stricter
-handover threshold, **no** compensation authority, **with** authority to reschedule
-appointments, and budget-focused recommendation weights.
+handover threshold, **no** compensation authority, and budget-focused recommendation weights.
 
 ```bash
 docker compose run --rm -e TENANT=_example test-runner \

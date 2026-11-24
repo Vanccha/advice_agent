@@ -111,6 +111,13 @@ DIAG_VIEW_STATEMENTS = [
     JOIN core.customers c ON c.id = n.customer_id
     """,
     """
+    CREATE OR REPLACE VIEW diag.credit_history AS
+    SELECT c.customer_no, cr.subscription_id, cr.amount_gbp, cr.reason, cr.created_at
+    FROM core.credits cr
+    JOIN core.subscriptions s ON s.id = cr.subscription_id
+    JOIN core.customers c ON c.id = s.customer_id
+    """,
+    """
     CREATE OR REPLACE VIEW diag.subscription_timeline AS
     SELECT c.customer_no, e.subscription_id, e.event_type, e.from_status, e.to_status,
            e.actor, e.reason, e.created_at

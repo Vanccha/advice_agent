@@ -123,11 +123,17 @@ sessizce kaybolmaz; ticket'a dönüşür.
 
 **Sonuçlar.**
 - Artı: Yetki **veri** olarak denetlenebilir ve müşteri başına değişir (`_example` tenant'ında
-  tazminat yok, randevu erteleme var).
+  tazminat yok; ikisinde de randevu erteleme alan ekibe aittir).
 - Artı: Test edilebilir saf fonksiyon (`assistant/policy/tests/test_engine.py`).
-- Eksi: `build_policy_context` (`modes/action/known_causes.py:60`) bağlamı kodla kuruyor; yaml'daki
+- Eksi: `build_policy_context` (`modes/action/known_causes.py`) bağlamı kodla kuruyor; yaml'daki
   bir koşul için bağlamda alan yoksa koşul "sağlanmadı" olur (fail-safe) ama bu, yeni koşul
   eklerken kolayca şaşırtır. (Alıştırma 1 tam bunu işliyor.)
+- Ders: Policy'nin değeri, beslendiği **gerçek verilere** bağlıdır. Bir inceleme, bağlamın bir
+  kısmının sabit uydurma değerlerle (`existing_count_30d: 0`, `amount_gbp: 5.0`) kurulduğunu ve
+  `rate_limit` sayaçlarının hiç doldurulmadığını buldu; yani yaml'daki kurallar süs olmuştu.
+  Düzeltme: tutar aksiyonun gerçek `params`'ından gelir, kredi sayısı şirketin kayıtlarından
+  (`get_credit_history`) okunur, veri yoksa alan bağlama **hiç konmaz** (policy reddeder),
+  kullanım sayaçlarını da çağıran değil `ActionExecutor` kendi kayıtlarından hesaplar.
 
 **Alternatifler.** Yetkiyi prompt'a yazmak (reddedildi: zorlanamaz); aksiyonların içine `if`
 kontrolleri dağıtmak (reddedildi: unutulur, denetlenemez, müşteri başına değişemez).
@@ -228,9 +234,9 @@ doğru yön, demoyu gereksiz karmaşıklaştırırdı.
 
 ## ADR-10: Bağımlılıkları sabitle (FastAPI yield-scope olayı)
 
-> Durum notu: Bu ADR bir **ders** kaydıdır. Bu commit'te `get_db` hâlâ düz `Depends(get_db)` ile
-> kullanılıyor ve `requirements.txt` dosyalarında alt sınırlı sürümler var (`fastapi>=0.115`).
-> Yani karar henüz kodda uygulanmış değil; alıştırma olarak size bırakıldı.
+> Durum notu: Bu ADR bir **ders** kaydıdır ve karar kodda **uygulandı**: router'lar
+> `Depends(get_db, scope="function")` kullanıyor ve `company/requirements.txt` `fastapi>=0.165,<1.0`
+> ile sürümü bilinçli bir aralığa bağlıyor. Alıştırma 10 bu düzeltmeyi okuyup doğrulamanı ister.
 
 **Bağlam.** `company/core-api/app/db.py::get_db`, `yield` ile bir oturum verir; `yield`'den sonra
 `session.commit()` çağırır. Sürüm notlarına göre yeni FastAPI sürümlerinde (0.118 ve sonrası)
@@ -239,7 +245,7 @@ istemci hemen ardından okur, commit henüz yok. Yani "yazdım ama okuyunca yok"
 bağlı hatalar, ve commit sonradan patlarsa istemci başarılı sanıp gider. Kod aynı, sadece
 `pip install` ile gelen **sürüm** değişti ve `>=` alt sınırı bunu sessizce içeri aldı.
 
-**Karar (önerilen).**
+**Karar (uygulandı).**
 1. Kritik yan etkiyi (commit) cevaptan önce garanti et: yeni sürümlerde
    `Depends(get_db, scope="function")` (0.121+), ya da commit'i endpoint içinde açıkça yap.
 2. Üretimde çalışan sürümleri **sabitle** (`fastapi==X.Y.Z`, bir kilit dosyası ile) ve yükseltmeyi

@@ -32,6 +32,7 @@ from modes.action.triage import (
     decide_priority,
 )
 from modes.context import TurnContext
+from modes.tool_data import raw_payload
 from policy.executor import ConfirmationRequired, PolicyDenied
 
 # --- Cause -> action table ----------------------------------------------------------
@@ -57,8 +58,43 @@ ROOT_CAUSE_ACTION: dict[str, tuple[str, IssueType, Priority]] = {
 }
 
 # --- Policy inputs ------------------------------------------------------------------
-def build_policy_context(ctx: TurnContext, diagnosis: Diagnosis) -> dict[str, Any]:
-    """The facts `policy.yaml` conditions are evaluated against (job, subscription, payment...)."""
+# Demo simplification: the outage credit is always this fixed amount. It is a parameter of
+# the action that will run (see `build_params`), never a separate number made up for the
+# policy check. Production would price it from the tariff and the outage's length.
+OUTAGE_CREDIT_GBP = 5.0
+CREDIT_LOOKBACK_DAYS = 30
+
+
+def credit_count_30d(ctx: TurnContext, customer_no: str | None) -> int | None:
+    """Credits the company already granted this customer in the look-back window.
+
+    Read through the gateway (`get_credit_history`, the company's own records). Returns
+    None when the answer is unknown (no customer, tool down, odd payload): the caller then
+    leaves the fact out of the context and the policy engine denies, never assuming 0.
+    """
+    if not customer_no:
+        return None
+    outcome = ctx.call_tool_cached(
+        "get_credit_history", {"customer_no": customer_no, "days": CREDIT_LOOKBACK_DAYS}
+    )
+    payload = raw_payload(outcome)
+    count = payload.get("count") if isinstance(payload, dict) else None
+    return count if isinstance(count, int) and not isinstance(count, bool) else None
+
+
+def build_policy_context(
+    ctx: TurnContext,
+    diagnosis: Diagnosis,
+    *,
+    action_name: str,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """The facts `policy.yaml` conditions are evaluated against (job, subscription, payment...).
+
+    `params` are the exact arguments the action will run with, so `amount_gbp` is what is
+    checked against `max_amount_gbp` and what is later executed. Facts we cannot establish
+    are omitted rather than defaulted: a condition on a missing field counts as not met.
+    """
     evidence = diagnosis.evidence
     context: dict[str, Any] = {
         "conversation_id": ctx.conversation_id,
@@ -70,9 +106,14 @@ def build_policy_context(ctx: TurnContext, diagnosis: Diagnosis) -> dict[str, An
         "subscription": {"status": evidence.get("subscription_status")},
         "payment": {"status": evidence.get("payment_status")},
         "incident": {"exists": diagnosis.incident_no is not None},
-        "credit": {"existing_count_30d": 0},
-        "amount_gbp": 5.0,
     }
+    if "amount_gbp" in params:
+        context["amount_gbp"] = params["amount_gbp"]
+    if action_name == "apply_outage_credit":
+        # Only fetched for the action that needs it, so other cases do not spend tool budget.
+        existing = credit_count_30d(ctx, params.get("customer_no"))
+        if existing is not None:
+            context["credit"] = {"existing_count_30d": existing}
     return context
 
 
@@ -83,7 +124,7 @@ def build_params(root_cause: str, diagnosis: Diagnosis, customer_no: str) -> dic
     if root_cause == RootCause.STUCK_PROVISIONING:
         base["job_id"] = evidence.get("job_id")
     if root_cause == RootCause.REGIONAL_OUTAGE:
-        base["amount_gbp"] = 5.0
+        base["amount_gbp"] = OUTAGE_CREDIT_GBP
         base["reason"] = f"Regional outage compensation ({diagnosis.incident_no})"
     return base
 
@@ -110,8 +151,8 @@ def handle_known_cause(
     triage = compute_triage(ctx, diagnosis)
     issue_type = decide_issue_type(ctx, diagnosis, deterministic_issue_type, triage)
     priority = decide_priority(ctx, diagnosis, issue_type, deterministic_priority, triage)
-    policy_context = build_policy_context(ctx, diagnosis)
     params = build_params(root_cause, diagnosis, customer_no)
+    policy_context = build_policy_context(ctx, diagnosis, action_name=action_name, params=params)
 
     try:
         ctx.action_executor.execute(action_name, params, policy_context, confirmed=False)

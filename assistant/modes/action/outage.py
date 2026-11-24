@@ -45,10 +45,10 @@ def handle_regional_outage(
     # Offer the (confirmation-required, irreversible) outage credit on top of the
     # incident attachment — two independent concerns, both handled this turn.
     action_name = "apply_outage_credit"
-    policy_context = build_policy_context(ctx, diagnosis)
     params = build_params(root_cause, diagnosis, customer_no)
+    policy_context = build_policy_context(ctx, diagnosis, action_name=action_name, params=params)
     try:
-        ctx.action_executor.execute("apply_outage_credit", params, policy_context, confirmed=False)
+        ctx.action_executor.execute(action_name, params, policy_context, confirmed=False)
     except ConfirmationRequired as exc:
         approval_id = persist_pending_approval(
             ctx, action_name="apply_outage_credit", params=params, policy_context=policy_context,

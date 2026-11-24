@@ -282,6 +282,28 @@ class GetNotificationHistoryOutput(BaseModel):
     notifications: list[NotificationLogEntry]
 
 
+# --- get_credit_history ---------------------------------------------------
+
+
+class GetCreditHistoryInput(BaseModel):
+    customer_no: str
+    days: int = Field(default=30, ge=1, le=365, description="look-back window in days")
+
+
+class CreditHistoryEntry(BaseModel):
+    customer_no: str
+    subscription_id: int
+    amount_gbp: float
+    reason: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class GetCreditHistoryOutput(BaseModel):
+    days: int
+    count: int = Field(description="number of credits granted inside the window")
+    credits: list[CreditHistoryEntry]
+
+
 # --- get_region_health ----------------------------------------------------
 
 

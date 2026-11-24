@@ -7,7 +7,7 @@ same surface for tests.
 
 Key ideas:
 - Per-turn scoping: a gateway (or its ``for_turn`` view) has a call budget of
-  ``MAX_TOOL_CALLS_PER_TURN``; call N+1 raises ``ToolBudgetExceeded`` so a runaway model loop
+  ``policy.yaml: limits.max_tool_calls_per_turn``; call N+1 raises ``ToolBudgetExceeded`` so a runaway model loop
   cannot hammer company systems.
 - Graceful degradation: a dead or absent adapter yields ``ok=False,
   error_code="ADAPTER_UNAVAILABLE"`` instead of raising, so the assistant still runs when

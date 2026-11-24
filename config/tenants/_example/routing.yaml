@@ -62,16 +62,6 @@ urgency_floor:
   paid_not_active: NORMAL
   other: LOW
 
-# ── Diagnostic checklist order (diagnostic mode is a fixed sequence) ────────
-diagnostic_checklist:
-  - find_customer
-  - get_subscription_status
-  - get_payment_status
-  - get_provisioning_status
-  - get_installation_status
-  - get_active_incidents_for_region
-  - get_service_health
-
 # ── Agentic investigation (modes/investigation.py) ──────────────────────────
 # When the fixed checklist finds nothing, a model may investigate with ONLY these
 # read-only tools. Write tools are never listed here (validated at load time).
@@ -85,6 +75,7 @@ investigation_tools:
   - get_active_incidents_for_region
   - get_incident_detail
   - get_notification_history
+  - get_credit_history
   - get_region_health
   - get_payment_status
   - list_customer_charges

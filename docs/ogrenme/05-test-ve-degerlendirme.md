@@ -105,7 +105,9 @@ docker compose run --rm test-runner python -m evals.run --only scenarios --case 
 
 Veri: `evals/datasets/scenarios.yaml` (6 chaos senaryosu x farklı tonlar, 3 "aksiyonsuz" vaka,
 3 investigation vakası) ve `evals/datasets/advisory_profiles.yaml` (10 müşteri profili). Bu
-commit'te toplam 36 vaka var (20 senaryo mesajı + 3 + 3 + 10).
+commit'te scripted eval toplam **37** vaka raporlar: 27 senaryo vakası (20 ton varyantı mesajı +
+regional outage'ın "iki müşteri tek ticket" kontrolü + 3 aksiyonsuz + 3 investigation) + 10
+advisory profili.
 
 ### Vakalarda neler kontrol edilir?
 

@@ -17,8 +17,8 @@ Key ideas:
 Table of contents: find_customer, get_subscription_status,
 get_subscription_timeline, get_provisioning_status, get_installation_status,
 get_modem_status, get_active_incidents_for_region, get_incident_detail,
-list_packages, get_notification_history, get_region_health, and finally
-`register_read_tools` (names and descriptions of all eleven).
+list_packages, get_notification_history, get_credit_history, get_region_health, and
+finally `register_read_tools` (names and descriptions of all twelve).
 
 Read next: `tools_write.py`.
 """
@@ -33,11 +33,14 @@ from .deps import core_api_client
 from .diag import DiagQueryError, query_diag
 from .models import (
     AffectedSubscription,
+    CreditHistoryEntry,
     CustomerSummary,
     FindCustomerInput,
     FindCustomerOutput,
     GetActiveIncidentsForRegionInput,
     GetActiveIncidentsForRegionOutput,
+    GetCreditHistoryInput,
+    GetCreditHistoryOutput,
     GetIncidentDetailInput,
     GetIncidentDetailOutput,
     GetInstallationStatusInput,
@@ -313,6 +316,31 @@ async def handle_get_notification_history(inp: GetNotificationHistoryInput) -> T
     return ok(GetNotificationHistoryOutput(notifications=notifications), SOURCE_DIAG)
 
 
+# --- get_credit_history ---------------------------------------------------
+
+_CREDIT_HISTORY_SQL = """
+    SELECT customer_no, subscription_id, amount_gbp, reason, created_at
+    FROM diag.credit_history
+    WHERE customer_no = :customer_no
+      AND created_at >= now() - make_interval(days => CAST(:days AS int))
+    ORDER BY created_at DESC
+"""
+
+
+async def handle_get_credit_history(inp: GetCreditHistoryInput) -> ToolResult[Any]:
+    """Goodwill credits granted to a customer inside the look-back window, newest first.
+
+    The assistant's policy counts these (`credit.existing_count_30d`) before it offers
+    another credit, so the answer must come from the company's own records.
+    """
+    try:
+        rows = query_diag(_CREDIT_HISTORY_SQL, {"customer_no": inp.customer_no, "days": inp.days})
+    except DiagQueryError as exc:
+        return fail("DIAG_DB_ERROR", exc.message, SOURCE_DIAG)
+    credits = [CreditHistoryEntry(**row) for row in rows]
+    return ok(GetCreditHistoryOutput(days=inp.days, count=len(credits), credits=credits), SOURCE_DIAG)
+
+
 # --- get_region_health ----------------------------------------------------
 
 _REGION_HEALTH_SQL = """
@@ -335,7 +363,7 @@ async def handle_get_region_health(inp: GetRegionHealthInput) -> ToolResult[Any]
 
 
 def register_read_tools(mcp: Any) -> None:
-    """Register all eleven read tools (names and descriptions are part of the public contract)."""
+    """Register all twelve read tools (names and descriptions are part of the public contract)."""
     register_tool(
         mcp,
         name="find_customer",
@@ -415,6 +443,14 @@ def register_read_tools(mcp: Any) -> None:
         input_model=GetNotificationHistoryInput,
         output_model=GetNotificationHistoryOutput,
         handler=handle_get_notification_history,
+    )
+    register_tool(
+        mcp,
+        name="get_credit_history",
+        description="Get the goodwill credits granted to a customer in the last N days (default 30).",
+        input_model=GetCreditHistoryInput,
+        output_model=GetCreditHistoryOutput,
+        handler=handle_get_credit_history,
     )
     register_tool(
         mcp,

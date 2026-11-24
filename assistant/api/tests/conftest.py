@@ -52,7 +52,7 @@ def client(tmp_path, monkeypatch: pytest.MonkeyPatch):
         # fixtures loaded) and a real `ToolGateway` (no live adapters reachable here).
         # Swap in a `FakeGateway` + a `ScriptedProvider` with routing fixtures so chat
         # tests are fully deterministic and offline, exactly like `modes/tests/`.
-        fake_gateway = FakeGateway(default_responses())
+        fake_gateway = FakeGateway(default_responses(), max_calls_per_turn=14)
         provider = ScriptedProvider(INTENT_RULES)
         decision_service = LLMStructuredDecisionService(provider)
         state_module.state.gateway = fake_gateway

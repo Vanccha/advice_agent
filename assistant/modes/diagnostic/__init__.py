@@ -1,8 +1,8 @@
 """DIAGNOSTIC mode, first stage: the fixed checklist that names a known root cause.
 
-Where this sits: called by `modes.dispatch` for a problem report. Walks the checklist from
-``routing.yaml: diagnostic_checklist`` (customer, subscription, payment, provisioning,
-installation, regional incidents, service health) through the gateway's read-only tools,
+Where this sits: called by `modes.dispatch` for a problem report. Walks the fixed checklist
+(customer, subscription, payment, provisioning, installation, regional incidents, service
+health; the order is code, see `checklist.py`) through the gateway's read-only tools,
 stopping at the first established root cause. Its `Diagnosis` feeds `modes.action`; when
 nothing matches, `modes.investigation` takes over.
 

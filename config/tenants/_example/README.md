@@ -14,7 +14,7 @@ customer needs no code change" instead of just reading it.
 | Handover threshold | 0.6 | **0.8** (hands over to a human sooner) |
 | Advisory question limit | 5 | **3** |
 | Outage compensation | up to £5, **can** apply with consent | **cannot** → Revenue Management |
-| Rescheduling installations | **cannot** → field team | **can** with consent |
+| Rescheduling installations | cannot → field team | cannot → field team (the company's partner API key has no `appointments:write` scope, so allowing it here would only fail after the customer approved) |
 | Recommendation weights | speed 0.35 / budget 0.25 | speed 0.20 / **budget 0.45** |
 | Monitoring and channel adapters | required | **optional** (this customer does not expose them to suppliers) |
 
@@ -32,7 +32,11 @@ with TestClient(app) as c:
 "
 ```
 Expected: `NS-100001`, valid for `netswift`, gets a **format error** here, the sign-in page
-says "Account number", and the authority engine denies compensation but allows rescheduling.
+says "Account number", and the authority engine denies compensation.
+
+Authority in policy must match what the company's API will actually let the integration do:
+`assistant/mcp_gateway/tests/test_config_consistency.py` fails when a tenant allows an action that has no tool
+mapping, so a policy cannot promise something the assistant cannot carry out.
 
 ## The honest limit
 

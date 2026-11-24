@@ -4,7 +4,7 @@ Where this sits: the process entry point of the `mcp-core` container; the
 assistant connects to it over MCP streamable HTTP.
 
 Key ideas:
-- MCP server exposes tools with JSON schemas: 11 read-only and 5 mutating
+- MCP server exposes tools with JSON schemas: 12 read-only and 6 mutating
   tools (docs/contracts.md section 3) at `POST /mcp`, plus `GET /health` and
   `GET /metrics`.
 - All wiring lives in `common.server.build_server`; this file only lists

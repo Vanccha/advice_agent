@@ -34,15 +34,7 @@ def test_can_transition_matches_transition(machine: StateMachine) -> None:
     assert machine.can_transition(Mode.ROUTER, Mode.ACTION) is False
 
 
-def test_limits_enforced(machine: StateMachine) -> None:
-    machine.check_tool_calls(0)
-    with pytest.raises(LimitExceeded):
-        machine.check_tool_calls(2)
-
-    machine.check_questions_advisory(1)
-    with pytest.raises(LimitExceeded):
-        machine.check_questions_advisory(2)
-
+def test_action_cap_is_enforced(machine: StateMachine) -> None:
     machine.check_actions_per_conversation(0)
     with pytest.raises(LimitExceeded):
         machine.check_actions_per_conversation(1)

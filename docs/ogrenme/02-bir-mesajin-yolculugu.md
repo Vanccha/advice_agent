@@ -53,8 +53,8 @@ widget.js
      tool hakkını harcayamaz.
    - `dispatch_turn` (satır 115) çağrılır; `LimitExceeded` ve `ToolBudgetExceeded` yakalanıp
      (satır 118 ve 124) kibar bir "bir yetkiliye aktarıyorum" cevabına çevrilir, hata sayfasına değil.
-     (Pratikte bugün tur içinde fırlayan, `ToolBudgetExceeded`; `LimitExceeded` yakalayıcısı hazır
-     ama bu commit'te üretim kodundan fırlatan bir çağrı yok, bkz. `07-bilinen-sinirlar.md`.)
+     (`ToolBudgetExceeded` tool bütçesini aşan tur içinde gateway'den, `LimitExceeded` ise
+     konuşmanın `max_actions_per_conversation` hakkı dolduğunda `ActionExecutor`'dan fırlar.)
    - Sonunda geçmiş, mode ve mesajlar kaydedilir (`self.store.save`, satır 147).
 
 Buradan sonrası `modes/dispatch.py`.
@@ -278,9 +278,12 @@ ctx.action_executor.execute(action_name, params, policy_context, confirmed=False
 
 1. `PolicyEngine.check` çağırır (`executor.py:77`; `engine.py:101`). `policy.yaml` içinde
    `retry_provisioning_job` için koşullar: `job.status in [stuck, failed]` **ve**
-   `job.attempt_count < 3`. Bağlam `build_policy_context` (`known_causes.py:60`) ile checklist
-   kanıtından kurulur. Bir koşulun verisi yoksa koşul **sağlanmamış** sayılır (fail-safe).
-2. Kontrolü `POLICY_CHECK` olarak audit'e yazar (izin verilse de verilmese de).
+   `job.attempt_count < 3`. Bağlam `build_policy_context` (`known_causes.py`) ile checklist
+   kanıtından ve aksiyonun gerçek parametrelerinden kurulur (örn. tutar `params`'tan gelir;
+   kredi geçmişi `get_credit_history` tool'uyla şirketten okunur). Bir koşulun verisi yoksa koşul **sağlanmamış** sayılır (fail-safe).
+2. Önce kendi `ActionRecord` kayıtlarından kullanım sayaçlarını (`policy/usage.py`: konuşma
+   başına ve müşteri başına günlük) hesaplayıp bağlama koyar; `rate_limit` bunlara bakar.
+   Kontrolü `POLICY_CHECK` olarak audit'e yazar (izin verilse de verilmese de).
 3. İzin yoksa `PolicyDenied`, onay gerekiyorsa `ConfirmationRequired` fırlatır; ikisi de
    `ActionRecord` satırı bırakır.
 4. İzin varsa action runner'ı çağırır (`executor.py:108`). Runner

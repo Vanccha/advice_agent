@@ -45,7 +45,6 @@ class AssistantSettings(BaseSettings):
     ANTHROPIC_MODEL: str | None = None
     DECISION_SERVICE: str = "llm_structured"
     DECISION_MIN_CONFIDENCE: float = 0.6
-    MAX_TOOL_CALLS_PER_TURN: int = 8
 
     # MCP adapters
     MCP_CORE_URL: str | None = None

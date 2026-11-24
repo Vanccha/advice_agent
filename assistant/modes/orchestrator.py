@@ -193,7 +193,10 @@ class Orchestrator:
         for_turn = getattr(self.gateway, "for_turn", None)
         gateway = for_turn(conversation_id) if for_turn is not None else self.gateway
         gateway.reset_turn_budget()
-        executor = ActionExecutor(self.policy_engine, self.audit_log, make_action_runner(gateway))
+        executor = ActionExecutor(
+            self.policy_engine, self.audit_log, make_action_runner(gateway),
+            conversation_action_guard=self.machine.check_actions_per_conversation,
+        )
         return gateway, executor, TicketService(gateway)
 
     def _handover_mode(self, mode: Mode) -> Mode:

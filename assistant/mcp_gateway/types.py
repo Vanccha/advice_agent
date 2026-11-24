@@ -56,7 +56,7 @@ class ToolCallOutcome(BaseModel):
 
 
 class ToolBudgetExceeded(Exception):
-    """Raised by `ToolGateway.call()`/`call_sync()` when a turn's `MAX_TOOL_CALLS_PER_TURN`
+    """Raised by `ToolGateway.call()`/`call_sync()` when a turn's `policy.yaml: limits.max_tool_calls_per_turn`
     budget is already spent — call N+1 raises instead of silently placing another call."""
 
     def __init__(self, tool_name: str, limit: int) -> None:

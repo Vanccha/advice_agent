@@ -102,39 +102,54 @@ söylemek istediğimiz boşluklar. Bölüm C test/operasyon gözlemleri.
 - **Production'da?** Her takip mesajında "cevap mı, yeni konu mu?" tespiti (güven eşiğiyle) ve
   konu değişince state'i temizleyip router'a dönmek. Alıştırma 13.
 
-### B5. Bazı `policy.yaml` limitleri ve koşulları bugün tam uygulanmıyor
-Kodu okurken şunları gördük (yeni bir geliştirici olarak bunları bilmek seni yanlış varsayımdan korur):
-- `limits.max_actions_per_conversation` (netswift: 3) config'te ve `StateMachine.check_actions_per_conversation`
-  içinde var, ancak bu commit'te **üretim kodundan çağrılmıyor**; yalnızca `modes/tests/test_machine.py`
-  çağırıyor. Aynısı `check_tool_calls` ve `check_questions_advisory` için de geçerli: o limitler
-  başka yollarla uygulanıyor (tool bütçesi `ToolGateway`'de; advisory soru sınırı `advisory/flow.py`'de
-  doğrudan config'ten okunuyor).
-- `build_policy_context` (`assistant/modes/action/known_causes.py:60`) `credit.existing_count_30d`
-  değerini sabit `0` ve `amount_gbp` değerini sabit `5.0` olarak veriyor. Yani `apply_outage_credit`
-  için "son 30 günde kredi almamış olmalı" koşulu bugün **her zaman sağlanıyor**; gerçek koruma
-  şirketin kendi API'sinde olmalı (mcp-core tarafı idempotency key gönderir).
-- `policy.yaml: rate_limit` sayaçları `context["usage"]` içinden okunur, ama üretim kodu bu anahtarı
-  doldurmuyor; bu yüzden hız sınırları bugün hiç tetiklenmez (policy testleri `usage`'ı elle verir).
-- `config/tenants/_example` `reschedule_installation` aksiyonuna onayla izin veriyor, ancak
-  `action_runner.ACTION_TOOL_MAP` içinde bu aksiyonun karşılığı yok (onaydan sonra
-  `UnmappedActionError`), ayrıca mcp-core'daki ilgili tool partner anahtarının yetkisi olmadığı için
-  her zaman `SCOPE_DENIED` döner (`integrations/mcp_core/app/tools_write.py` başlığı). Yani o
-  müşterinin "randevu erteleyebilir" yeteneği henüz uçtan uca çalışmıyor. Alıştırma 8 buna götürür.
-- `routing.yaml: diagnostic_checklist` listesi config modelinde doğrulanıyor ama checklist'in
-  adım sırası `modes/diagnostic/checklist.py` içinde kodla sabit.
-- **Neden kabul edilebilir?** Demo akışları bunlara dokunmuyor; boşluklar test ve eval tarafından
-  yakalanmadı, ki bu da kendi başına öğretici (Alıştırma 8).
-- **Production'da?** Her config anahtarı için "okunuyor mu, uygulanıyor mu?" kontrolü: ölü config
-  anahtarlarını bulan bir test, gerçek kullanım sayaçları (konuşma başına aksiyon sayısı, müşteri başına
-  günlük kredi), ve config ile kod uyumunu doğrulayan testler.
+### B5. `policy.yaml` limitleri ve koşulları: bir inceleme bulguları ve düzeltmeleri
+Bir kod incelemesi, projenin temel vaadini ("model kendi yetkisine karar vermez, policy engine
+verir") zayıflatan boşluklar buldu. Hepsi düzeltildi; hangi boşluk neydi, ne yapıldı ve neden:
+- **Uydurma policy gerçekleri.** `build_policy_context` `credit.existing_count_30d` değerini sabit `0`,
+  `amount_gbp` değerini sabit `5.0` veriyordu: "son 30 günde kredi almamış olmalı" koşulu **her
+  zaman** geçiyordu. Şimdi tutar aksiyonun gerçek `params`'ından gelir; kredi sayısı yeni salt-okunur
+  `get_credit_history` tool'uyla (`diag.credit_history` view'u) şirketin kayıtlarından okunur
+  (yalnızca `apply_outage_credit` için çağrılır). Veri alınamazsa alan bağlama konmaz ve policy
+  engine reddeder; `0` varsayılmaz. Not: tutar hâlâ sabit bir demo sadeleştirmesidir
+  (`OUTAGE_CREDIT_GBP`), ama policy'nin kontrol ettiği sayı ile çalışan sayı artık aynıdır.
+- **Hiç tetiklenmeyen hız sınırları.** `rate_limit` `context["usage"]` okuyordu ama kimse doldurmuyordu.
+  Şimdi `ActionExecutor` her kontrolden önce `policy/usage.py` ile asistanın **kendi** `ActionRecord`
+  kayıtlarından (`executed=True`) konuşma başına ve müşteri başına UTC günlük sayaçları hesaplar;
+  çağıranın verdiği `usage` yok sayılır.
+- **Uygulanmayan `max_actions_per_conversation`.** `StateMachine.check_actions_per_conversation`
+  yalnızca testlerde çağrılıyordu. Şimdi `ActionExecutor` bir aksiyon izin alıp çalışmadan (ve onay
+  istenmeden) önce bunu çağırır; `LimitExceeded` orkestratörde (ve onay akışında) kibar bir devre
+  çevrilir. `check_tool_calls` ve `check_questions_advisory` **silindi**: tool bütçesini gateway
+  (`ToolBudgetExceeded`), soru sınırını advisory akışı zaten uyguluyordu; aynı kuralı iki yerde
+  tutmak ölü kod ve yanlış güven yaratıyordu.
+- **`_example` ve `reschedule_installation`.** Policy onayla izin veriyor ama `ACTION_TOOL_MAP`'te
+  eşleme yoktu (`UnmappedActionError`); ayrıca partner anahtarı `appointments:write` yetkisine sahip
+  olmadığı için mcp-core tool'u `SCOPE_DENIED` döner. Yetki sınırını gevşetmek yerine `_example`
+  policy'si dürüst yapıldı (reddet + `FIELD_INSTALL`'a devret). Tekrarını önlemek için bir config
+  tutarlılık testi eklendi (`assistant/mcp_gateway/tests/test_config_consistency.py`, Alıştırma 8).
+- **Ölü config: `routing.yaml: diagnostic_checklist`.** Doğrulanıyor ama hiç okunmuyordu; sıra kodda
+  sabitti. Adımlar birbirine bağlı (örn. kurulum kontrolü yalnızca abonelik o aşamadaysa çalışır), bu
+  yüzden sıra config olmayı hak etmiyor: anahtar iki tenant'tan, config modelinden ve contracts'tan
+  kaldırıldı, docstring düzeltildi.
+- **Ölü ayar: `MAX_TOOL_CALLS_PER_TURN`.** Çalışma zamanında okunmuyordu; bütçe `policy.yaml:
+  limits.max_tool_calls_per_turn`'den gelir. Ayar `settings`, `.env.example` ve compose'tan kaldırıldı.
+- **Neden böyle oldu?** Bu boşlukları ne testler ne eval'ler yakaladı: policy testleri bağlamı elle
+  veriyordu, eval'lerde kredi geçmişi hep boştu. Ders: bir kuralın testi, kuralın **beslendiği
+  verinin** gerçekten üretildiğini de kapsamalı (uçtan uca testler: `modes/tests/test_policy_facts.py`,
+  `policy/tests/test_usage_and_limits.py`).
+- **Kalan sınırlar.** Kredi tutarı hâlâ sabit (demo sadeleştirmesi); müşteri başına günlük sayaç
+  yalnızca `asst.conversations` ile müşteriye bağlı konuşmaları sayar (ilk turdaki konuşma, tur
+  bitip kaydedilene kadar `params`'taki `customer_no` ile eşleşir). Gerçek koruma yine şirketin
+  kendi API'sinde de olmalı (mcp-core idempotency key gönderir, core-api tavan uygular).
+- **Production'da?** Her config anahtarı için "okunuyor mu, uygulanıyor mu?" kontrolü, gerçek kullanım
+  sayaçları ve config ile kod uyumunu doğrulayan testler (Alıştırma 8).
 
 ### B6. Ek küçük gözlemler
 - Birçok dosya başlığında bölüm işareti için `§` karakteri bozuk kodlanmış (`§`) görünüyor
   (örn. `assistant/policy/engine.py` başlığındaki "See: docs/contracts.md §4.6"). Bu bir
   karakter kodlama sorunu; içeriği etkilemez ama aramayı zorlaştırır.
-- Bir iş turu için tool bütçesi 14 (`policy.yaml`); `.env.example` içinde `MAX_TOOL_CALLS_PER_TURN=8`
-  tanımlı. Gateway'in kurucu varsayılanı da 8; ancak çalışma zamanında `from_tenant_config` politika
-  değerini (14) kullanır. İki "limit"in nerede etkili olduğuna dikkat.
+- Bir tur için tool bütçesi yalnızca `policy.yaml: limits.max_tool_calls_per_turn`'dir (netswift: 14);
+  `FakeGateway`'in kurucu varsayılanı (8) sadece testler içindir, testler `make_gateway` ile 14 verir.
 
 ---
 

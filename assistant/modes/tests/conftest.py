@@ -85,6 +85,7 @@ def default_responses() -> dict[str, Any]:
         "retry_provisioning_job": {"status": "queued"},
         "enqueue_provisioning_job": {"status": "queued"},
         "resend_activation_notification": {"status": "sent"},
+        "get_credit_history": {"days": 30, "count": 0, "credits": []},
         "apply_outage_credit": {"status": "applied", "amount_gbp": 5},
         "post_department_message": {"ok": True},
         "create_structured_ticket": {
@@ -122,6 +123,9 @@ def make_gateway(overrides: dict[str, Any] | None = None, **kwargs: Any) -> Fake
     responses = default_responses()
     if overrides:
         responses.update(overrides)
+    # Same per-turn budget as netswift's policy.yaml: the outage flow (checklist, incident
+    # ticket, credit history) needs more than FakeGateway's default of 8.
+    kwargs.setdefault("max_calls_per_turn", 14)
     return FakeGateway(responses, **kwargs)
 
 

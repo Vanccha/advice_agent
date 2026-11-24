@@ -175,12 +175,12 @@ Multi-tenancy burada "aynı kod, farklı müşteri ayarı" anlamında. Bir müş
 |---|---|
 | `tenant.yaml` | Müşteri adı, müşteri numarası formatı (`customer_identifier.pattern`), adapter adresleri (ortam değişkeninden), departmanlar, persona |
 | `policy.yaml` | Asistanın hangi aksiyonları yapabileceği, koşullar, limitler, PII ayarları |
-| `routing.yaml` | Checklist adları (`diagnostic_checklist`; dikkat: bu liste config modelinde doğrulanıyor ama adımların sırası şu an `modes/diagnostic/checklist.py` içinde kodla sabit), sorun tipi → departman tablosu, öneri ağırlıkları, `investigation_tools` allowlist'i |
+| `routing.yaml` | Sorun tipi → departman tablosu, öneri ağırlıkları, `investigation_tools` allowlist'i |
 
 Hangi müşterinin kullanılacağını `TENANT` ortam değişkeni belirler (`.env.example` içinde
 `TENANT=netswift`). `config/tenants/_example/` boş bir şablon değil, **çalışan ikinci bir
 müşteri**: farklı numara formatı (`OR-2045118`), farklı departman adları, daha yüksek devir
-eşiği (0.8), tazminat yetkisi yok, randevu erteleme yetkisi var. Aynı imajı `TENANT=_example` ile
+eşiği (0.8), tazminat yetkisi yok. Aynı imajı `TENANT=_example` ile
 çalıştırıp farkı görebilirsin (komut `config/tenants/_example/README.md` içinde). Dürüst sınır orada
 da yazıyor: `IssueType` ve `Department` enum'ları kodda tanımlı; başka bir *sektöre* geçmek için
 bu sözlük de genişlemeli, başka bir *internet sağlayıcıya* geçmek için yalnızca config yeter.

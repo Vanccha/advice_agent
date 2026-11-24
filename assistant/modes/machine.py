@@ -9,8 +9,8 @@ Key ideas:
   in one screen.
 - Fail loudly: an illegal move raises `IllegalTransition` (a bug in a handler) instead of
   being silently accepted.
-- Limits from `policy.yaml` are enforced here, in code, so no prompt can talk its way past
-  them.
+- The per-conversation action cap from `policy.yaml` is enforced in code, so no prompt can
+  talk its way past it.
 
 Read next: modes/dispatch.py, modes/router.py.
 
@@ -53,8 +53,7 @@ class IllegalTransition(Exception):
 
 
 class LimitExceeded(Exception):
-    """Raised when a conversation-scoped limit from ``policy.yaml: limits`` is hit
-    (``max_tool_calls_per_turn``, ``max_questions_advisory``, ``max_actions_per_conversation``)."""
+    """Raised when ``policy.yaml: limits.max_actions_per_conversation`` is hit."""
 
     def __init__(self, limit_name: str, limit_value: int) -> None:
         super().__init__(f"limit '{limit_name}' ({limit_value}) exceeded")
@@ -81,17 +80,17 @@ class StateMachine:
         return target in ALLOWED_TRANSITIONS.get(current, frozenset())
 
     # --- Limits ---------------------------------------------------------------------
-    # The three checks raise at ``>= limit`` (not ``>``): the limit is the number of calls
-    # allowed, so reaching it means the next one would be over budget.
-    def check_tool_calls(self, used: int) -> None:
-        if used >= self.limits.max_tool_calls_per_turn:
-            raise LimitExceeded("max_tool_calls_per_turn", self.limits.max_tool_calls_per_turn)
-
-    def check_questions_advisory(self, asked: int) -> None:
-        if asked >= self.limits.max_questions_advisory:
-            raise LimitExceeded("max_questions_advisory", self.limits.max_questions_advisory)
-
+    # Only the per-conversation action cap lives here. The other two limits in
+    # ``policy.yaml: limits`` are enforced where the counter is: ``max_tool_calls_per_turn``
+    # by the gateway (``ToolBudgetExceeded``, which sees every call, including the model's)
+    # and ``max_questions_advisory`` by the advisory flow's own question counter.
     def check_actions_per_conversation(self, used: int) -> None:
+        """Raise ``LimitExceeded`` when ``used`` executed actions already reach the cap.
+
+        Raises at ``>=``: the limit is the number of actions allowed, so reaching it means
+        the next one would be over budget. ``policy.executor.ActionExecutor`` calls this with
+        the count from the action records before an allowed action runs.
+        """
         if used >= self.limits.max_actions_per_conversation:
             raise LimitExceeded(
                 "max_actions_per_conversation", self.limits.max_actions_per_conversation

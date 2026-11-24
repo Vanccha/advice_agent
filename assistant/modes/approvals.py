@@ -25,6 +25,7 @@ from core_common.models import PendingApproval
 from core_common.types import Department, IssueType, Mode, Priority, StepType
 from modes import replies
 from modes.dispatch import lookup_requester
+from modes.machine import LimitExceeded
 from modes.results import TurnResult
 from modes.ticket_links import record_ticket_link
 from policy.executor import PolicyDenied
@@ -72,6 +73,14 @@ def resolve_approval(orch: Orchestrator, *, approval_id: str, granted: bool) -> 
     else:
         try:
             ctx.action_executor.execute(action_name, action_params, policy_context, confirmed=True)
+        except LimitExceeded as exc:
+            # The conversation spent its action budget between asking and approving: hand
+            # over politely instead of running one more action.
+            orch.audit_log.append(
+                conv_id, StepType.ESCALATION, f"limit exceeded: {exc}", str(exc), {}, tenant=orch.tenant
+            )
+            reply_en = replies.STEP_LIMIT_REACHED
+            new_mode = Mode.ESCALATED
         except PolicyDenied as exc:
             name, contact = lookup_requester(ctx, customer_no)
             department = exc.decision.escalate_to or Department.SUBSCRIPTION_OPS

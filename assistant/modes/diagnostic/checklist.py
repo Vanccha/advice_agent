@@ -11,7 +11,9 @@ Key ideas:
   `Diagnosis.evidence`, because it is audited and returned by the API (contracts §4.7/§4.8).
 
 Checklist order: 1 customer, 2 subscription, 3 payment (+ duplicate charge), 4 provisioning,
-5 installation, 6 regional incident, 7 service health.
+5 installation, 6 regional incident, 7 service health. The order is code, not configuration:
+later steps depend on what earlier ones found, so a reorderable list would promise more than
+the code can keep.
 
 Read next: modes/diagnostic/payment_checks.py.
 See: docs/contracts.md §4.3, §5.

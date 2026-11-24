@@ -24,9 +24,9 @@ Genel kurallar:
 | 5 | Investigation allowlist'ine salt-okunur bir tool ekle | Orta |
 | 6 | Türkiye'ye özel PII dedektörleri | Orta |
 | 7 | Türkçe locale (`replies.py` dikişi) | Orta |
-| 8 | Config tutarlılık testi: her izinli aksiyonun bir tool eşlemesi var mı? | Orta |
+| 8 | Config tutarlılık testi: bulunan hatayı oku, testi genişlet | Orta |
 | 9 | "Tek başına geçer, tam koşuda kırılır": yazılı analiz | Orta |
-| 10 | Yield/commit deneyi ve sürüm sabitleme | Orta |
+| 10 | Yield/commit düzeltmesini oku, doğrula ve yakalayan bir test yaz | Orta |
 | 11 | Yeni bir chaos senaryosu + eval vakası | Zor |
 | 12 | Sahte streaming yerine gerçek token streaming | Zor |
 | 13 | Açık investigation sırasında konu değişimi | Zor |
@@ -220,29 +220,41 @@ bittiğini** görmek.
 
 ---
 
-## 8. Config tutarlılık testi (Orta)
+## 8. Config tutarlılık testi: bulunan hatayı oku, testi genişlet (Orta)
 
-**Amaç.** "Yapılandırma ile kod arasında sessiz uyumsuzlukları" bir testle yakalamak.
+**Amaç.** "Yapılandırma ile kod arasında sessiz uyumsuzlukları" bir testle yakalamayı öğrenmek.
 
-**Nereden başla.** `assistant/mcp_gateway/action_runner.py::ACTION_TOOL_MAP`,
-`config/tenants/*/policy.yaml`, `assistant/core_common/config.py::load_tenant_config`,
-`assistant/policy/tests/test_engine.py` (config yükleme biçimi).
+**Nasıl bulundu, nasıl düzeltildi.** Bir inceleme `config/tenants/_example/policy.yaml`'ın
+`reschedule_installation` aksiyonuna onayla izin verdiğini, ama `ACTION_TOOL_MAP`'te bu aksiyonun
+karşılığı olmadığını gösterdi: müşteri "onayla" dedikten sonra `UnmappedActionError` patlardı. Bir
+adım ötede mcp-core'daki tool da partner API anahtarında `appointments:write` yetkisi olmadığı için
+her zaman `SCOPE_DENIED` döner (`integrations/mcp_core/app/tools_write.py` başlığı; contracts §2.1).
+İki yoldan biri seçilebilirdi: eşlemeyi tamamlayıp partner anahtarına yazma yetkisi vermek (şirketin
+yetki sınırını gevşetir, `netswift` ve contracts'taki "randevuyu saha ekibi yönetir" hikâyesini
+bozar) ya da policy'yi dürüst yapmak. İkincisi seçildi: `_example` artık `reschedule_installation`
+için `allowed: false` + `FIELD_INSTALL`'a devir diyor. Düzeltmenin yanına
+`assistant/mcp_gateway/tests/test_config_consistency.py` eklendi: her tenant için `allowed: true`
+olan her aksiyonun `ACTION_TOOL_MAP`'te olduğunu doğrular; hatayı baştan yakalardı.
 
-**Görev.** Her tenant için, `allowed: true` olan her aksiyonun `ACTION_TOOL_MAP`'te bir karşılığı
-olduğunu doğrulayan bir test yaz. (Hatırlatma: izin verilmeyen aksiyonun runner'a hiç ulaşmadığı
-kod yorumunda yazıyor.)
+**Nereden başla.** `assistant/mcp_gateway/tests/test_config_consistency.py`,
+`assistant/mcp_gateway/action_runner.py::ACTION_TOOL_MAP`, `config/tenants/*/policy.yaml`,
+`config/tenants/_example/README.md`.
 
-**İpuçları.**
-- Testi **hem `netswift` hem `_example`** için çalıştır. Sonuç ne? Bir tenant testi kırıyorsa gerçek
-  bir uyumsuzluk bulmuş olabilirsin. Önce gerçekten bir hata mı, test mi yanlış, karar ver; sonra
-  iki yoldan birini seç ve gerekçelendir: eşlemeyi tamamlamak ya da yapılandırmadan aksiyonu
-  çıkarmak. (Eşlemeyi tamamlarsan mcp-core tarafında o tool'un bugün ne döndürdüğüne de bak:
-  `integrations/mcp_core/app/tools_write.py` dosya başlığı.)
-- Test fonksiyonunu `pytest.mark.parametrize` ile tenant listesi üzerinde çalıştır; tenant listesini
-  `config/tenants/` klasöründen dinamik oku.
+**Görev.**
+1. `_example/policy.yaml`'da `reschedule_installation`'ı geçici olarak tekrar `allowed: true` yap ve
+   testin kırıldığını, hata mesajının neyi söylediğini gör. Sonra geri al.
+2. Testi bir adım ileri taşı: `ACTION_TOOL_MAP`'in **değerlerinin** (tool adları) gerçekten mcp-core
+   veya diğer adapter'larda kayıtlı bir tool olduğunu doğrulayan ikinci bir test yaz (ipucu:
+   `integrations/` ayrı bir paket; `assistant/` onu import edemez, mimari testi okuyup tool
+   adlarını contracts §3 tablosundan ya da bir sabit listeden nasıl kontrol edebileceğini tasarla
+   ve gerekçesini yaz).
+3. Başka bir "okunmayan config" sınıfı daha ara: `config_models.py`'de tanımlı ama üretim kodunda
+   hiç okunmayan bir alan var mı? (Bu bulgu turunda `routing.yaml: diagnostic_checklist` ve
+   `MAX_TOOL_CALLS_PER_TURN` ayarı böyle çıktı ve kaldırıldı.) Bunu otomatik arayan küçük bir
+   betik veya test tasarla.
 
 **Kabul kriterleri.**
-- Test mevcut ve bulduğu her uyumsuzluk için ya düzeltme ya da gerekçeli bir istisna içeriyor.
+- İkinci test mevcut ve bulduğu her uyumsuzluk için düzeltme ya da gerekçeli istisna var.
 - `assistant/` suite'i yeşil.
 
 ---
@@ -273,30 +285,36 @@ olabilir ve hangi sırayla araştırırım?" Şunları içersin:
 
 ---
 
-## 10. Yield/commit deneyi ve sürüm sabitleme (Orta)
+## 10. Yield/commit düzeltmesini oku, doğrula ve yakalayan bir test yaz (Orta)
 
-**Amaç.** `ADR-10`'daki dersi kendi gözünle görmek.
+**Amaç.** `ADR-10`'daki dersi kendi gözünle görmek; düzeltmenin **neden** işe yaradığını açıklamak.
+
+**Durum.** Düzeltme uygulandı: `company/core-api/app/db.py::get_db` docstring'i dersi anlatır,
+router'lar `Depends(get_db, scope="function")` kullanır, `company/requirements.txt` `fastapi>=0.165,<1.0`
+aralığına bağlıdır.
 
 **Nereden başla.** `company/core-api/app/db.py::get_db`, `company/core-api/app/routers/`,
 `company/requirements.txt`, sözlükteki "Yield dependency" maddesi, `04-tasarim-kararlari.md` ADR-10.
 
 **Görev.**
-1. İzole bir klasörde (repo dışında) küçük bir FastAPI uygulaması yaz: `yield` kullanan bir
+1. Düzeltmeyi oku ve kendi cümlelerinle açıkla: `scope="function"` ile varsayılan kapsam arasındaki
+   fark nedir? Commit hangi anda yapılıyor, cevap hangi anda gidiyor?
+2. İzole bir klasörde (repo dışında) küçük bir FastAPI uygulaması yaz: `yield` kullanan bir
    dependency, içinde `print("exit code")`; bir endpoint `print("handler done")` basıp döner; bir
-   response middleware'i `print("response sent")` basar. `TestClient` ile çağır ve **sıralamayı**
-   gözle. Bunu iki FastAPI sürümünde (alt sınırda `0.115.x` ve güncel) tekrarla.
-2. Aynı uygulamada `Depends(get_db, scope="function")` dene (desteklenen sürümde). Sıra nasıl değişti?
-3. Bu bilgiyi `core-api`'ye uygula: `get_db`'nin kullanıldığı yerlerde commit'in cevaptan önce
-   olmasını sağla ve `company/requirements.txt` içindeki `fastapi`'yi bilinçli bir sürüme sabitle
-   (neden `>=` yerine `==`?).
+   response middleware'i `print("response sent")` basar. Bunu hem varsayılan kapsamla hem
+   `scope="function"` ile çalıştır ve **sıralamayı** gözle. Mümkünse eski bir FastAPI sürümünde de dene.
+3. Bu hatayı yakalayacak bir test tasarla: "201 aldım, hemen ardından okudum, kayıt yok" durumunu
+   `TestClient` ile nasıl üretirsin? (İpucu: dependency çıkış kodunu yapay olarak geciktir.)
+   `company/core-api/tests/` içine ekle.
+4. `>=0.165,<1.0` neden hem alt hem üst sınır içeriyor? `==` ile sabitlemenin artı ve eksileri neler?
 
 **İpuçları.**
 - Hangi sürümde ne olduğunu **sürüm notlarından** doğrula; bu rehberdeki sürüm numaraları sadece hatırlatmadır.
 - Değişikliğin `company/core-api/tests` ve `company/chaos/tests`'i bozmadığını kontrol et.
 
 **Kabul kriterleri.**
-- Deney çıktısı (iki sürüm için sıra) PR açıklamasında.
-- Core-api suite'i yeşil; sabitleme gerekçesi yazılı.
+- Deney çıktısı (sıra) PR açıklamasında; yeni test düzeltme geri alınınca kırılıyor.
+- Core-api suite'i yeşil; sürüm aralığı gerekçesi yazılı.
 - `tests/architecture` yeşil.
 
 ---

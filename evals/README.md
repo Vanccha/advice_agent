@@ -65,6 +65,9 @@ that case's `expect:` block is asserted. Injection strategy (see
 - `payment_down`: injected once (a global PSP outage flag, no customer to pick); all tone
   variants are sent as the same fixed seeded customer (`NS-100001`).
 
+The scenario suite reports 27 cases (20 tone-variant messages + the outage dedup check + 3
+no-action + 3 investigation cases); with the 10 advisory profiles a full run reports 37.
+
 The chaos CLI is reset once after all of a scenario id's variants have run (never between
 variants of the *same* id — each already has independent state), and once more at the end
 of the whole run.

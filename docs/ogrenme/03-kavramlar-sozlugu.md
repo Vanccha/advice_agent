@@ -300,10 +300,11 @@ Alfabetik (İngilizce terime göre). Her maddede üç şey var: **Kısa tanım**
   Yürütücü: `assistant/modes/dispatch.py`.
 - **Neden önemli:** Tüm konuşma akışını tek ekranda okuyabilirsin. Handler'lar mode'u kendileri
   değiştirmez; geçişi makine onaylar, geçersiz geçiş `IllegalTransition` ile **yüksek sesle** patlar.
-  `StateMachine` ayrıca `policy.yaml: limits` için `check_*` yöntemleri sunar (`LimitExceeded`).
-  Dürüst not: bu commit'te bu yöntemler yalnızca testlerde çağrılıyor; çalışma zamanındaki limitler
-  başka yerlerden uygulanıyor (tool bütçesi gateway'de, soru sınırı advisory akışında) ve
-  `max_actions_per_conversation` henüz hiçbir yerde uygulanmıyor (bkz. `07-bilinen-sinirlar.md`).
+  `StateMachine` yalnızca `max_actions_per_conversation` için `check_actions_per_conversation`
+  sunar (`LimitExceeded`); `ActionExecutor` bunu bir aksiyon çalışmadan (ve onay istemeden) önce
+  çağırır. Diğer iki limit sayacın yaşadığı yerde uygulanır: tool bütçesi gateway'de
+  (`ToolBudgetExceeded`), advisory soru sınırı `advisory/flow.py`'de. Aynı limit iki yerde
+  tekrarlanmadığı için ölü kod kalmadı (bkz. `07-bilinen-sinirlar.md`).
 
 ---
 
@@ -349,10 +350,10 @@ Alfabetik (İngilizce terime göre). Her maddede üç şey var: **Kısa tanım**
   fonksiyonunun bitişine bağlayarak commit'in cevaptan **önce** olmasını sağlar. (Kendi
   kurulu sürümünün davranışını sürüm notlarından ve küçük bir deneyle doğrula.)
 - **Projede nerede:** `company/core-api/app/db.py::get_db` (`yield session` -> `session.commit()`).
-  **Bu commit'te** `get_db` hâlâ düz `Depends(get_db)` ile kullanılıyor (`company/core-api/app/routers/`)
-  ve `company/requirements.txt` içinde `fastapi>=0.115` gibi **alt sınırlı** (pinlenmemiş) bir
-  sürüm var; yani `scope="function"` ve sürüm sabitleme henüz uygulanmış değil. Bunu kendi
-  alıştırman olarak düşün: `06-alistirmalar.md`.
+  Düzeltme **uygulandı**: router'lar `Depends(get_db, scope="function")` kullanıyor
+  (`company/core-api/app/routers/`) ve `company/requirements.txt` `fastapi>=0.165,<1.0` ile
+  sürümü bilinçli bir aralığa bağlıyor. `get_db` docstring'i dersi de anlatıyor. Bunu bir ders
+  olarak oku ve alıştırma 10'daki gibi kendin doğrula: `06-alistirmalar.md`.
 - **Neden önemli:** Cevap `200 OK` ile istemciye gitti ama commit henüz yapılmadıysa, istemci hemen
   ardından okuma yaptığında yazdığı veriyi **göremeyebilir**; ya da commit sonradan patlarsa istemci
   başarılı sanıp gitmiş olur. Bu, `ticket oluşturuldu` cevabı alıp ticket'ı bulamamak, ya da bir

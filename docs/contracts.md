@@ -200,6 +200,8 @@ diag.incidents(...same columns plus resolved_at...)
                       -- every status, so a resolved outage can still be explained afterwards
 diag.incident_affected(incident_no, customer_no, subscription_id, region_code)
 diag.notification_history(customer_no, subscription_id, channel, template_code, status, sent_at)
+diag.credit_history(customer_no, subscription_id, amount_gbp, reason, created_at)
+                      -- goodwill credits already granted (policy counts them per customer)
 diag.subscription_timeline(customer_no, subscription_id, event_type, from_status, to_status,
                            actor, reason, created_at)
 diag.region_health(region_code, total_subscriptions, active_subscriptions,
@@ -469,7 +471,7 @@ Rules:
 
 | Server (port) | Tools |
 |---|---|
-| `mcp-core` (9101) | `find_customer`, `get_subscription_status`, `get_subscription_timeline`, `get_provisioning_status`, `get_installation_status`, `get_modem_status`, `get_active_incidents_for_region`, `get_incident_detail`, `list_packages`, `get_notification_history`, `get_region_health`, `retry_provisioning_job`*, `enqueue_provisioning_job`*, `resend_activation_notification`*, `apply_outage_credit`*, `request_refund`* (always returns the 403 from core-api — proves the hard boundary), `reschedule_installation`* |
+| `mcp-core` (9101) | `find_customer`, `get_subscription_status`, `get_subscription_timeline`, `get_provisioning_status`, `get_installation_status`, `get_modem_status`, `get_active_incidents_for_region`, `get_incident_detail`, `list_packages`, `get_notification_history`, `get_credit_history`, `get_region_health`, `retry_provisioning_job`*, `enqueue_provisioning_job`*, `resend_activation_notification`*, `apply_outage_credit`*, `request_refund`* (always returns the 403 from core-api — proves the hard boundary), `reschedule_installation`* |
 | `mcp-payment` (9102) | `get_payment_status`, `list_customer_charges`, `detect_duplicate_charges`, `get_gateway_health` |
 | `mcp-ticketing` (9103) | `create_structured_ticket`, `get_ticket`, `list_customer_tickets`, `find_tickets_by_incident`, `add_ticket_comment` |
 | `mcp-monitoring` (9104) | `get_service_health`, `query_metric`, `list_active_alerts`, plus `POST /webhooks/alertmanager` → forwards normalized alert to `ASSISTANT_ALERT_WEBHOOK_URL` |
@@ -573,7 +575,7 @@ in the real conversation) and its own `max_tool_calls_per_turn` budget. The turn
 calls see the current masked user message as the last entry of `history`.
 States: `ROUTER → {ADVISORY, DIAGNOSTIC, STATUS_QUERY} → ACTION → CLOSING`,
 plus `AWAITING_APPROVAL` and `ESCALATED`. Transitions are table-driven; no free-form loop.
-`MAX_TURNS_PER_MODE`, `MAX_TOOL_CALLS_PER_TURN` (default 8) are config.
+The per-turn tool-call budget, the question cap and the per-conversation action cap are `policy.yaml: limits` (per tenant), not environment settings.
 
 - `ROUTER` → `DecisionService.classify_intent` → one of
   `advisory | problem_report | status_query | smalltalk | out_of_scope`.
@@ -716,6 +718,19 @@ reason_code, reason_en, escalate_to, limit_applied}`. The model never decides au
 `ActionExecutor.execute()` calls `check()` first and raises `PolicyDenied` otherwise —
 unknown action names default to **deny**. Every check is written to the audit log.
 
+Where the facts come from (a condition on a missing fact counts as not met, never as met):
+- `amount_gbp` is the amount in the action's own params (what is checked is what runs).
+- `credit.existing_count_30d` comes from the company via `get_credit_history`
+  (`diag.credit_history`); if that call fails the fact is omitted and the engine denies.
+- `usage.per_conversation` / `usage.per_customer_per_day` are computed by `ActionExecutor`
+  from `asst.action_records` (`executed = true`, UTC day); callers cannot supply them.
+- `limits.max_actions_per_conversation` is enforced by `ActionExecutor` (via
+  `StateMachine.check_actions_per_conversation`, raising `LimitExceeded`) before an allowed
+  action runs or asks for confirmation. `max_tool_calls_per_turn` is enforced by the gateway
+  (`ToolBudgetExceeded`) and `max_questions_advisory` by the advisory flow.
+- Every action a tenant's `policy.yaml` allows must have an entry in
+  `mcp_gateway.action_runner.ACTION_TOOL_MAP` (tested in `test_config_consistency.py`).
+
 ### 4.7 Masking (`assistant/privacy/masking.py`)
 `mask_text(text) -> (masked_text, mapping)` and `mask_payload(dict)`.
 Rules: UK National Insurance number (`AA999999A`, optionally spaced) → `*********`; UK mobile
@@ -809,7 +824,7 @@ Company: `COMPANY_DB_*`, `CORE_API_KEY_CRM`, `CORE_API_KEY_PARTNER`, `PSP_API_KE
 `RESEND_COOLDOWN_SECONDS`, `ALERT_INTEGRATION_WEBHOOK_URL`.
 Assistant: `ASSISTANT_DB_*`, `TENANT=netswift`, `LLM_PROVIDER=openai_agents`,
 `LLM_MODEL=gpt-4.1-mini`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`,
-`DECISION_SERVICE=llm_structured`, `DECISION_MIN_CONFIDENCE`, `MAX_TOOL_CALLS_PER_TURN`,
+`DECISION_SERVICE=llm_structured`, `DECISION_MIN_CONFIDENCE`,
 `MCP_*_URL`, `COMPANY_API_KEY` (= partner key), `DIAG_DATABASE_URL`,
 `LANGFUSE_ENABLED`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`,
 `EVAL_MODE=scripted|live`.

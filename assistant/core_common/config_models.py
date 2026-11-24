@@ -238,7 +238,6 @@ class RoutingFile(BaseModel):
     recommendation: RecommendationConfig
     issue_routing: dict[str, str]
     urgency_floor: dict[str, str]
-    diagnostic_checklist: list[str]
     # READ-ONLY tool names the investigation model may call (contracts §4.3). Never write
     # tools: validated against `policy.yaml: actions` in `TenantConfig`.
     investigation_tools: list[str] = Field(default_factory=list)
