@@ -67,3 +67,27 @@ diagnostic_checklist:
   - get_installation_status
   - get_active_incidents_for_region
   - get_service_health
+
+# ── Agentic investigation (modes/investigation.py) ──────────────────────────
+# When the fixed checklist finds nothing, a model may investigate with ONLY these
+# read-only tools. Write tools are never listed here (validated at load time).
+investigation_tools:
+  - find_customer
+  - get_subscription_status
+  - get_subscription_timeline
+  - get_provisioning_status
+  - get_installation_status
+  - get_modem_status
+  - get_active_incidents_for_region
+  - get_incident_detail
+  - get_notification_history
+  - get_region_health
+  - get_payment_status
+  - list_customer_charges
+  - detect_duplicate_charges
+  - get_gateway_health
+  - list_customer_tickets
+  - find_tickets_by_incident
+  - get_ticket
+  - get_service_health
+  - list_active_alerts

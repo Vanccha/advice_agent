@@ -7,12 +7,21 @@ with a clear `ProviderConfigError` when the key is missing or empty.
 """
 from __future__ import annotations
 
-from typing import Sequence, TypeVar
+from typing import Any, Sequence, TypeVar
 
 from pydantic import BaseModel
 
 from core_common.settings import get_settings
-from llm.base import ChatMessage, ProviderConfigError, ProviderError, ProviderHealth
+from llm.base import (
+    AgentMessage,
+    ChatMessage,
+    ProviderConfigError,
+    ProviderError,
+    ProviderHealth,
+    ToolCall,
+    ToolDefinition,
+    ToolStep,
+)
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
@@ -93,6 +102,30 @@ class AnthropicProvider:
             f"{self.name}: model did not call '{tool_name}'; cannot produce {schema.__name__}"
         )
 
+    def run_tool_step(
+        self,
+        *,
+        system: str,
+        messages: Sequence[AgentMessage],
+        tools: Sequence[ToolDefinition],
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> ToolStep:
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "system": system,
+            "messages": anthropic_agent_messages(messages),
+            "max_tokens": max_tokens or 1024,
+            "temperature": temperature,
+        }
+        if tools:
+            kwargs["tools"] = anthropic_tool_specs(tools)
+        try:
+            response = self._client.messages.create(**kwargs)
+        except Exception as exc:  # pragma: no cover - depends on live infra
+            raise ProviderError(f"{self.name}: tool step failed: {exc}") from exc
+        return parse_anthropic_tool_step(response)
+
     def health(self) -> ProviderHealth:
         try:
             self._client.models.list(limit=1)
@@ -105,3 +138,54 @@ def _anthropic_messages(messages: Sequence[ChatMessage]) -> list[dict[str, str]]
     # Anthropic's `system` is a separate top-level parameter; only user/assistant turns
     # go in `messages`.
     return [{"role": m.role, "content": m.content} for m in messages if m.role != "system"]
+
+
+def anthropic_tool_specs(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
+    return [
+        {"name": t.name, "description": t.description, "input_schema": t.input_schema}
+        for t in tools
+    ]
+
+
+def anthropic_agent_messages(messages: Sequence[AgentMessage]) -> list[dict[str, Any]]:
+    """Maps tool-loop messages to the Messages API: assistant tool calls become `tool_use`
+    blocks, and consecutive tool results are folded into ONE user message of `tool_result`
+    blocks (the API requires the results to follow the tool_use turn in a single user turn)."""
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        if m.role == "tool":
+            block = {"type": "tool_result", "tool_use_id": m.tool_call_id, "content": m.content}
+            last = out[-1] if out else None
+            if (
+                last is not None
+                and last["role"] == "user"
+                and isinstance(last["content"], list)
+                and last["content"]
+                and last["content"][0].get("type") == "tool_result"
+            ):
+                last["content"].append(block)
+            else:
+                out.append({"role": "user", "content": [block]})
+        elif m.role == "assistant" and m.tool_calls:
+            blocks: list[dict[str, Any]] = []
+            if m.content:
+                blocks.append({"type": "text", "text": m.content})
+            blocks.extend(
+                {"type": "tool_use", "id": c.id, "name": c.name, "input": c.arguments}
+                for c in m.tool_calls
+            )
+            out.append({"role": "assistant", "content": blocks})
+        else:
+            out.append({"role": m.role, "content": m.content})
+    return out
+
+
+def parse_anthropic_tool_step(response: Any) -> ToolStep:
+    calls: list[ToolCall] = []
+    texts: list[str] = []
+    for block in getattr(response, "content", None) or []:
+        if block.type == "tool_use":
+            calls.append(ToolCall(id=block.id, name=block.name, arguments=dict(block.input or {})))
+        elif block.type == "text":
+            texts.append(block.text)
+    return ToolStep(tool_calls=calls, text="".join(texts) or None)

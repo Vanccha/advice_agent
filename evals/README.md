@@ -28,7 +28,10 @@ Flags:
 - `--no-chaos` — skip chaos injection entirely. Every scenario case is then reported as
   `ERROR` ("chaos injection skipped") rather than silently passing — this flag exists for a
   quick advisory-only loop (`--no-chaos --only advisory`), not to make the scenario suite
-  green without chaos. The three `no_action_cases` never touch chaos and always run.
+  green without chaos. The three `no_action_cases` and the `investigation_cases` never touch chaos and always run.
+  Investigation cases script the model's read-only tool calls and final `submit_finding` in
+  the dataset (`scripted_investigation`); they assert it asks a question (`reply_must_ask_question`,
+  mode `DIAGNOSTIC`) or hands over with a ticket, never the old "cannot see an obvious problem" dead end.
 
 Exit code is `0` only when every case `PASS`ed; any `FAIL` or `ERROR` exits non-zero, so
 `make eval` is usable as a CI gate.

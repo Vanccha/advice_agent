@@ -10,9 +10,11 @@ decision:
 limits:
   # The diagnostic checklist alone is seven tool calls; a turn may then also look up a
   # duplicate charge, ask the payment gateway about itself, and open a ticket.
-  max_tool_calls_per_turn: 12
+  max_tool_calls_per_turn: 14
   max_questions_advisory: 5
   max_actions_per_conversation: 3
+  max_investigation_steps: 4     # model steps per turn in the agentic investigation
+  max_clarification_rounds: 2    # clarifying questions before handing over to a human
 
 actions:
   retry_provisioning_job:

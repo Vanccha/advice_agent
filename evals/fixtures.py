@@ -48,11 +48,14 @@ _NO_ACTION_INTENT: dict[str, str] = {
 }
 
 
-def _rule(text: str, intent: str, *, confidence: float = 0.97) -> ScriptedRule:
+def _rule(
+    text: str, intent: str, *, confidence: float = 0.97, tool_script: Any = ()
+) -> ScriptedRule:
     masked = mask_text(text).masked
     return ScriptedRule(
         match=masked,
         exact=True,
+        tool_script=tuple(tuple(step) for step in tool_script),
         structured={
             "_IntentResult": {"value": intent, "confidence": confidence, "rationale": "eval fixture"}
         },
@@ -65,6 +68,14 @@ def build_intent_rules(scenarios_doc: dict[str, Any], advisory_doc: dict[str, An
     for scenario in scenarios_doc.get("scenarios", []):
         for message in scenario.get("messages", []):
             rules.append(_rule(message["text"], "problem_report"))
+
+    # Investigation cases (no chaos): the first message is a problem report, and the same
+    # exact-match rule also carries the scripted tool sequence for `run_tool_step` — one
+    # rule per message, because the first matching rule wins.
+    for case in scenarios_doc.get("investigation_cases", []):
+        rules.append(
+            _rule(case["message"], "problem_report", tool_script=case.get("scripted_investigation") or ())
+        )
 
     for case in scenarios_doc.get("no_action_cases", []):
         intent = _NO_ACTION_INTENT.get(case["id"])

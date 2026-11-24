@@ -10,7 +10,7 @@ from typing import Sequence, TypeVar
 
 from pydantic import BaseModel
 
-from llm.base import ChatMessage, LLMProvider, ProviderHealth
+from llm.base import AgentMessage, ChatMessage, LLMProvider, ProviderHealth, ToolDefinition, ToolStep
 from privacy.masking import PIILeakError, assert_no_pii
 
 TModel = TypeVar("TModel", bound=BaseModel)
@@ -56,6 +56,39 @@ class MaskingProvider:
         self._guard(system, messages)
         return self._inner.structured(
             system=system, messages=messages, schema=schema, temperature=temperature
+        )
+
+    def run_tool_step(
+        self,
+        *,
+        system: str,
+        messages: Sequence[AgentMessage],
+        tools: Sequence[ToolDefinition],
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> ToolStep:
+        # Everything that goes out is checked: the system prompt, every message, the
+        # arguments of earlier tool calls and every tool RESULT (callers mask results with
+        # `mask_payload` first; this is the backstop that refuses to send if anything slipped).
+        assert_no_pii(
+            {
+                "system": system,
+                "messages": [
+                    {
+                        "content": m.content,
+                        "tool_calls": [c.arguments for c in m.tool_calls],
+                    }
+                    for m in messages
+                ],
+                "tools": [{"name": t.name, "description": t.description} for t in tools],
+            }
+        )
+        return self._inner.run_tool_step(
+            system=system,
+            messages=messages,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
 
     def health(self) -> ProviderHealth:

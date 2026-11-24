@@ -23,7 +23,7 @@ from core_common.types import AdvisoryProfile, Department, Diagnosis, IssueType,
 from decision.base import DecisionService
 from llm.base import LLMProvider
 from mcp_gateway.action_runner import make_action_runner
-from modes import action, advisory, diagnostic, status_query
+from modes import action, advisory, diagnostic, investigation, status_query
 from modes.context import TurnContext
 from mcp_gateway.types import ToolBudgetExceeded
 from modes.machine import LimitExceeded, StateMachine
@@ -435,6 +435,7 @@ class Orchestrator:
         self, ctx: TurnContext, state: dict[str, Any], mode: Mode, masked_message: str, customer_no: str | None
     ) -> tuple[Mode, _StepOutcome]:
         diagnosis_obj: Diagnosis | None = None
+        finding: investigation.InvestigationFinding | None = None
         hops = 0
 
         while True:
@@ -489,6 +490,22 @@ class Orchestrator:
                     )
                 diagnosis_obj = diagnostic.run_diagnosis(ctx, customer_no)
                 state["diagnosis"] = diagnosis_obj.model_dump(mode="json")
+                if diagnosis_obj.root_cause == diagnostic.ROOT_CAUSE_NO_ISSUE_FOUND:
+                    # The checklist found no known pattern: read what the customer actually
+                    # wrote (bounded, read-only, audited). It either asks one question and
+                    # keeps the conversation in DIAGNOSTIC, or hands a finding to ACTION.
+                    inv_turn = investigation.plan_turn(
+                        ctx, state, customer_no=customer_no, diagnosis=diagnosis_obj
+                    )
+                    if inv_turn.reply_en is not None:
+                        stay = self.machine.transition(Mode.DIAGNOSTIC, Mode.DIAGNOSTIC)
+                        return stay, _StepOutcome(
+                            reply_en=inv_turn.reply_en,
+                            diagnosis=diagnosis_obj.model_dump(mode="json"),
+                        )
+                    finding = inv_turn.finding
+                else:
+                    investigation.clear_rounds(state)
                 mode = self.machine.transition(Mode.DIAGNOSTIC, Mode.ACTION)
                 continue
 
@@ -511,6 +528,7 @@ class Orchestrator:
                     customer_no=customer_no or "unknown",
                     requester_name=name,
                     requester_contact=contact,
+                    finding=finding,
                 )
                 new_mode = self.machine.transition(Mode.ACTION, action_step.next_mode)
                 return new_mode, _StepOutcome(

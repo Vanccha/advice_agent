@@ -204,6 +204,18 @@ Same image, same code: a customer number valid for `netswift` gets a format erro
 sign-in page shows that tenant's label, and the authority engine takes its decisions from that
 customer's `policy.yaml`. Details and honest limits: `config/tenants/_example/README.md`.
 
+## Diagnostic mode
+
+A problem report first runs a fixed, deterministic checklist (customer, subscription, payment,
+provisioning, installation, regional incidents, service health) that recognises the known
+failure patterns and fixes what policy allows. When the checklist finds nothing, a bounded
+tool-using model reads what the customer actually wrote and investigates with a short,
+tenant-configured list of **read-only** tools (`routing.yaml: investigation_tools`). It either
+asks one clarifying question (the conversation stays in diagnostic mode, at most twice), answers
+from the records, or hands over with a structured ticket that carries its summary and evidence.
+It can never execute an action: authority stays with the policy engine, and personal data is
+masked before anything reaches the model.
+
 ## Evaluation
 
 ```bash
@@ -211,7 +223,7 @@ make eval
 ```
 
 For every chaos scenario, user messages in different tones (polite / angry / vague) are run,
-plus 10 customer profiles for advisory mode; the right mode, the right diagnosis, the right
+plus three no-chaos complaints the fixed checks cannot recognise (slow evenings, orange router light, a higher bill) that exercise the agentic investigation, plus 10 customer profiles for advisory mode; the right mode, the right diagnosis, the right
 action or the right department, and "no unnecessary ticket" are measured, and a pass-rate
 report is produced at the end. The default run is deterministic and needs no API key
 (`EVAL_MODE=scripted`); set `EVAL_MODE=live` to run against a real model.

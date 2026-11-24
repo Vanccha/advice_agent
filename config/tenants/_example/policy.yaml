@@ -13,6 +13,8 @@ limits:
   max_tool_calls_per_turn: 10
   max_questions_advisory: 3    # their customers dislike long questionnaires
   max_actions_per_conversation: 3
+  max_investigation_steps: 4     # model steps per turn in the agentic investigation
+  max_clarification_rounds: 2    # clarifying questions before handing over to a human
 
 actions:
   retry_provisioning_job:

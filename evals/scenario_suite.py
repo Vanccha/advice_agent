@@ -29,7 +29,7 @@ from typing import Any
 
 from evals import chaos_cli
 from evals.chaos_cli import ChaosCliError
-from evals.checks import BLAME_PHRASES_EN, CaseResult, contains_any, contains_none, error_case
+from evals.checks import BLAME_PHRASES_EN, CaseResult, asks_question, contains_any, contains_none, error_case
 from modes.tool_data import raw_payload
 
 # Scenarios where each tone variant must inject its own fresh customer/subscription.
@@ -178,6 +178,12 @@ def _apply_common_checks(
         case.add(
             "reply_must_not_mention_any_en", contains_none(turn.reply_en, phrases),
             expected=f"none of {phrases}", actual=turn.reply_en,
+        )
+
+    if expect.get("reply_must_ask_question"):
+        case.add(
+            "reply_must_ask_question", asks_question(turn.reply_en),
+            expected="a question for the customer", actual=turn.reply_en,
         )
 
     if expect.get("must_not_blame_customer"):
@@ -422,6 +428,12 @@ def run_scenario_suite(
             results.append(error_case("scenarios", case_id, None, f"no injection strategy wired for id {case_id!r}"))
 
     for case in scenarios_doc.get("no_action_cases", []):
+        if only_case and case["id"] != only_case:
+            continue
+        _run_no_action_case(harness, case, results, default_customer)
+
+    # Agentic-investigation cases: no chaos, same single-turn shape as the no-action cases.
+    for case in scenarios_doc.get("investigation_cases", []):
         if only_case and case["id"] != only_case:
             continue
         _run_no_action_case(harness, case, results, default_customer)

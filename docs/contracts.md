@@ -571,6 +571,38 @@ plus `AWAITING_APPROVAL` and `ESCALATED`. Transitions are table-driven; no free-
   provisioning status → installation status → regional incidents → service health.
   Produces a `Diagnosis` with `root_cause`, `scope ∈ {customer_specific, regional_incident,
   system_wide}`, `confidence`, `evidence`.
+  **Agentic investigation** (`assistant/modes/investigation.py`): only when the checklist ends in
+  `no_issue_found` (never for a known root cause, never for `customer_not_found`), a bounded
+  tool-using model reads the customer's actual message. It sees the masked conversation
+  (the current message last), the customer number and a masked summary of the checklist
+  evidence, and may call **only** the read-only tools in `routing.yaml: investigation_tools`
+  (∩ the gateway catalogue; any other tool name, e.g. a write tool, is refused and audited;
+  `customer_no` arguments are forced to the signed-in customer; tool results are masked with
+  `mask_payload` before the model sees them). It runs at most
+  `policy.yaml: limits.max_investigation_steps` model steps (default 4) plus one final
+  "conclude" step restricted to the local `submit_finding` tool, and respects the per-turn
+  tool budget (`ToolBudgetExceeded` ends the lookups, not the turn). It ends with an
+  `InvestigationFinding` — `outcome ∈ {needs_more_info, escalate, resolved_info}`,
+  `summary_en` (ticket text, no PII), `customer_reply_en`, `clarifying_question_en`,
+  `suggested_department`, `confidence`, `evidence` (ids/statuses only):
+  - `needs_more_info` → the reply carries the question and the conversation **stays in
+    `DIAGNOSTIC`**; the next message continues the investigation with the history. State key
+    `investigation_rounds` counts the questions; after `limits.max_clarification_rounds`
+    (default 2) the finding is converted to `escalate`.
+  - `escalate` → `ACTION` builds a structured ticket (`issue_type=other`, priority
+    `NORMAL` or the `urgency_floor`, department from the finding — an unknown one falls back to
+    `routing.yaml: issue_routing[other]`) whose body holds the investigation summary and
+    evidence; mode `ESCALATED`.
+  - `resolved_info` → informational answer, mode `CLOSING`.
+  - Confidence below `policy.yaml: decision.min_confidence` turns a `resolved_info` into an
+    escalation (a clarifying question is not a guess, so it is exempt).
+  - If the provider cannot take a tool step (scripted without a matching rule, provider
+    error, `PIILeakError`, no finding within the step limit) the assistant asks the customer
+    for more detail and stays in `DIAGNOSTIC` (counted as a clarification round; after the
+    cap a ticket is created) instead of closing silently.
+  The investigation never executes a write action: its outcome only shapes a reply or a
+  ticket; actions remain the policy engine's business (§4.6). Every model step is audited
+  (`decision_service` / `mode_decision`) and traced; tool calls are audited by the gateway.
 - `ACTION`: candidate action → **policy engine** → execute | ask approval | escalate (ticket).
 - `STATUS_QUERY`: reports on existing ticket(s)/subscription without opening anything new.
 
@@ -611,6 +643,8 @@ decision:
 limits:
   max_tool_calls_per_turn: 8
   max_questions_advisory: 5
+  max_investigation_steps: 4     # model steps in the agentic investigation (§4.3)
+  max_clarification_rounds: 2    # clarifying questions before handing over to a human
 actions:
   retry_provisioning_job:
     allowed: true
@@ -748,3 +782,31 @@ Assistant: `ASSISTANT_DB_*`, `TENANT=netswift`, `LLM_PROVIDER=openai_agents`,
 `MCP_*_URL`, `COMPANY_API_KEY` (= partner key), `DIAG_DATABASE_URL`,
 `LANGFUSE_ENABLED`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`,
 `EVAL_MODE=scripted|live`.
+
+### 8.1 Provider seam (`assistant/llm/base.py`)
+
+`LLMProvider` = `complete` (free text), `structured` (schema-validated, used by every
+`DecisionService` call), `health`, and `run_tool_step` — ONE step of a tool-using loop:
+
+```python
+def run_tool_step(*, system: str, messages: Sequence[AgentMessage],
+                  tools: Sequence[ToolDefinition], temperature=0.0,
+                  max_tokens=None) -> ToolStep   # ToolStep(tool_calls: [ToolCall], text: str | None)
+```
+
+`AgentMessage` is a user / assistant (text and/or `tool_calls`) / tool-result message. The
+caller executes tools and loops; a provider never runs a tool. Mappings: OpenAI uses
+`chat.completions.create(tools=[{"type": "function", ...}])` (not the Agents SDK `Runner`),
+Anthropic uses `tools=` with `tool_use` / `tool_result` blocks, and `scripted` plays
+`ScriptedRule.tool_script` (a list of steps, each a list of `{name, arguments}`; it raises
+`UnscriptedPromptError` when nothing matches, which the investigation turns into its
+fallback). `llm.guard.MaskingProvider.run_tool_step` runs the PII check over the system
+prompt, every message, earlier tool-call arguments and every tool result before the inner
+provider is called.
+
+### 8.2 Tenant routing: `investigation_tools`
+
+`config/tenants/<tenant>/routing.yaml: investigation_tools` is the explicit read-only
+allowlist of tool names the investigation model may call. The loader rejects duplicates,
+names that appear in `policy.yaml: actions`, and names with a write-style prefix
+(`create_`, `post_`, `add_`, `retry_`, `enqueue_`, `resend_`, `apply_`, `request_`, ...).
