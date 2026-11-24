@@ -48,6 +48,22 @@ class FakeGateway:
         self._calls_this_turn = 0
         self.calls_made: list[tuple[str, dict[str, Any]]] = []
 
+    def for_turn(self, conversation_id: str, *, actor: str | None = None) -> "FakeGateway":
+        """Per-turn view (mirrors `ToolGateway.for_turn`): shares the canned responses and
+        the `calls_made` record with this instance, but has its own conversation id and
+        call budget."""
+        view = FakeGateway(
+            audit_log=self._audit_log,
+            conversation_id=conversation_id,
+            tenant=self.tenant,
+            actor=actor or self.actor,
+            max_calls_per_turn=self.max_calls_per_turn,
+        )
+        view._responses = self._responses
+        view._adapter_map = self._adapter_map
+        view.calls_made = self.calls_made
+        return view
+
     def reset_turn_budget(self) -> None:
         self._calls_this_turn = 0
 

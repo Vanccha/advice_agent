@@ -58,7 +58,7 @@ def route_intent(ctx: TurnContext, masked_message: str) -> RouterResult:
     decision_ctx = DecisionContext(
         conversation_id=ctx.conversation_id,
         tenant=ctx.tenant,
-        history=ctx.history + [{"role": "user", "content": masked_message}],
+        history=ctx.history,  # already ends with the current masked user message
         masked_customer_facts={},
         tenant_config_slice={"known_intents": [i.value for i in Intent]},
     )

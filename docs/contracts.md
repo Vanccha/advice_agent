@@ -295,6 +295,10 @@ alert_events(id PK, alert_fingerprint text, alertname text, severity text, statu
 ```
 `audit_entries` is append-only: a BEFORE UPDATE/DELETE trigger raises an exception, and
 `entry_hash = sha256(prev_hash || canonical_json(entry_without_hash))`.
+Appends are serialised (`seq` is global and each row chains from its conversation's previous row):
+PostgreSQL takes a transaction-scoped advisory lock (`pg_advisory_xact_lock`) before reading the
+predecessor; other dialects use a process-level lock. `seq` has no DB-level unique constraint
+(no migration story for existing databases); uniqueness comes from the serialised append.
 
 ---
 
@@ -546,6 +550,12 @@ The audit endpoint may return a bare array or `{steps:[…]}`; each step is read
 `{step_type, summary, reason}`.
 
 ### 4.3 Modes (explicit state machine, `assistant/modes/machine.py`)
+
+Tool calls are scoped per turn: the startup `ToolGateway` is a shared root (adapter config +
+discovered catalog); the orchestrator calls `gateway.for_turn(conversation_id)` for every turn
+(message, approval, alert), giving each its own `conversation_id` (tool-call audit entries land
+in the real conversation) and its own `max_tool_calls_per_turn` budget. The turn's decision
+calls see the current masked user message as the last entry of `history`.
 States: `ROUTER → {ADVISORY, DIAGNOSTIC, STATUS_QUERY} → ACTION → CLOSING`,
 plus `AWAITING_APPROVAL` and `ESCALATED`. Transitions are table-driven; no free-form loop.
 `MAX_TURNS_PER_MODE`, `MAX_TOOL_CALLS_PER_TURN` (default 8) are config.

@@ -75,6 +75,21 @@ class ToolGateway:
         self._calls_this_turn = 0
         self._tool_index: dict[str, str] | None = None  # tool_name -> adapter key
         self._tool_specs: dict[str, list[ToolSpec]] = {}
+        self._catalog_owner: ToolGateway = self  # turn views delegate discovery to the root
+
+    def for_turn(self, conversation_id: str, *, actor: str | None = None) -> "ToolGateway":
+        """A per-turn view: same adapters, audit log and (shared) tool catalog, but its own
+        `conversation_id`, `actor` and call budget. Cheap; build one per turn/request."""
+        view = ToolGateway(
+            self._adapters,
+            self._audit_log,
+            conversation_id=conversation_id,
+            tenant=self.tenant,
+            actor=actor or self.actor,
+            max_calls_per_turn=self.max_calls_per_turn,
+        )
+        view._catalog_owner = self._catalog_owner
+        return view
 
     @classmethod
     def from_tenant_config(
@@ -126,6 +141,11 @@ class ToolGateway:
         ]
 
     async def _ensure_catalog(self) -> None:
+        owner = self._catalog_owner
+        if owner is not self:
+            await owner._ensure_catalog()
+            self._tool_index, self._tool_specs = owner._tool_index, owner._tool_specs
+            return
         if self._tool_index is not None:
             return
         await self.refresh_catalog()
@@ -133,6 +153,10 @@ class ToolGateway:
     async def refresh_catalog(self) -> None:
         """Re-run discovery against every configured adapter. Safe to call repeatedly
         (e.g. after an adapter that was down comes back up mid-conversation)."""
+        if self._catalog_owner is not self:
+            await self._catalog_owner.refresh_catalog()
+            await self._ensure_catalog()
+            return
         index: dict[str, str] = {}
         specs_by_adapter: dict[str, list[ToolSpec]] = {}
         adapter_items = list(self._adapters.items())
