@@ -228,6 +228,13 @@ action or the right department, and "no unnecessary ticket" are measured, and a 
 report is produced at the end. The default run is deterministic and needs no API key
 (`EVAL_MODE=scripted`); set `EVAL_MODE=live` to run against a real model.
 
+## Learning guide (Turkish)
+
+A Turkish learning guide for the team lives in `docs/ogrenme/` (start with
+`docs/ogrenme/README.md`): architecture tour, the journey of one message, a glossary, design
+decisions, testing and evals, exercises and known limits. The code, comments and product text
+stay English; the commenting and naming standard is in `docs/STYLE.md`.
+
 ## More
 
 - `CLAUDE.md` — architecture rules and working agreements
