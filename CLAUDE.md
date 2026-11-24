@@ -45,6 +45,8 @@ company/ ──REST + read-only SQL──> integrations/ (MCP servers) ──MCP
 - Everything is **English** — code, identifiers, comments, commit messages and logs, and also
   everything an end user or a department agent reads (UI strings, assistant replies, ticket
   bodies, policy `*_en` fields). User-facing text is British English; money is GBP.
+- The one deliberate exception is `docs/ogrenme/`: a learning guide written in Turkish for the
+  team. Code, comments and product text stay English; see `docs/STYLE.md` for the standard.
 
 ## Where things live
 
