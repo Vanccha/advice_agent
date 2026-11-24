@@ -1,17 +1,23 @@
-"""ACTION mode (contracts §4.3/§4.6): map a `Diagnosis` to a candidate action and run it
-**only** through `policy.executor.ActionExecutor` — never call a mutating tool directly.
+"""ACTION mode: turn a diagnosis (or investigation finding) into a policy-checked action or a ticket.
 
-- `PolicyDenied` -> build a structured ticket for `decision.escalate_to`, mode ESCALATED.
-- `ConfirmationRequired` -> persist a `pending_approvals` row, mode AWAITING_APPROVAL.
-- success -> inform the customer what was fixed, mode CLOSING.
+Where this sits: called by `modes.dispatch` after DIAGNOSTIC. Runs actions only through
+`policy.executor.ActionExecutor`, creates tickets through `tickets.builder`/the ticket
+service, and stores approval requests in `asst.pending_approvals`.
 
-Issue type, urgency and (when policy does not already fix it) department are real
-`DecisionService` calls now (contracts §4.5) — `_ROOT_CAUSE_ACTION` below is the
-**fallback** table for when the service is unsure, wrong, or unavailable, not the primary
-source of truth it used to be. See `_decide_issue_type`/`_decide_priority`/
-`_decide_department`.
+Key ideas:
+- The model never decides its own authority: every mutating call goes through the policy
+  engine; a denial becomes a ticket for a human, a confirmation requirement becomes an
+  approval card (contracts §4.6).
+- The root-cause -> action table is deterministic. Issue type, urgency and department are
+  `DecisionService` calls (contracts §4.5) whose tables here are only the fallback when
+  the service is unsure, wrong or unavailable.
+- Every outcome tells the customer what was found and what happens next, so a handover
+  never leaves them guessing.
+
+Read next: policy/executor.py, modes/incident_policy.py, modes/approvals.py.
 
 Import as: ``from modes.action import handle_action, ActionStepResult``.
+See: docs/contracts.md §4.3, §4.6.
 """
 from __future__ import annotations
 
@@ -23,7 +29,7 @@ from core_common.db import session_scope
 from core_common.types import Department, Diagnosis, IssueType, Mode, Priority, StepType, Triage
 from decision.base import DecisionContext, triage_via_individual_calls
 from decision.fallback import PRIORITY_ORDER, apply_confidence_floor
-from modes import diagnostic
+from modes import diagnostic, replies
 from modes.context import TurnContext
 from modes.incident_policy import ensure_incident_ticket
 from modes.investigation import FindingOutcome, InvestigationFinding, resolve_department
@@ -55,18 +61,6 @@ _ROOT_CAUSE_ACTION: dict[str, tuple[str, IssueType, Priority]] = {
         "repair_infrastructure", IssueType.PAYMENT_SYSTEM_DOWN, Priority.URGENT,
     ),
 }
-
-_SUCCESS_REPLY_EN = {
-    "retry_provisioning_job": (
-        "I found that your setup job had got stuck, and I have restarted it just now. I "
-        "expect it to finish within a few minutes."
-    ),
-    "enqueue_provisioning_job": (
-        "I can see your payment was received but the setup process never started; I have "
-        "now queued your setup job."
-    ),
-}
-
 
 @dataclass
 class ActionStepResult:
@@ -131,28 +125,6 @@ def _decision_context(ctx: TurnContext, diagnosis: Diagnosis) -> DecisionContext
     )
 
 
-# What the customer is actually told we found, before being told it was handed over.
-# "I am not authorised, I forwarded it" on its own leaves the customer none the wiser —
-# worse, during a payment outage it lets them assume their card is at fault.
-_FINDING_EN: dict[str, str] = {
-    "stuck_provisioning": "I found that your setup (provisioning) job has got stuck.",
-    "paid_not_active": (
-        "I found that your payment was received, but your subscription has not been activated."
-    ),
-    "double_charge": "I found that the same amount was taken from your account twice.",
-    "missed_installation": "I found that your installation appointment did not take place.",
-    "regional_outage": (
-        "I found an ongoing infrastructure fault in your area; the problem is not specific to you."
-    ),
-    "payment_system_down": (
-        "Our payment system is temporarily unavailable. The problem is not with your card or "
-        "your device; you can try your payment again once the system is back to normal."
-    ),
-    "no_issue_found": "I could not pin down the cause of the problem in your records.",
-    "customer_not_found": "I could not reach your records.",
-}
-
-
 # The department reads these fields, so they are plain-language and specific. A subject of
 # "double_charge — NS-100039" and a next step that merely repeats the refusal both make a
 # human re-do the work the assistant already did.
@@ -207,10 +179,6 @@ def _evidence_list(evidence: dict[str, Any], key: str) -> list[Any]:
                 if item not in merged:
                     merged.append(item)
     return merged
-
-
-def _finding_en(root_cause: str) -> str:
-    return _FINDING_EN.get(root_cause, "I have looked into your situation.")
 
 
 def _compute_triage(ctx: TurnContext, diagnosis: Diagnosis) -> Triage:
@@ -425,10 +393,8 @@ def _escalate_with_ticket(
         tenant=ctx.tenant,
     )
     dept_en = _department_en(ctx, department)
-    reply_en = (
-        f"{_finding_en(diagnosis.root_cause)} I am not authorised to complete this myself, "
-        f"so I have passed your request to the {dept_en} team. "
-        f"Your reference number is {ticket_ref.ticket_key}."
+    reply_en = replies.blocked_by_policy_handover(
+        diagnosis.root_cause, dept_en, ticket_ref.ticket_key
     )
     return ActionStepResult(
         reply_en=reply_en,
@@ -527,10 +493,7 @@ def _handle_investigation_finding(
     )
     dept_en = _department_en(ctx, department)
     return ActionStepResult(
-        reply_en=(
-            f"{reply} I have passed this to the {dept_en} team with everything I found, so you "
-            f"will not need to explain it again. Your reference number is {ticket_ref.ticket_key}."
-        ),
+        reply_en=replies.investigation_handover(reply, dept_en, ticket_ref.ticket_key),
         next_mode=Mode.ESCALATED,
         ticket_key=ticket_ref.ticket_key,
         actions=[
@@ -568,15 +531,12 @@ def handle_action(
                 requester_contact=requester_contact,
             )
         return ActionStepResult(
-            reply_en=(
-                "I have checked your account and subscription, and I cannot see an obvious "
-                "problem right now. If it carries on, please share a few more details."
-            ),
+            reply_en=replies.NO_OBVIOUS_PROBLEM,
             next_mode=Mode.CLOSING,
         )
     if root_cause == diagnostic.ROOT_CAUSE_CUSTOMER_NOT_FOUND:
         return ActionStepResult(
-            reply_en="I could not find your customer number; please check it and try again.",
+            reply_en=replies.CUSTOMER_NOT_FOUND,
             next_mode=Mode.CLOSING,
         )
 
@@ -598,13 +558,10 @@ def handle_action(
         except ConfirmationRequired as exc:
             approval_id = _persist_pending_approval(
                 ctx, action_name="apply_outage_credit", params=params, policy_context=policy_context,
-                prompt_en=exc.decision.reason_en or "This action needs your approval.",
+                prompt_en=exc.decision.reason_en or replies.DEFAULT_APPROVAL_PROMPT,
             )
-            reply_en = (
-                f"There is an open fault record for your area ({diagnosis.incident_no}), and I "
-                f"have added your request to ticket {incident_ticket.ticket_key}. I can apply a "
-                "goodwill credit of up to £5 to your account for the outage, but as this cannot "
-                "be undone I need your approval first. Do you approve?"
+            reply_en = replies.outage_credit_offer(
+                diagnosis.incident_no, incident_ticket.ticket_key
             )
             return ActionStepResult(
                 reply_en=reply_en,
@@ -623,29 +580,22 @@ def handle_action(
                 ],
             )
         except PolicyDenied as exc:
-            reply_en = (
-                f"There is an open fault record for your area ({diagnosis.incident_no}), and I "
-                f"have added your request to ticket {incident_ticket.ticket_key}. I cannot apply "
-                f"a credit for this outage: {exc.decision.reason_en}"
+            reply_en = replies.outage_credit_denied(
+                diagnosis.incident_no, incident_ticket.ticket_key, exc.decision.reason_en
             )
             return ActionStepResult(
                 reply_en=reply_en, next_mode=Mode.ESCALATED, ticket_key=incident_ticket.ticket_key,
             )
         else:
-            # allowed without confirmation (shouldn't happen per policy.yaml, but handle it)
-            reply_en = (
-                f"There is an open fault record for your area ({diagnosis.incident_no}), and I "
-                f"have added your request to ticket {incident_ticket.ticket_key}."
-            )
+            # policy.yaml requires confirmation for this action, so this branch is a safety
+            # net for a tenant that configures it differently.
+            reply_en = replies.outage_attached_only(diagnosis.incident_no, incident_ticket.ticket_key)
             return ActionStepResult(reply_en=reply_en, next_mode=Mode.CLOSING, ticket_key=incident_ticket.ticket_key)
 
     mapping = _ROOT_CAUSE_ACTION.get(root_cause)
     if mapping is None:
         return ActionStepResult(
-            reply_en=(
-                "I have looked into it, but there is no step I can take automatically; if you "
-                "like, I can pass you to an agent."
-            ),
+            reply_en=replies.NO_AUTOMATIC_STEP,
             next_mode=Mode.CLOSING,
         )
 
@@ -678,10 +628,10 @@ def handle_action(
     except ConfirmationRequired as exc:
         approval_id = _persist_pending_approval(
             ctx, action_name=action_name, params=params, policy_context=policy_context,
-            prompt_en=exc.decision.reason_en or "This action needs your approval.",
+            prompt_en=exc.decision.reason_en or replies.DEFAULT_APPROVAL_PROMPT,
         )
         return ActionStepResult(
-            reply_en=f"{exc.decision.reason_en} Do you approve?",
+            reply_en=replies.approval_question(exc.decision.reason_en),
             next_mode=Mode.AWAITING_APPROVAL,
             requires_approval=True,
             approval_id=approval_id,
@@ -696,11 +646,8 @@ def handle_action(
             ],
         )
     else:
-        reply_en = _SUCCESS_REPLY_EN.get(
-            action_name, f"I have successfully carried out {action_name}."
-        )
         return ActionStepResult(
-            reply_en=reply_en,
+            reply_en=replies.action_success(action_name),
             next_mode=Mode.CLOSING,
             actions=[
                 {

@@ -70,7 +70,10 @@ assistant/privacy/    UK GDPR masking
 assistant/audit/      hash-chained, append-only audit log
 assistant/decision/   DecisionService interface (llm_structured | typesafe_jev stub)
 assistant/llm/        LLMProvider interface (openai_agents | anthropic | scripted)
-assistant/modes/      explicit state machine: router / advisory / diagnostic / action
+assistant/modes/      explicit state machine: orchestrator (facade) | dispatch (mode routing) |
+                      state (typed ConversationState) | conversation_store | approvals | events |
+                      replies (customer-facing text catalogue) | router / advisory / diagnostic /
+                      investigation / action / status_query handlers
 assistant/tickets/    structured ticket builder
 assistant/mcp_gateway/  MCP client gateway + action runner (named mcp_gateway, NOT mcp:
                       a package called `mcp` would shadow the installed MCP client SDK)

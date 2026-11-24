@@ -1,26 +1,22 @@
-"""ADVISORY mode (contracts §4.3/§4.4): ask at most
-``policy.yaml: limits.max_questions_advisory`` (5) fixed questions, fill an
-``AdvisoryProfile``, then call the **deterministic** ``recommend_packages`` — the LLM never
-invents, reorders or re-prices a package; only ``recommendation.engine`` decides that.
+"""ADVISORY mode: ask a few fixed questions, then recommend packages deterministically.
 
-Parsing a free-text answer into a typed ``AdvisoryProfile`` field is done with small
-deterministic heuristics (keyword/number extraction), not a model call: this keeps the
-whole mode runnable offline (no LLM dependency) and perfectly reproducible — the same
-answer always fills the same field the same way, which is what the "same profile twice
-gives the same packages" test asserts transitively.
+Where this sits: entered from the router; called by `modes.dispatch` once per message.
+Fills an `AdvisoryProfile`, then calls `recommendation.engine.recommend_packages` on the
+live catalogue (via the gateway) and asks the LLM provider only to narrate the result.
 
-The verbalisation step asks the configured provider to narrate the engine's own
-``PackageOffer`` objects in plain English (contracts §4.3: "the LLM only verbalizes the result").
-The model is handed nothing but those offers (name/code/speed/price/commitment/reasons) and
-its reply is validated before use (``_validate_model_reply``): it may only name packages the
-engine actually returned, in the engine's own order, and every price/speed figure it states
-must match the offer data exactly. A provider error or a reply that fails validation falls
-back to the fixed template (``_verbalize_offers``), which is built only from the
-`PackageOffer` fields and therefore trivially satisfies the same constraint. Either way, the
-*packages themselves* (`AdvisoryStepResult.offers`) always come straight from
-``recommend_packages`` — the LLM's wording can never change what was actually recommended.
+Key ideas:
+- The LLM never chooses, orders or prices a package: only the scoring engine does
+  (contracts §4.3/§4.4). The model's wording is validated against the engine's offers
+  (`_validate_model_reply`) and falls back to a fixed template on any mismatch or error.
+- Answers are parsed into typed fields by a model reader plus offline regex fallbacks,
+  and both go through one plausibility check, so the mode still works without an LLM.
+- Bounded: at most ``policy.yaml: limits.max_questions_advisory`` questions, then it
+  recommends with what it has.
+
+Read next: recommendation/engine.py, modes/state.py (advisory fields), modes/replies.py.
 
 Import as: ``from modes.advisory import handle_turn, AdvisoryStepResult``.
+See: docs/contracts.md §4.3, §4.4.
 """
 from __future__ import annotations
 
@@ -33,6 +29,7 @@ from pydantic import BaseModel
 from core_common.text import format_money
 from core_common.types import AdvisoryProfile, CommitmentPreference, Mode, PackageOffer, StepType, UsageType
 from llm.base import ChatMessage
+from modes import replies
 from modes.context import TurnContext
 from modes.tool_data import as_list
 from recommendation.engine import recommend_packages
@@ -119,12 +116,12 @@ def _parse_commitment(text: str, *, strict: bool = False) -> CommitmentPreferenc
     return None if strict else CommitmentPreference.ANY
 
 
-# ── understanding the answer ───────────────────────────────────────────────────────────
-# Positional regex parsing is not enough for real conversation: "50 quid a month" in
-# answer to "how many devices?" would set device_count=50, and "I can do a 24-month
-# contract" would set a £24 budget — observed against a live model. The model is allowed to *read*
-# the sentence into typed fields (it still never chooses a package); regex stays as the
-# offline fallback, and both paths go through the same plausibility check.
+# --- Understanding the answer -------------------------------------------------------
+# Positional regex parsing misreads real sentences: "50 quid a month" given as the answer
+# to "how many devices?" would set device_count=50, and "I can do a 24-month contract"
+# would set a £24 budget. So the model may *read* the sentence into typed fields (it still
+# never chooses a package); regex stays as the offline fallback, and both paths go through
+# the same plausibility check.
 
 _PLAUSIBLE = {
     "household_size": (1, 30),
@@ -213,9 +210,9 @@ def _apply_answer(
     if field_name in extracted:
         return AdvisoryProfile.model_validate(data), True
     # The model read the sentence and put its numbers somewhere else (a budget, a contract
-    # length). Re-reading those same digits as the asked-for count or budget is exactly the
-    # misreading the extraction exists to prevent; a plausibility range cannot catch it once
-    # "24" is both a believable contract length and a believable monthly budget in pounds.
+    # length). Re-reading those same digits as the asked-for count or budget would repeat
+    # the misreading the extraction exists to prevent, and a plausibility range cannot
+    # catch it: "24" is both a believable contract length and a believable monthly budget.
     if extracted and field_name in _PLAUSIBLE:
         return AdvisoryProfile.model_validate(data), True
 
@@ -258,7 +255,7 @@ def _apply_answer(
     return AdvisoryProfile.model_validate(data), understood
 
 
-# ── the opening message ────────────────────────────────────────────────────────────────
+# --- The opening message ------------------------------------------------------------
 # The message that routed the customer here may already answer several questions ("four of
 # us, we stream every evening, budget £50"). There is no "current question" yet, so the
 # positional parsers above must not run (a bare "50" would become the device count): only
@@ -353,14 +350,11 @@ def _format_offer(offer: PackageOffer) -> str:
 
 def _verbalize_offers(offers: list[PackageOffer]) -> str:
     if not offers:
-        return (
-            "I could not find a package that fits what you told me. Would you like to stretch "
-            "your budget or needs a little?"
-        )
-    intro = "Here are the packages that best fit your needs:"
+        return replies.ADVISORY_NO_MATCH
+    intro = replies.ADVISORY_INTRO
     body = "\n\n".join(_format_offer(offer) for offer in offers)
     best = offers[0]
-    outro = f"\n\nMy recommendation: {best.name}."
+    outro = replies.advisory_recommendation(best.name)
     return f"{intro}\n\n{body}{outro}"
 
 
@@ -556,10 +550,7 @@ def handle_turn(
         )
 
     if offers and not complete and questions_asked >= max_questions:
-        reply_en += (
-            "\n\n(I have reached the number of questions I can ask, so I recommended based on "
-            "what I know.)"
-        )
+        reply_en += replies.ADVISORY_QUESTION_LIMIT_NOTE
 
     return AdvisoryStepResult(
         reply_en=reply_en,

@@ -1,25 +1,24 @@
-"""Agentic investigation (contracts §4.3, DIAGNOSTIC mode, second stage).
+"""Agentic investigation: a bounded, read-only model loop for problems the checklist cannot name.
 
-The deterministic checklist in `modes.diagnostic` only recognises the known failure
-patterns. When it ends in ``no_issue_found`` the customer's *actual words* have still not
-been read by anything, so a bounded, tool-using model investigates:
+Where this sits: DIAGNOSTIC mode, second stage. `modes.dispatch` calls `plan_turn` when
+`modes.diagnostic` ends in ``no_issue_found``; a resulting finding is handed to
+`modes.action`. Calls the LLM provider and, through the gateway, read-only tools only.
 
-* it sees the masked conversation (the current message is last), the customer number and a
-  compact masked summary of the checklist evidence already gathered;
-* it may call ONLY read-only tools: the intersection of the gateway catalogue and
-  ``routing.yaml: investigation_tools``. A model asking for anything else (a write tool, an
-  invented name) is refused, and the refusal is audited;
-* ``customer_no`` arguments are forced to the signed-in customer, so the model cannot look
-  at somebody else's records;
-* it ends by calling the local ``submit_finding`` tool, whose arguments are validated into
-  an `InvestigationFinding`.
+Key ideas:
+- Least privilege: the model may call only the intersection of the gateway catalogue and
+  ``routing.yaml: investigation_tools``; anything else is refused and the refusal audited.
+- Server-side scoping: ``customer_no`` arguments are forced to the signed-in customer, so
+  the model cannot look at somebody else's records.
+- The model never executes anything: it ends by calling the local ``submit_finding`` tool,
+  validated into an `InvestigationFinding` that only shapes a reply or a ticket. Authority
+  stays with `policy.engine`; no write action is reachable from here by construction.
+- Bounded and fail-safe: step caps, a clarification-round cap, and every failure ends in
+  a human handover, never a guess.
 
-The model never executes anything: the outcome only shapes a reply or a ticket (see
-`modes.action`). Authority stays with `policy.engine` — no write action is reachable from
-here by construction. Every model step is audited and traced; tool calls are audited by the
-gateway itself.
+Read next: modes/diagnostic.py, modes/action.py, modes/state.py.
 
 Import as: ``from modes.investigation import plan_turn, InvestigationFinding``.
+See: docs/contracts.md §4.3.
 """
 from __future__ import annotations
 
@@ -36,7 +35,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from core_common.types import Department, Diagnosis, StepType
 from llm.base import AgentMessage, ToolCall, ToolDefinition
 from mcp_gateway.types import ToolBudgetExceeded
+from modes import replies
 from modes.context import TurnContext
+from modes.state import ConversationState
 from observability.tracing import record_decision
 from privacy.masking import mask_payload, mask_text
 
@@ -45,8 +46,6 @@ logger = logging.getLogger(__name__)
 SUBMIT_FINDING = "submit_finding"
 _MAX_TOOL_CALLS_PER_STEP = 4
 _MAX_RESULT_CHARS = 3000
-_STATE_ROUNDS_KEY = "investigation_rounds"
-_STATE_PRIOR_KEY = "investigation_prior"  # {"questions": [...], "summary": "..."}
 
 
 class FindingOutcome(StrEnum):
@@ -114,8 +113,7 @@ class InvestigationTurn:
     finding: InvestigationFinding | None = None
 
 
-# -- prompt ---------------------------------------------------------------------------------
-
+# --- prompt -------------------------------------------------------------------------
 _SYSTEM_PROMPT = """You are the diagnostic assistant of {company}, a broadband provider. \
 A customer has reported a problem and the standard automated checks found no known fault. \
 Work out what is going on from what they wrote and the read-only tools you have.
@@ -201,9 +199,7 @@ def _allow_unmasked(ctx: TurnContext) -> frozenset[str] | None:
     return frozenset(allowed) if allowed else None
 
 
-# -- tools ----------------------------------------------------------------------------------
-
-
+# --- tools --------------------------------------------------------------------------
 def _available_tools(ctx: TurnContext) -> dict[str, ToolDefinition]:
     """Gateway catalogue ∩ tenant read-only allowlist, as provider-neutral definitions."""
     allowlist = set(ctx.tenant_config.routing.investigation_tools)
@@ -321,8 +317,7 @@ def _execute_tool_call(
     return _tool_result_text(ctx, outcome)
 
 
-# -- finding handling -----------------------------------------------------------------------
-
+# --- finding handling ---------------------------------------------------------------
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
 
@@ -377,17 +372,14 @@ def finalize_finding(
             final = _handover(
                 finding,
                 summary_prefix="Investigation could not form a usable question.",
-                reply_en="I could not work out the cause from what I can see, so I am passing this to a colleague.",
+                reply_en=replies.INVESTIGATION_NO_QUESTION,
             )
             note = " (no clarifying question supplied; handed over)"
         elif not allow_clarification:
             final = _handover(
                 finding,
                 summary_prefix="The customer has already been asked for more detail and the problem is still unclear.",
-                reply_en=(
-                    "I still cannot pin down the cause from what I can see, so I am passing "
-                    "this to a colleague who can look into it properly."
-                ),
+                reply_en=replies.INVESTIGATION_ROUNDS_EXHAUSTED,
             )
             note = " (clarification rounds exhausted; handed over)"
     elif (
@@ -398,10 +390,7 @@ def finalize_finding(
         final = _handover(
             finding,
             summary_prefix=f"Low-confidence investigation ({finding.confidence:.2f}); not told to the customer as fact.",
-            reply_en=(
-                "I could not be certain about the cause from what I can see, so I am "
-                "passing this to a colleague to check."
-            ),
+            reply_en=replies.INVESTIGATION_LOW_CONFIDENCE,
         )
         note = " (low confidence; handed over)"
     elif finding.outcome is FindingOutcome.ESCALATE and finding.confidence < min_confidence:
@@ -436,9 +425,7 @@ def finalize_finding(
     return final
 
 
-# -- the loop -------------------------------------------------------------------------------
-
-
+# --- The loop -----------------------------------------------------------------------
 def run_investigation(
     ctx: TurnContext,
     *,
@@ -551,15 +538,7 @@ def run_investigation(
     return result
 
 
-# -- turn planning --------------------------------------------------------------------------
-
-_ASK_MORE_DETAIL_EN = (
-    "I have checked your account, subscription, payments and our network, and nothing there "
-    "explains this yet. Could you tell me a little more? For example, what exactly is "
-    "happening, when it started, and which device or light is affected?"
-)
-
-
+# --- Turn planning ------------------------------------------------------------------
 def _fallback_finding(ctx: TurnContext, reason: str | None) -> InvestigationFinding:
     last_user = next(
         (h["content"] for h in reversed(ctx.history) if h.get("role") == "user"), ""
@@ -571,26 +550,22 @@ def _fallback_finding(ctx: TurnContext, reason: str | None) -> InvestigationFind
             f"conclude ({reason or 'unavailable'}). Customer's latest message (masked): "
             f"{mask_text(last_user).masked[:400]}"
         ),
-        customer_reply_en=(
-            "I could not work out the cause from what I can see, so I am passing this to "
-            "a colleague who can look into it properly."
-        ),
+        customer_reply_en=replies.INVESTIGATION_FALLBACK,
         suggested_department=None,
         confidence=0.0,
     )
 
 
 def plan_turn(
-    ctx: TurnContext, state: dict[str, Any], *, customer_no: str, diagnosis: Diagnosis
+    ctx: TurnContext, state: ConversationState, *, customer_no: str, diagnosis: Diagnosis
 ) -> InvestigationTurn:
     """Run the investigation for a ``no_issue_found`` diagnosis and decide what happens
-    next. Owns the per-conversation clarification counter in `state`
-    (``investigation_rounds``)."""
+    next. Owns the per-conversation clarification counter in `state`."""
     max_rounds = ctx.tenant_config.policy.limits.max_clarification_rounds
-    rounds = int(state.get(_STATE_ROUNDS_KEY) or 0)
+    rounds = state.investigation_rounds
     allow_clarification = rounds < max_rounds
 
-    prior = dict(state.get(_STATE_PRIOR_KEY) or {})
+    prior = dict(state.investigation_prior)
     result = run_investigation(
         ctx,
         customer_no=customer_no,
@@ -602,22 +577,22 @@ def plan_turn(
 
     if finding is None:
         if allow_clarification:
-            state[_STATE_ROUNDS_KEY] = rounds + 1
-            return InvestigationTurn(reply_en=_ASK_MORE_DETAIL_EN)
+            state.investigation_rounds = rounds + 1
+            return InvestigationTurn(reply_en=replies.INVESTIGATION_ASK_MORE_DETAIL)
         finding = _fallback_finding(ctx, result.fallback_reason)
         finding = finalize_finding(ctx, finding, allow_clarification=False)
 
     if finding.outcome is FindingOutcome.NEEDS_MORE_INFO:
-        state[_STATE_ROUNDS_KEY] = rounds + 1
+        state.investigation_rounds = rounds + 1
         question = (finding.clarifying_question_en or "").strip()
         reply = compose_question_reply(finding.customer_reply_en, question)
-        state[_STATE_PRIOR_KEY] = {
+        state.investigation_prior = {
             "questions": [*prior.get("questions", []), mask_text(question).masked],
             "summary": mask_text(finding.summary_en).masked[:500],
         }
         return InvestigationTurn(reply_en=mask_text(reply).masked)
 
-    clear_rounds(state)
+    state.clear_investigation()
     return InvestigationTurn(finding=finding)
 
 
@@ -629,14 +604,3 @@ def compose_question_reply(context_en: str, question: str) -> str:
     if not question:
         return context or context_en.strip()
     return f"{context} {question}".strip()
-
-
-def has_open_investigation(state: dict[str, Any]) -> bool:
-    """True while a clarification is pending, i.e. the next message continues it."""
-    return int(state.get(_STATE_ROUNDS_KEY) or 0) > 0
-
-
-def clear_rounds(state: dict[str, Any]) -> None:
-    """Forget the clarification state (a known root cause was found, or the turn ended)."""
-    state.pop(_STATE_ROUNDS_KEY, None)
-    state.pop(_STATE_PRIOR_KEY, None)

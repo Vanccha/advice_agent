@@ -1,13 +1,21 @@
-"""DIAGNOSTIC mode (contracts §4.3/§5): the fixed checklist from
-``routing.yaml: diagnostic_checklist`` — customer -> subscription -> payment ->
-provisioning -> installation -> regional incidents -> service health — stopping as soon
-as a root cause is established.
+"""DIAGNOSTIC mode, first stage: the fixed checklist that names a known root cause.
 
-Only non-PII fields (ids, statuses, codes, counts) are ever put in ``Diagnosis.evidence``:
-this dict is logged to the audit trail and returned to the API, both of which must never
-carry raw PII (contracts §4.7/§4.8).
+Where this sits: called by `modes.dispatch` for a problem report. Walks the checklist from
+``routing.yaml: diagnostic_checklist`` (customer, subscription, payment, provisioning,
+installation, regional incidents, service health) through the gateway's read-only tools,
+stopping at the first established root cause. Its `Diagnosis` feeds `modes.action`; when
+nothing matches, `modes.investigation` takes over.
+
+Key ideas:
+- Deterministic first: cheap, explainable rules run before any model is involved.
+- Evidence hygiene: only non-PII fields (ids, statuses, codes, counts) go into
+  `Diagnosis.evidence`, because it is audited and returned by the API (contracts §4.7/§4.8).
+- First match wins, ordered from most to least specific, so one fault gets one name.
+
+Read next: modes/investigation.py, modes/action.py, modes/tool_data.py.
 
 Import as: ``from modes.diagnostic import run_diagnosis``.
+See: docs/contracts.md §4.3, §5.
 """
 from __future__ import annotations
 
@@ -29,9 +37,6 @@ ROOT_CAUSE_NO_ISSUE_FOUND = "no_issue_found"
 ROOT_CAUSE_CUSTOMER_NOT_FOUND = "customer_not_found"
 
 
-_ok_data = first_record
-_as_list = as_list
-
 
 def _step(ctx: TurnContext, summary: str, reason: str, evidence: dict[str, Any]) -> None:
     ctx.audit_log.append(
@@ -49,7 +54,7 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
 
     # 1. customer -------------------------------------------------------------------
     customer_outcome = ctx.call_tool_cached("find_customer", {"customer_no": customer_no})
-    customer = _ok_data(customer_outcome)
+    customer = first_record(customer_outcome)
     evidence["queried_sources"].append("mcp-core:find_customer")
     if customer is None:
         _step(ctx, "diagnostic: customer not found", "find_customer returned no record", evidence)
@@ -64,7 +69,7 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
 
     # 2. subscription -----------------------------------------------------------------
     sub_outcome = ctx.call_tool("get_subscription_status", {"customer_no": customer_no})
-    subscription = _ok_data(sub_outcome)
+    subscription = first_record(sub_outcome)
     evidence["queried_sources"].append("mcp-core:get_subscription_status")
     subscription_id = subscription.get("subscription_id") if subscription else None
     sub_status = subscription.get("status") if subscription else None
@@ -116,7 +121,7 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
     prov_outcome = ctx.call_tool(
         "get_provisioning_status", {"customer_no": customer_no, "subscription_id": subscription_id}
     )
-    provisioning = _ok_data(prov_outcome)
+    provisioning = first_record(prov_outcome)
     evidence["queried_sources"].append("mcp-core:get_provisioning_status")
     if provisioning:
         evidence["job_id"] = provisioning.get("job_id")
@@ -156,7 +161,7 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
         install_outcome = ctx.call_tool(
             "get_installation_status", {"customer_no": customer_no, "subscription_id": subscription_id}
         )
-        installation = _ok_data(install_outcome)
+        installation = first_record(install_outcome)
         evidence["queried_sources"].append("mcp-core:get_installation_status")
         if installation:
             evidence["appointment_id"] = installation.get("appointment_id")
@@ -174,7 +179,7 @@ def run_diagnosis(ctx: TurnContext, customer_no: str) -> Diagnosis:
 
     # 6. regional incidents -------------------------------------------------------------
     if region_code:
-        incidents = _as_list(ctx.call_tool("get_active_incidents_for_region", {"region_code": region_code}))
+        incidents = as_list(ctx.call_tool("get_active_incidents_for_region", {"region_code": region_code}))
         evidence["queried_sources"].append("mcp-core:get_active_incidents_for_region")
         if incidents:
             incident = incidents[0]
