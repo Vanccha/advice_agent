@@ -30,6 +30,11 @@ One root cause (`payment_system_down`) is **deliberately left unscripted** for
 only the confident path — see `evals/README.md` and the per-case `decision_paths_exercised`
 check in `evals/scenario_suite.py`.
 
+Since the combined `triage` call, `modes/action.py` makes ONE `_TriageResult` call instead
+of the three above; the root-cause rules therefore script `_TriageResult` (same values) next
+to the individual schemas, and `payment_system_down` stays unscripted for it too (the generic
+`'scope':` rule has no `_TriageResult`, so the whole call fails -> all three fall back).
+
 Import as: ``from evals.fixtures import build_intent_rules, build_decision_rules``.
 """
 from __future__ import annotations
@@ -100,13 +105,23 @@ def build_decision_rules(routing_config: RoutingFile) -> list[ScriptedRule]:
     rules: list[ScriptedRule] = []
     for root_cause in _SCRIPTED_ROOT_CAUSES:
         urgency = routing_config.urgency_floor.get(root_cause, "NORMAL")
+        department = routing_config.issue_routing.get(root_cause, "SUBSCRIPTION_OPS")
         pattern = rf"'root_cause':\s*'{re.escape(root_cause)}'"
+        fixture_field = {"confidence": 0.93, "rationale": "eval fixture"}
         rules.append(
             ScriptedRule(
                 match=pattern,
                 structured={
                     "_IssueTypeResult": {"value": root_cause, "confidence": 0.93, "rationale": "eval fixture"},
                     "_UrgencyResult": {"value": urgency, "confidence": 0.93, "rationale": "eval fixture"},
+                    # The combined call `modes/action.py` makes once per escalation: same
+                    # issue_type/priority values as above; the department value is the
+                    # routing.yaml fallback (unreachable here, policy `escalate_to` wins).
+                    "_TriageResult": {
+                        "issue_type": {"value": root_cause, **fixture_field},
+                        "priority": {"value": urgency, **fixture_field},
+                        "department": {"value": department, **fixture_field},
+                    },
                 },
             )
         )

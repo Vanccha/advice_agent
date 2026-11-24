@@ -258,6 +258,91 @@ def _apply_answer(
     return AdvisoryProfile.model_validate(data), understood
 
 
+# ── the opening message ────────────────────────────────────────────────────────────────
+# The message that routed the customer here may already answer several questions ("four of
+# us, we stream every evening, budget £50"). There is no "current question" yet, so the
+# positional parsers above must not run (a bare "50" would become the device count): only
+# the model's typed extraction and clearly labelled patterns are used.
+
+_NUMBER_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+    "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+}
+_NUM = r"(\d+|" + "|".join(_NUMBER_WORDS) + r")"
+_OPENING_BUDGET_RES = [
+    re.compile(r"£\s*(\d[\d,]*(?:\.\d+)?)"),
+    re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*(?:pounds?|quid|gbp)\b", re.IGNORECASE),
+    re.compile(r"\bbudget\b\D{0,15}?(\d[\d,]*(?:\.\d+)?)", re.IGNORECASE),
+]
+_OPENING_HOUSEHOLD_RES = [
+    re.compile(rf"\b{_NUM}\s+of\s+us\b", re.IGNORECASE),
+    re.compile(rf"\b{_NUM}\s+(?:people|persons|adults|members)\b", re.IGNORECASE),
+    re.compile(rf"\b(?:family|household)\s+of\s+{_NUM}\b", re.IGNORECASE),
+]
+_OPENING_DEVICES_RE = re.compile(rf"\b{_NUM}\s+(?:connected\s+)?(?:devices|gadgets)\b", re.IGNORECASE)
+_OPENING_COMMITMENT_RES: list[tuple[re.Pattern[str], CommitmentPreference]] = [
+    (
+        re.compile(
+            r"no.?contract|without (?:a |any )?contract|contract.?free|no (?:minimum term|commitment)"
+            r"|month.?to.?month",
+            re.IGNORECASE,
+        ),
+        CommitmentPreference.NONE,
+    ),
+    (re.compile(r"\b24[- ]months?\b|two[- ]years?\b", re.IGNORECASE), CommitmentPreference.TWENTY_FOUR),
+    (
+        re.compile(r"\b12[- ]months?\b|one[- ]year\b|\b(?:a|1)[- ]year\b", re.IGNORECASE),
+        CommitmentPreference.TWELVE,
+    ),
+]
+
+
+def _to_number(raw: str) -> float:
+    return float(_NUMBER_WORDS.get(raw.lower(), raw.replace(",", "")))
+
+
+def _extract_opening_with_regex(text: str) -> dict[str, Any]:
+    """Only clearly labelled statements; never a positional guess."""
+    values: dict[str, Any] = {}
+    for pattern in _OPENING_BUDGET_RES:
+        match = pattern.search(text)
+        if match and _plausible("budget_gbp", _to_number(match.group(1))):
+            values["budget_gbp"] = _to_number(match.group(1))
+            break
+    for pattern in _OPENING_HOUSEHOLD_RES:
+        match = pattern.search(text)
+        if match and _plausible("household_size", _to_number(match.group(1))):
+            values["household_size"] = int(_to_number(match.group(1)))
+            break
+    match = _OPENING_DEVICES_RE.search(text)
+    if match and _plausible("device_count", _to_number(match.group(1))):
+        values["device_count"] = int(_to_number(match.group(1)))
+    for pattern, preference in _OPENING_COMMITMENT_RES:
+        if pattern.search(text):
+            values["commitment_preference"] = preference.value
+            break
+    usage = [u.value for u in _parse_usage(text, strict=True) if u is not UsageType.BASIC]
+    if usage:
+        values["usage"] = usage
+    if re.search(r"stati[ck].?ip", text, re.IGNORECASE):
+        values["needs_static_ip"] = True
+    if re.search(r"\btv\b|television", text, re.IGNORECASE):
+        values["needs_tv"] = True
+    return values
+
+
+def _apply_opening_message(
+    profile: AdvisoryProfile, text: str, ctx: TurnContext
+) -> tuple[AdvisoryProfile, list[str]]:
+    """Fill every field the opening message states. Model extraction wins; labelled regex
+    fills what the model did not return (and is the whole story with no model)."""
+    values = _extract_opening_with_regex(text)
+    values.update(_extract_with_model(ctx, text))
+    data = profile.model_dump(mode="json")
+    data.update(values)
+    return AdvisoryProfile.model_validate(data), sorted(values)
+
+
 def _format_offer(offer: PackageOffer) -> str:
     price = format_money(offer.monthly_price_gbp)
     lines = [f"• {offer.name} — {offer.down_mbps}/{offer.up_mbps} Mbps, {price}/month"]
@@ -392,6 +477,19 @@ def handle_turn(
     question we haven't asked yet, so it is never parsed as an answer.
     """
     max_questions = ctx.tenant_config.policy.limits.max_questions_advisory
+
+    if is_first_turn and masked_message:
+        profile, filled = _apply_opening_message(profile, masked_message, ctx)
+        if filled:
+            ctx.audit_log.append(
+                ctx.conversation_id,
+                StepType.MODE_DECISION,
+                f"advisory: opening message already stated {', '.join(filled)}",
+                "extracted from the first message (model extraction + labelled patterns); "
+                "only the missing questions are asked",
+                {"fields": filled},
+                tenant=ctx.tenant,
+            )
 
     if not is_first_turn and awaiting_field and masked_message is not None:
         profile, _understood = _apply_answer(profile, awaiting_field, masked_message, ctx)

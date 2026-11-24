@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core_common.types import AdvisoryProfile, Decision, Department, Diagnosis, Intent, IssueType, Priority
+from core_common.types import AdvisoryProfile, Decision, Department, Diagnosis, Intent, IssueType, Priority, Triage
 
 
 class DecisionContext(BaseModel):
@@ -46,3 +46,19 @@ class DecisionService(Protocol):
     def assess_urgency(self, ctx: DecisionContext) -> Decision[Priority]: ...
 
     def classify_issue_type(self, ctx: DecisionContext) -> Decision[IssueType]: ...
+
+    def triage(self, ctx: DecisionContext) -> Triage:
+        """Issue type + priority + department in ONE round-trip (same context for all
+        three). Services that only implement the three methods above can delegate to
+        `triage_via_individual_calls`."""
+        ...
+
+
+def triage_via_individual_calls(service: Any, ctx: DecisionContext) -> Triage:
+    """Default `triage` for any service exposing just `classify_issue_type`,
+    `assess_urgency` and `choose_department` (three calls, as before the combined call)."""
+    return Triage(
+        issue_type=service.classify_issue_type(ctx),
+        priority=service.assess_urgency(ctx),
+        department=service.choose_department(ctx),
+    )

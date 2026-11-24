@@ -20,8 +20,8 @@ from typing import Any
 
 from core_common.models import PendingApproval
 from core_common.db import session_scope
-from core_common.types import Department, Diagnosis, IssueType, Mode, Priority, StepType
-from decision.base import DecisionContext
+from core_common.types import Department, Diagnosis, IssueType, Mode, Priority, StepType, Triage
+from decision.base import DecisionContext, triage_via_individual_calls
 from decision.fallback import PRIORITY_ORDER, apply_confidence_floor
 from modes import diagnostic
 from modes.context import TurnContext
@@ -211,8 +211,21 @@ def _finding_en(root_cause: str) -> str:
     return _FINDING_EN.get(root_cause, "I have looked into your situation.")
 
 
+def _compute_triage(ctx: TurnContext, diagnosis: Diagnosis) -> Triage:
+    """One combined decision (issue type + priority + department) per escalation. Services
+    without a native `triage` fall back to three individual calls."""
+    dctx = _decision_context(ctx, diagnosis)
+    native = getattr(ctx.decision_service, "triage", None)
+    if native is None:
+        return triage_via_individual_calls(ctx.decision_service, dctx)
+    return native(dctx)
+
+
 def _decide_issue_type(
-    ctx: TurnContext, diagnosis: Diagnosis, deterministic_issue_type: IssueType
+    ctx: TurnContext,
+    diagnosis: Diagnosis,
+    deterministic_issue_type: IssueType,
+    triage: Triage | None = None,
 ) -> IssueType:
     """contracts §4.5: `classify_issue_type` is a real `DecisionService` call now.
     `deterministic_issue_type` (the `_ROOT_CAUSE_ACTION` table below) is used instead
@@ -221,7 +234,11 @@ def _decide_issue_type(
     three of those into a confidence-0.0 `Decision`, so a single confidence check covers
     every case and a provider failure can never break the turn."""
     min_confidence = ctx.tenant_config.policy.decision.min_confidence
-    decision = ctx.decision_service.classify_issue_type(_decision_context(ctx, diagnosis))
+    decision = (
+        triage.issue_type
+        if triage is not None
+        else ctx.decision_service.classify_issue_type(_decision_context(ctx, diagnosis))
+    )
     record_decision(
         "classify_issue_type",
         value=decision.value.value,
@@ -259,6 +276,7 @@ def _decide_priority(
     diagnosis: Diagnosis,
     issue_type: IssueType,
     deterministic_priority: Priority,
+    triage: Triage | None = None,
 ) -> Priority:
     """contracts §4.5: `assess_urgency` is a real `DecisionService` call now.
     `deterministic_priority` (the `_ROOT_CAUSE_ACTION` table) is used whenever the service's
@@ -267,7 +285,11 @@ def _decide_priority(
     urgency for an issue type, never lower it (contracts §4.5/§4.6)."""
     min_confidence = ctx.tenant_config.policy.decision.min_confidence
     routing = ctx.tenant_config.routing
-    decision = ctx.decision_service.assess_urgency(_decision_context(ctx, diagnosis))
+    decision = (
+        triage.priority
+        if triage is not None
+        else ctx.decision_service.assess_urgency(_decision_context(ctx, diagnosis))
+    )
     record_decision(
         "assess_urgency",
         value=decision.value.value,
@@ -306,7 +328,9 @@ def _decide_priority(
     return priority
 
 
-def _decide_department(ctx: TurnContext, diagnosis: Diagnosis, issue_type: IssueType) -> Department:
+def _decide_department(
+    ctx: TurnContext, diagnosis: Diagnosis, issue_type: IssueType, triage: Triage | None = None
+) -> Department:
     """contracts §4.5: `choose_department` is a real `DecisionService` call now. Its result
     is used as the ticket's department whenever `policy.yaml` does not already fix one via
     `escalate_to` for the denied action (see the call site in `handle_action`) — policy's own
@@ -314,7 +338,11 @@ def _decide_department(ctx: TurnContext, diagnosis: Diagnosis, issue_type: Issue
     over an action is a policy decision, never the model's (contracts §4.6), while this call
     only decides *routing* for the (rarer) case policy leaves open."""
     min_confidence = ctx.tenant_config.policy.decision.min_confidence
-    decision = ctx.decision_service.choose_department(_decision_context(ctx, diagnosis))
+    decision = (
+        triage.department
+        if triage is not None
+        else ctx.decision_service.choose_department(_decision_context(ctx, diagnosis))
+    )
     record_decision(
         "choose_department",
         value=decision.value.value,
@@ -511,8 +539,9 @@ def handle_action(
         )
 
     action_name, deterministic_issue_type, deterministic_priority = mapping
-    issue_type = _decide_issue_type(ctx, diagnosis, deterministic_issue_type)
-    priority = _decide_priority(ctx, diagnosis, issue_type, deterministic_priority)
+    triage = _compute_triage(ctx, diagnosis)
+    issue_type = _decide_issue_type(ctx, diagnosis, deterministic_issue_type, triage)
+    priority = _decide_priority(ctx, diagnosis, issue_type, deterministic_priority, triage)
     policy_context = _build_policy_context(ctx, diagnosis)
     params = _build_params(root_cause, diagnosis, customer_no)
 
@@ -522,7 +551,7 @@ def handle_action(
         # policy's own `escalate_to` is authoritative when set (contracts §4.6: the model
         # never decides its own authority) — `choose_department` only fills the gap for an
         # action policy.yaml leaves without one, with its own confidence floor/fallback.
-        department = exc.decision.escalate_to or _decide_department(ctx, diagnosis, issue_type)
+        department = exc.decision.escalate_to or _decide_department(ctx, diagnosis, issue_type, triage)
         return _escalate_with_ticket(
             ctx,
             department=department,

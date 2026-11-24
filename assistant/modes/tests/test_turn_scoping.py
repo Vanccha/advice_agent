@@ -68,6 +68,10 @@ class _RecordingDecisionService(LLMStructuredDecisionService):
         self._record("choose_department", ctx)
         return super().choose_department(ctx)
 
+    def triage(self, ctx):
+        self._record("triage", ctx)
+        return super().triage(ctx)
+
     def classify_intent(self, ctx):
         self._record("classify_intent", ctx)
         return super().classify_intent(ctx)

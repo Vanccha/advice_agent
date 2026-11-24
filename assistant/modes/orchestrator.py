@@ -472,7 +472,7 @@ class Orchestrator:
                     profile=profile,
                     awaiting_field=awaiting_field,
                     questions_asked=questions_asked,
-                    masked_message=None if is_first else masked_message,
+                    masked_message=masked_message,
                     is_first_turn=is_first,
                 )
                 state["advisory_profile"] = step.profile.model_dump(mode="json")

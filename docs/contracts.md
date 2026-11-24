@@ -528,7 +528,7 @@ Normalized alert payload forwarded to the assistant:
 | GET | `/` | demo page: fake login by `customer_no` + embedded chat widget |
 | POST | `/api/login` | body: `{customer_no}` → session cookie (demo only, no password) |
 | POST | `/api/chat` | body: `{conversation_id?, message}` (a `customer_no` in the body is ignored; identity comes only from the login cookie) → `{conversation_id, mode, reply_en, actions[], ticket_key?, requires_approval?, approval_id?}`. Each `actions[]` entry is self-describing: `{label_en, action_name, executed, policy_allowed, awaiting_confirmation?, escalated_to?, ticket_key?}` — a customer-facing label for the widget plus what was actually attempted and whether policy permitted it. |
-| GET | `/api/chat/stream?conversation_id=&message=` | SSE stream of the same turn. Event framing: `event: token` (plain-text chunk, appended by the client), `event: final` (JSON, identical body to `POST /api/chat`), `event: error` (any payload; the client falls back to `POST /api/chat`). |
+| GET | `/api/chat/stream?conversation_id=&message=` | SSE delivery of the same turn. This is not token streaming: the whole reply is computed first, and only then delivered as word-sized events once the turn has completed. Event framing: `event: token` (a word-sized plain-text chunk, appended by the client), `event: final` (JSON, identical body to `POST /api/chat`), `event: error` (any payload; the client falls back to `POST /api/chat`). |
 | | | **Ownership:** a `conversation_id` that is already bound to a customer can only be continued by that customer (login cookie); anyone else gets `403 {"error": {"code": "FORBIDDEN", ...}}`. Anonymous conversations may be continued and bind to the first logged-in customer. Applies to `/api/chat`, `/api/chat/stream` and the audit endpoint. |
 | POST | `/api/approvals/{approval_id}` | `{decision: "granted"\|"denied"}`; the cookie customer must own the approval's conversation, otherwise `404 APPROVAL_NOT_FOUND` (404 rather than 403 so approval ids are not probeable) |
 | GET | `/api/conversations/{conversation_id}/audit` | audit trail for the demo; same ownership rule (403) |
@@ -575,6 +575,12 @@ plus `AWAITING_APPROVAL` and `ESCALATED`. Transitions are table-driven; no free-
 - `STATUS_QUERY`: reports on existing ticket(s)/subscription without opening anything new.
 
 ### 4.4 `recommend_packages` (deterministic, `assistant/recommendation/engine.py`)
+The opening message that routes a customer into ADVISORY is read too: every field it already
+states (model extraction `_ExtractedFields`, plus clearly labelled patterns such as `£50`,
+"four of us", "8 devices", "no contract" when the model is unavailable — never a positional
+guess, so a bare number is not a device count) is stored, and only the still-missing questions
+are asked. If that completes the profile the recommendation follows immediately.
+
 Pure function, no LLM. Input `AdvisoryProfile`:
 ```
 usage: list[student|family|home_office|gaming|streaming|basic]
@@ -594,7 +600,18 @@ class DecisionService(Protocol):
     def choose_department(self, ctx: DecisionContext) -> Decision[Department]: ...
     def assess_urgency(self, ctx: DecisionContext) -> Decision[Priority]: ...
     def classify_issue_type(self, ctx: DecisionContext) -> Decision[IssueType]: ...
+    def triage(self, ctx: DecisionContext) -> Triage: ...   # issue_type + priority + department
 ```
+`Triage = {issue_type: Decision[IssueType], priority: Decision[Priority], department:
+Decision[Department]}` (`core_common.types`). ACTION mode calls `triage` **once** per
+escalation (one LLM round-trip instead of three) and feeds the existing per-field logic from
+it: deterministic root-cause fallbacks, the confidence floor, `routing.yaml` fallbacks and
+`urgency_floor`, and one audit entry plus one `record_decision` trace per field, exactly as
+with three separate calls. `llm_structured.triage` makes one structured call (schema
+`_TriageResult`: value + confidence + rationale per field) and validates each field on its own:
+an out-of-enum field becomes a confidence-0 `Decision` without affecting the others, and a
+provider failure makes all three confidence 0. Services that only implement the three
+single methods use `decision.base.triage_via_individual_calls(service, ctx)`.
 `Decision[T] = {value: T, confidence: float, rationale: str, model: str, raw: dict}`.
 Implementations: `llm_structured` (default), `typesafe_jev` (stub raising
 `NotImplementedError` with a documented adapter surface), selected via

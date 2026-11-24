@@ -140,6 +140,17 @@ class Decision(BaseModel, Generic[T]):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
+class Triage(BaseModel):
+    """Result of the combined `DecisionService.triage` call: the three escalation decisions
+    (issue type, priority, department) made from one shared context in one round-trip."""
+
+    model_config = ConfigDict(frozen=True)
+
+    issue_type: Decision[IssueType]
+    priority: Decision[Priority]
+    department: Decision[Department]
+
+
 # --------------------------------------------------------------------------------------
 # Advisory / recommendation (contracts §4.4)
 # --------------------------------------------------------------------------------------

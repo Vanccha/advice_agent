@@ -13,7 +13,7 @@ from __future__ import annotations
 from core_common.types import Department, Diagnosis, DiagnosisScope, IssueType, Priority
 from decision.llm_structured import LLMStructuredDecisionService
 from llm.scripted import ScriptedProvider, ScriptedRule
-from modes.action import _decide_department, _decide_issue_type, _decide_priority
+from modes.action import _compute_triage, _decide_department, _decide_issue_type, _decide_priority
 from modes.context import TurnContext
 
 
@@ -46,6 +46,54 @@ def _diagnosis(root_cause: str) -> Diagnosis:
 
 def _decision_log(audit_log, conversation_id: str) -> list:
     return [e for e in audit_log.timeline(conversation_id) if e.step_type == "decision_service"]
+
+
+# -- combined triage ------------------------------------------------------------------------
+
+
+def test_triage_feeds_all_three_helpers_with_one_call_and_one_audit_entry_each(
+    tenant_config, audit_log
+) -> None:
+    calls: list[str] = []
+
+    class Counting(ScriptedProvider):
+        def structured(self, **kwargs):
+            calls.append(kwargs["schema"].__name__)
+            return super().structured(**kwargs)
+
+    def field(v: str) -> dict:
+        return {"value": v, "confidence": 0.9, "rationale": "sure"}
+
+    provider = Counting([
+        ScriptedRule(
+            match=r"double_charge",
+            structured={"_TriageResult": {
+                "issue_type": field("double_charge"), "priority": field("HIGH"), "department": field("BILLING"),
+            }},
+        ),
+    ])
+    ctx = _ctx(tenant_config, audit_log, provider)
+    diagnosis = _diagnosis("double_charge")
+
+    triage = _compute_triage(ctx, diagnosis)
+    issue_type = _decide_issue_type(ctx, diagnosis, IssueType.OTHER, triage)
+    priority = _decide_priority(ctx, diagnosis, issue_type, Priority.NORMAL, triage)
+    department = _decide_department(ctx, diagnosis, issue_type, triage)
+
+    assert calls == ["_TriageResult"]
+    assert (issue_type, priority, department) == (IssueType.DOUBLE_CHARGE, Priority.HIGH, Department.BILLING)
+    summaries = [e.summary.split(" ")[0] for e in _decision_log(audit_log, ctx.conversation_id)]
+    assert summaries == ["classify_issue_type", "assess_urgency", "choose_department"]
+
+
+def test_triage_provider_failure_uses_deterministic_fallbacks(tenant_config, audit_log) -> None:
+    ctx = _ctx(tenant_config, audit_log, ScriptedProvider([]))
+    diagnosis = _diagnosis("double_charge")
+    triage = _compute_triage(ctx, diagnosis)
+    issue_type = _decide_issue_type(ctx, diagnosis, IssueType.DOUBLE_CHARGE, triage)
+    assert issue_type is IssueType.DOUBLE_CHARGE
+    assert _decide_priority(ctx, diagnosis, issue_type, Priority.HIGH, triage) is Priority.HIGH
+    assert _decide_department(ctx, diagnosis, issue_type, triage) is Department.BILLING
 
 
 # -- classify_issue_type --------------------------------------------------------------------
