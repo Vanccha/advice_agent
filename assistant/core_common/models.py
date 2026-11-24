@@ -9,7 +9,7 @@ Key ideas:
 - ``AuditEntryRow.created_at`` is a string on purpose (it is part of the hashed payload).
 
 Read next: ``core_common/db.py``, ``audit/log.py``.
-See: docs/contracts.md Â§1.5.
+See: docs/contracts.md §1.5.
 """
 from __future__ import annotations
 

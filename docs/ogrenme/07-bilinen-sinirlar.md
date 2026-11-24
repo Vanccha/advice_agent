@@ -129,8 +129,8 @@ Kodu okurken şunları gördük (yeni bir geliştirici olarak bunları bilmek se
   günlük kredi), ve config ile kod uyumunu doğrulayan testler.
 
 ### B6. Ek küçük gözlemler
-- Birçok dosya başlığında bölüm işareti için `§` karakteri bozuk kodlanmış (`Â§`) görünüyor
-  (örn. `assistant/policy/engine.py` başlığındaki "See: docs/contracts.md Â§4.6"). Bu bir
+- Birçok dosya başlığında bölüm işareti için `§` karakteri bozuk kodlanmış (`§`) görünüyor
+  (örn. `assistant/policy/engine.py` başlığındaki "See: docs/contracts.md §4.6"). Bu bir
   karakter kodlama sorunu; içeriği etkilemez ama aramayı zorlaştırır.
 - Bir iş turu için tool bütçesi 14 (`policy.yaml`); `.env.example` içinde `MAX_TOOL_CALLS_PER_TURN=8`
   tanımlı. Gateway'in kurucu varsayılanı da 8; ancak çalışma zamanında `from_tenant_config` politika

@@ -8,7 +8,7 @@ Key ideas:
 - Unknown names fail loudly at start-up rather than at the first customer turn.
 
 Read next: ``decision/llm_structured.py``.
-See: docs/contracts.md Â§4.5.
+See: docs/contracts.md §4.5.
 """
 from __future__ import annotations
 

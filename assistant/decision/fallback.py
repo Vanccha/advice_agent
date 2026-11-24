@@ -10,7 +10,7 @@ Key ideas:
 - Fail safe: with no table to fall back on, the decision is returned but marked ``escalated``.
 
 Read next: ``decision/llm_structured.py``, ``core_common/config_models.py`` (``RoutingFile``).
-See: docs/contracts.md Â§4.5, Â§4.6.
+See: docs/contracts.md §4.5, §4.6.
 """
 from __future__ import annotations
 

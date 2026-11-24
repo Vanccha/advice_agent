@@ -12,7 +12,7 @@ Key ideas:
 - Pure and stateless: same config and context in, same decision out, so it is easy to test.
 
 Read next: ``policy/executor.py``, ``config/tenants/netswift/policy.yaml``.
-See: docs/contracts.md Â§4.6.
+See: docs/contracts.md §4.6.
 """
 from __future__ import annotations
 

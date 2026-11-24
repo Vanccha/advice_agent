@@ -12,7 +12,7 @@ Key ideas:
   mutable exception because it fills in turn by turn.
 
 Read next: ``decision/base.py``, ``policy/engine.py``.
-See: docs/contracts.md Â§4.
+See: docs/contracts.md §4.
 """
 from __future__ import annotations
 

@@ -11,7 +11,7 @@ Key ideas:
   can raise ``ProviderConfigError``.
 
 Read next: ``llm/guard.py``, ``llm/openai_agents.py``.
-See: docs/contracts.md Â§8.
+See: docs/contracts.md §8.
 """
 from __future__ import annotations
 

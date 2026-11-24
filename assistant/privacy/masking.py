@@ -15,7 +15,7 @@ Key ideas:
 - ``assert_no_pii`` is the fail-closed backstop that raises ``PIILeakError`` instead of leaking.
 
 Read next: ``privacy/detectors.py``, ``llm/guard.py``.
-See: docs/contracts.md Â§4.7.
+See: docs/contracts.md §4.7.
 """
 from __future__ import annotations
 

@@ -11,7 +11,7 @@ Key ideas:
 - Denials and confirmations are recorded as ``ActionRecord`` rows too, not only successes.
 
 Read next: ``policy/engine.py``, ``audit/log.py``, ``mcp_gateway/action_runner.py``.
-See: docs/contracts.md Â§4.6.
+See: docs/contracts.md §4.6.
 """
 from __future__ import annotations
 

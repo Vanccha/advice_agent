@@ -12,7 +12,7 @@ Key ideas:
 - ``tool_script`` plays a fixed sequence of tool calls, one step per assistant tool turn.
 
 Read next: ``llm/base.py``, ``llm/tests/test_scripted.py``.
-See: docs/contracts.md Â§8.
+See: docs/contracts.md §8.
 """
 from __future__ import annotations
 

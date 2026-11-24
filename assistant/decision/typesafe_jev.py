@@ -11,7 +11,7 @@ Key ideas:
   guess high.
 
 Read next: ``decision/base.py``.
-See: docs/contracts.md Â§4.5.
+See: docs/contracts.md §4.5.
 """
 from __future__ import annotations
 

@@ -10,7 +10,7 @@ Key ideas:
 - Names are never guessed from capitalisation; only an explicit list is matched.
 
 Read next: ``privacy/masking.py``.
-See: docs/contracts.md Â§4.7.
+See: docs/contracts.md §4.7.
 """
 from __future__ import annotations
 

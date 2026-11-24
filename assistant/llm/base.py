@@ -13,7 +13,7 @@ Key ideas:
   caller runs the tools (through policy and audit) and calls again.
 
 Read next: ``llm/factory.py``, ``llm/guard.py``, ``llm/scripted.py``.
-See: docs/contracts.md Â§8.
+See: docs/contracts.md §8.
 """
 from __future__ import annotations
 

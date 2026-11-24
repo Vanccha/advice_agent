@@ -11,7 +11,7 @@ Key ideas:
 - Context is already masked: this layer sits downstream of the PII boundary.
 
 Read next: ``decision/llm_structured.py``, ``decision/fallback.py``.
-See: docs/contracts.md Â§4.5.
+See: docs/contracts.md §4.5.
 """
 from __future__ import annotations
 

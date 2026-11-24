@@ -10,7 +10,7 @@ Key ideas:
 - Append-only audit table is enforced by a Postgres trigger, not just by application code.
 
 Read next: ``core_common/models.py``, ``audit/log.py``.
-See: docs/contracts.md Â§1.5.
+See: docs/contracts.md §1.5.
 """
 from __future__ import annotations
 

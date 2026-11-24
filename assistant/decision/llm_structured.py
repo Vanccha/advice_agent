@@ -14,7 +14,7 @@ Key ideas:
 - ``triage()`` asks for three decisions in one round-trip but validates each field on its own.
 
 Read next: ``decision/fallback.py``, ``llm/base.py``.
-See: docs/contracts.md Â§4.5.
+See: docs/contracts.md §4.5.
 """
 from __future__ import annotations
 

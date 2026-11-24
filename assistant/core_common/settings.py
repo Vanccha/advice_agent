@@ -9,7 +9,7 @@ Key ideas:
 - ``lru_cache`` makes settings a process-wide singleton; tests call ``get_settings.cache_clear()``.
 
 Read next: ``core_common/config.py``.
-See: docs/contracts.md Â§8.
+See: docs/contracts.md §8.
 """
 from __future__ import annotations
 

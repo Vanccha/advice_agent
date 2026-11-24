@@ -9,7 +9,7 @@ Key ideas:
 - Safe default: an unknown code falls back to the generic "conditions not met" sentence.
 
 Read next: ``policy/engine.py``.
-See: docs/contracts.md Â§4.6.
+See: docs/contracts.md §4.6.
 """
 from __future__ import annotations
 

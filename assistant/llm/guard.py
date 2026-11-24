@@ -10,7 +10,7 @@ Key ideas:
 - Fail closed: on detection it raises ``PIILeakError`` and never calls the inner provider.
 
 Read next: ``privacy/masking.py``.
-See: docs/contracts.md Â§4.7.
+See: docs/contracts.md §4.7.
 """
 from __future__ import annotations
 
