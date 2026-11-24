@@ -9,11 +9,14 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import func, text
+from sqlalchemy.orm import Session, sessionmaker
 
 from core_common.db import session_scope
 from core_common.models import AuditEntryRow
@@ -22,6 +25,13 @@ from privacy.masking import assert_no_pii
 
 # The first entry in any conversation's chain has no predecessor.
 GENESIS_HASH = "0" * 64
+
+# Appends must be serialised: each row chains from the previous row and `seq` is global, so
+# two concurrent appends would otherwise read the same predecessor and fork the chain.
+# PostgreSQL: a transaction-scoped advisory lock (one global key, because `seq` is global).
+# Other dialects (SQLite in unit tests): a process-level lock.
+_AUDIT_APPEND_LOCK_KEY = 7_315_001
+_PROCESS_APPEND_LOCK = threading.Lock()
 
 
 # --------------------------------------------------------------------------------------
@@ -166,6 +176,25 @@ class AuditLog:
     def __init__(self, session_factory: sessionmaker) -> None:
         self.session_factory = session_factory
 
+    @contextmanager
+    def _serialised_session(self) -> Iterator[Session]:
+        """A write session in which this caller is the only appender until commit.
+
+        PostgreSQL: the advisory lock is taken as the transaction's first statement and
+        released automatically on commit/rollback, so it is held across the
+        read-predecessor/insert/commit sequence. Other dialects: a process-level lock held
+        around the whole session (including its commit)."""
+        bind = self.session_factory.kw.get("bind")
+        is_postgres = bind is not None and bind.dialect.name == "postgresql"
+        if is_postgres:
+            with session_scope(self.session_factory) as session:
+                session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _AUDIT_APPEND_LOCK_KEY})
+                yield session
+        else:
+            with _PROCESS_APPEND_LOCK:
+                with session_scope(self.session_factory) as session:
+                    yield session
+
     def append(
         self,
         conversation_id: str,
@@ -189,7 +218,7 @@ class AuditLog:
         step_type_value = step_type.value if isinstance(step_type, StepType) else str(step_type)
         created_at = dt.datetime.now(dt.timezone.utc).isoformat()
 
-        with session_scope(self.session_factory) as session:
+        with self._serialised_session() as session:
             prev_row = (
                 session.query(AuditEntryRow)
                 .filter_by(conversation_id=conversation_id)

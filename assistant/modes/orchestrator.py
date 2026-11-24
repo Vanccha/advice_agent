@@ -95,20 +95,27 @@ class Orchestrator:
         self.settings = settings
         self.provider = provider
         self.decision_service = decision_service
+        # The shared "root" gateway: owns adapter config + tool catalog. Never used for a
+        # turn's calls directly; every turn gets its own view via `_scope()`.
         self.gateway = gateway
         self.audit_log = audit_log
         self.session_factory = session_factory
 
         self.policy_engine = PolicyEngine(tenant_config.policy)
-        self.action_executor = ActionExecutor(
-            self.policy_engine, audit_log, make_action_runner(gateway)
-        )
-        self.ticket_service = TicketService(gateway)
         self.machine = StateMachine(tenant_config.policy.limits)
 
     @property
     def tenant(self) -> str:
         return self.tenant_config.tenant_name
+
+    def _scope(self, conversation_id: str) -> tuple[Any, ActionExecutor, TicketService]:
+        """Per-turn collaborators: a gateway view with this conversation's id and its own
+        call budget, plus the executor/ticket service wired to that same view."""
+        for_turn = getattr(self.gateway, "for_turn", None)
+        gateway = for_turn(conversation_id) if for_turn is not None else self.gateway
+        gateway.reset_turn_budget()
+        executor = ActionExecutor(self.policy_engine, self.audit_log, make_action_runner(gateway))
+        return gateway, executor, TicketService(gateway)
 
     # -- public API ---------------------------------------------------------------------
 
@@ -116,7 +123,6 @@ class Orchestrator:
         self, *, conversation_id: str | None, customer_no: str | None, message: str
     ) -> TurnResult:
         conv_id = conversation_id or f"conv-{uuid.uuid4().hex[:12]}"
-        self.gateway.reset_turn_budget()
 
         state, existing_customer_no = self._load_state(conv_id)
         customer_no = customer_no or state.get("customer_no") or existing_customer_no
@@ -130,20 +136,11 @@ class Orchestrator:
 
         history: list[dict[str, str]] = list(state.get("history", []))
 
-        ctx = TurnContext(
-            conversation_id=conv_id,
-            tenant_config=self.tenant_config,
-            decision_service=self.decision_service,
-            gateway=self.gateway,
-            audit_log=self.audit_log,
-            policy_engine=self.policy_engine,
-            action_executor=self.action_executor,
-            ticket_service=self.ticket_service,
-            provider=self.provider,
-            customer_no=customer_no,
-            masked_customer_ref=customer_no,
-            history=history,
-        )
+        ctx = self._build_ctx(conv_id, customer_no)
+        # The turn's view of the conversation already includes the message being answered
+        # (decision calls must see it). `history` stays the persisted list and gets the
+        # user/assistant pair appended exactly once below.
+        ctx.history = history + [{"role": "user", "content": masked_message}]
 
         with trace_turn(
             masked_customer_ref=customer_no or "anonymous",
@@ -222,7 +219,6 @@ class Orchestrator:
             row.status = "granted" if granted else "denied"
             row.resolved_at = _utcnow()
 
-        self.gateway.reset_turn_budget()
         self.audit_log.append(
             conv_id,
             StepType.APPROVAL_GRANTED if granted else StepType.APPROVAL_DENIED,
@@ -235,15 +231,15 @@ class Orchestrator:
         state, customer_no = self._load_state(conv_id)
         current_mode = Mode(state.get("mode", Mode.AWAITING_APPROVAL.value))
         ticket_key: str | None = None
+        ctx = self._build_ctx(conv_id, customer_no)
 
         if not granted:
             reply_en = "Understood, I have not carried out that action."
             new_mode = Mode.CLOSING
         else:
             try:
-                self.action_executor.execute(action_name, action_params, policy_context, confirmed=True)
+                ctx.action_executor.execute(action_name, action_params, policy_context, confirmed=True)
             except PolicyDenied as exc:
-                ctx = self._build_ctx(conv_id, customer_no)
                 name, contact = self._lookup_requester(ctx, customer_no)
                 department = exc.decision.escalate_to or Department.SUBSCRIPTION_OPS
                 ticket = build_structured_ticket(
@@ -261,7 +257,7 @@ class Orchestrator:
                     evidence_record_ids={"action_name": action_name},
                     evidence_queried_sources=[],
                 )
-                ticket_ref = self.ticket_service.create(ticket)
+                ticket_ref = ctx.ticket_service.create(ticket)
                 record_ticket_link(ctx, ticket_key=ticket_ref.ticket_key, department=ticket_ref.department)
                 ticket_key = ticket_ref.ticket_key
                 reply_en = f"I could not complete the action, so I have passed your request to the relevant team: {ticket_key}."
@@ -351,7 +347,7 @@ class Orchestrator:
             )
 
         conv_id = f"alert-{fingerprint}"
-        self.gateway.reset_turn_budget()
+        ctx = self._build_ctx(conv_id)
         self.audit_log.append(
             conv_id,
             StepType.ALERT_RECEIVED,
@@ -390,14 +386,14 @@ class Orchestrator:
             evidence_queried_sources=["mcp-monitoring:webhooks/alertmanager"],
             source="monitoring",
         )
-        ticket_ref = self.ticket_service.create(ticket)
+        ticket_ref = ctx.ticket_service.create(ticket)
         record_ticket_link(
-            self._build_ctx(conv_id), ticket_key=ticket_ref.ticket_key, department=ticket_ref.department
+            ctx, ticket_key=ticket_ref.ticket_key, department=ticket_ref.department
         )
 
         channel = self.tenant_config.departments.get(department.value)
         if channel is not None:
-            self.gateway.call_sync(
+            ctx.gateway.call_sync(
                 "post_department_message",
                 {
                     "channel": channel.channel,
@@ -596,15 +592,16 @@ class Orchestrator:
             )
 
     def _build_ctx(self, conversation_id: str, customer_no: str | None = None) -> TurnContext:
+        gateway, executor, ticket_service = self._scope(conversation_id)
         return TurnContext(
             conversation_id=conversation_id,
             tenant_config=self.tenant_config,
             decision_service=self.decision_service,
-            gateway=self.gateway,
+            gateway=gateway,
             audit_log=self.audit_log,
             policy_engine=self.policy_engine,
-            action_executor=self.action_executor,
-            ticket_service=self.ticket_service,
+            action_executor=executor,
+            ticket_service=ticket_service,
             provider=self.provider,
             customer_no=customer_no,
             masked_customer_ref=customer_no,
