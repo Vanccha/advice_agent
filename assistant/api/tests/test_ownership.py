@@ -11,11 +11,11 @@ OUTAGE_MESSAGE = "My internet is not working, I think there is a problem in the 
 
 
 def _bound_customer(conversation_id: str):
-    import api.main as main_module
+    from api.state import state
     from core_common.db import session_scope
     from core_common.models import Conversation
 
-    with session_scope(main_module.state.session_factory) as session:
+    with session_scope(state.session_factory) as session:
         row = session.query(Conversation).filter(Conversation.conversation_id == conversation_id).one()
         return row.customer_no
 

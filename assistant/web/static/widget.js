@@ -1,23 +1,34 @@
 /**
- * NetSwift support assistant — embeddable chat widget.
+ * Embeddable chat widget: launcher, chat panel, approval card and audit panel.
  *
- * Plain vanilla JS, no build step, no CDN. Talks to exactly the endpoints documented in
- * docs/contracts.md §4.2, always via relative URLs (never a hardcoded host):
+ * Where this sits: browser code, loaded by `templates/site.html` next to `_widget.html`
+ * (the markup this script wires up). It calls the HTTP API served by `assistant/api/`
+ * and nothing else.
  *
+ * Key ideas:
+ * - Plain vanilla JS, no build step, no CDN; every URL is relative (never a hardcoded host).
+ * - The server owns identity: login sets an httponly cookie the script cannot read, and
+ *   the browser sends it automatically. The script never sends a customer number when chatting.
+ * - Progressive enhancement: prefer the SSE stream, fall back to a plain POST on any error.
+ * - Escape every server-supplied string before it goes into innerHTML (XSS defence).
+ *
+ * Endpoints used (docs/contracts.md section 4.2):
  *   POST /api/login                                  {customer_no}
  *   POST /api/chat                                    {conversation_id, message}
- *   GET  /api/chat/stream?conversation_id=&message=    SSE token stream (falls back to
- *                                                       POST /api/chat on any error)
+ *   GET  /api/chat/stream?conversation_id=&message=    SSE (falls back to POST /api/chat)
  *   POST /api/approvals/{approval_id}                  {decision: "granted"|"denied"}
  *   GET  /api/conversations/{conversation_id}/audit
  *
- * SSE contract this client expects from /api/chat/stream (documented here because the
- * HTTP contract only says "SSE token stream of the same turn"):
+ * SSE events this client expects from /api/chat/stream:
  *   event: token   data: <plain text chunk, appended to the running reply>
  *   event: final   data: <JSON, same shape as the POST /api/chat response body>
  *   event: error   data: <anything>                    -> client falls back to POST /api/chat
- * If the browser has no EventSource, or the stream errors before a "final" event arrives,
- * the client transparently retries the same turn with POST /api/chat.
+ * The server currently delivers a finished reply split into words (a demo simplification,
+ * see `api/routes/chat.py`); this client would work unchanged with real token streaming.
+ * If the browser has no EventSource, or the stream errors before "final", the same turn is
+ * retried once with POST /api/chat.
+ *
+ * Read next: `api/routes/chat.py` (the server side of the stream).
  */
 (function () {
   "use strict";

@@ -1,3 +1,8 @@
+{# Customer sign-in page (demo only: a customer number, no password; see api/routes/auth.py).
+   Where this sits: rendered by api/routes/pages.py at /login; submits to POST /api/login.
+   Key ideas: asset URLs carry ?v=<content hash> for cache busting; labels and patterns come
+   from the tenant config, nothing here is customer-specific.
+   Read next: _widget.html. #}
 <!DOCTYPE html>
 <html lang="en">
 <head>

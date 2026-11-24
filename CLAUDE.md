@@ -75,7 +75,10 @@ assistant/tickets/    structured ticket builder
 assistant/mcp_gateway/  MCP client gateway + action runner (named mcp_gateway, NOT mcp:
                       a package called `mcp` would shadow the installed MCP client SDK)
 assistant/observability/  Langfuse + OTel wrapper (no-op when disabled)
-assistant/api/, assistant/web/   HTTP API + embedded chat widget
+assistant/api/      HTTP API: main.py (app factory) | state.py (composition root, startup) |
+                      security.py (cookie identity, ownership, webhook HMAC) | errors.py |
+                      templating.py | routes/ (pages, auth, chat, approvals, audit, webhooks, ops)
+assistant/web/      chat widget: Jinja templates + static JS/CSS (+ preview.py dev harness)
 config/tenants/       per-customer configuration (netswift, _example)
 evals/                scenario + advisory evaluations (make eval)
 evals/datasets/       the user messages and customer profiles under test

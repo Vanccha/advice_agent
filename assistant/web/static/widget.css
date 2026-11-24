@@ -1,9 +1,19 @@
 /* ==========================================================================
-   NetSwift Support Assistant — embeddable chat widget
-   Deliberately its own visual system (indigo/violet) so it reads as a guest
-   product bolted onto NetSwift's own teal-branded site (site.css), not as part
-   of it. Every selector is scoped under .nh-widget / #chat-widget so the
-   widget cannot leak styles onto — or be broken by — the host page.
+   Chat widget styles: launcher, panel, messages, approval card, audit panel.
+
+   Where this sits: loaded by templates/site.html and login.html after site.css; styles the
+   markup in templates/_widget.html and is driven by static/widget.js (which toggles the
+   data-state / data-mode attributes these rules key on).
+
+   Key ideas:
+   - Scoped CSS: every selector sits under .nh-widget / #chat-widget (BEM-like "nh-" names),
+     so the widget cannot leak styles onto, or be broken by, whatever host page embeds it.
+   - Deliberately its own visual system (indigo/violet), so it reads as a guest product
+     bolted onto the host's teal site (site.css), not as part of it.
+   - State lives in attributes (data-state, data-mode), not ad-hoc classes, so JS and CSS
+     share one vocabulary.
+
+   Read next: static/widget.js.
    ========================================================================== */
 
 /* Nunito (SIL Open Font License 1.1), self-hosted so the widget needs no third-party

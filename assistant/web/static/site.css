@@ -1,7 +1,15 @@
 /* ==========================================================================
-   NetSwift Telecom — marketing site shell (fake, demo-only host page)
-   Teal/navy brand, intentionally distinct from the widget's indigo system
-   (widget.css) and from the internal ticketing tool's flat blue (company/).
+   Marketing site shell: the fake, demo-only host page the widget is embedded in.
+
+   Where this sits: loaded by templates/site.html and login.html before widget.css. It is
+   the stand-in for "the customer's own website"; the product proper is widget.css/js.
+
+   Key ideas:
+   - Design tokens as CSS custom properties (:root --nh-*): change a colour in one place.
+   - Teal/navy brand, intentionally distinct from the widget's indigo system so the two
+     "worlds" stay visibly separate.
+
+   Read next: static/widget.css.
    ========================================================================== */
 
 :root {

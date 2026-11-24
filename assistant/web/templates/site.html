@@ -1,3 +1,8 @@
+{# Demo host page: a fake company site with the chat widget included.
+   Where this sits: rendered by api/routes/pages.py at "/"; includes _widget.html and loads widget.js.
+   Key ideas: asset URLs carry ?v=<content hash> for cache busting; labels and patterns come
+   from the tenant config, nothing here is customer-specific.
+   Read next: _widget.html. #}
 <!DOCTYPE html>
 <html lang="en">
 <head>

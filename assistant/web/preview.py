@@ -1,20 +1,25 @@
-"""Standalone UI preview harness for `assistant/web/`.
+"""Standalone UI preview harness: click through the widget without the rest of the stack.
 
-THIS IS NOT PART OF THE PRODUCT'S RUNTIME. The real assistant HTTP API (`assistant/api/`,
-built separately — contracts §4.2) serves these same templates/static files for real, backed
-by the policy engine, decision service, MCP tools and the Postgres-backed conversation state.
+THIS IS NOT PART OF THE PRODUCT'S RUNTIME. Nothing in `assistant/api/` imports it.
 
-This file exists only so the templates/CSS/JS in this directory can be eyeballed and clicked
-through without the rest of the stack running: it renders the Jinja templates with mock data
-and answers the same four endpoints the widget calls with small canned/stubbed responses (no
-LLM, no database, no company services). Nothing here is imported by, or shared with, the real
-API — it is a developer tool, run directly:
+Where this sits: developer tool beside `web/`. It renders the same templates and static
+files as the real API (`api/routes/pages.py`) but answers the widget's endpoints with
+canned data: no LLM, no database, no company services.
+
+Key ideas:
+- A mock backend with the same URLs and JSON shapes as docs/contracts.md section 4.2 lets
+  front-end work proceed independently of the back end.
+- Because it duplicates the contract, it can drift; the real API and its tests in
+  `api/tests/` are the authority.
+
+Run (from inside the test-runner container so the package set matches):
 
     cd assistant/web && uvicorn preview:app --host 0.0.0.0 --port 8099
 
-Run it from inside the test-runner container (see the service's DEBUG notes) so the installed
-package set matches: `docker compose run --rm -p 8099:8099 -w /workspace/assistant/web
-test-runner env PYTHONPATH=/workspace/assistant uvicorn preview:app --host 0.0.0.0 --port 8099`.
+    docker compose run --rm -p 8099:8099 -w /workspace/assistant/web \
+        test-runner env PYTHONPATH=/workspace/assistant uvicorn preview:app --host 0.0.0.0 --port 8099
+
+Read next: `api/routes/chat.py` for the real behaviour.
 """
 from __future__ import annotations
 
@@ -139,6 +144,7 @@ def widget_only(request: Request):
 @app.post("/api/login")
 async def api_login(request: Request):
     body = await request.json()
+    # Preview only: a fixed customer list stands in for the real `find_customer` lookup.
     customer_no = str(body.get("customer_no", "")).strip().upper()
     if customer_no not in MOCK_CUSTOMERS:
         return JSONResponse({"error": {"code": "CUSTOMER_NOT_FOUND", "message": "Unknown customer number"}}, status_code=404)
