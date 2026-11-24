@@ -172,6 +172,7 @@ services:
       <<: *integration-env
       MCP_SERVER_NAME: netswift-monitoring
       ASSISTANT_ALERT_WEBHOOK_URL: ${ASSISTANT_ALERT_WEBHOOK_URL}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
     ports: ["9104:8000"]
     depends_on: [prometheus]
 

@@ -523,12 +523,13 @@ Normalized alert payload forwarded to the assistant:
 |---|---|---|
 | GET | `/` | demo page: fake login by `customer_no` + embedded chat widget |
 | POST | `/api/login` | body: `{customer_no}` → session cookie (demo only, no password) |
-| POST | `/api/chat` | body: `{conversation_id?, message, customer_no?}` → `{conversation_id, mode, reply_en, actions[], ticket_key?, requires_approval?, approval_id?}`. Each `actions[]` entry is self-describing: `{label_en, action_name, executed, policy_allowed, awaiting_confirmation?, escalated_to?, ticket_key?}` — a customer-facing label for the widget plus what was actually attempted and whether policy permitted it. |
+| POST | `/api/chat` | body: `{conversation_id?, message}` (a `customer_no` in the body is ignored; identity comes only from the login cookie) → `{conversation_id, mode, reply_en, actions[], ticket_key?, requires_approval?, approval_id?}`. Each `actions[]` entry is self-describing: `{label_en, action_name, executed, policy_allowed, awaiting_confirmation?, escalated_to?, ticket_key?}` — a customer-facing label for the widget plus what was actually attempted and whether policy permitted it. |
 | GET | `/api/chat/stream?conversation_id=&message=` | SSE stream of the same turn. Event framing: `event: token` (plain-text chunk, appended by the client), `event: final` (JSON, identical body to `POST /api/chat`), `event: error` (any payload; the client falls back to `POST /api/chat`). |
-| POST | `/api/approvals/{approval_id}` | `{decision: "granted"\|"denied"}` |
-| GET | `/api/conversations/{conversation_id}/audit` | audit trail for the demo |
+| | | **Ownership:** a `conversation_id` that is already bound to a customer can only be continued by that customer (login cookie); anyone else gets `403 {"error": {"code": "FORBIDDEN", ...}}`. Anonymous conversations may be continued and bind to the first logged-in customer. Applies to `/api/chat`, `/api/chat/stream` and the audit endpoint. |
+| POST | `/api/approvals/{approval_id}` | `{decision: "granted"\|"denied"}`; the cookie customer must own the approval's conversation, otherwise `404 APPROVAL_NOT_FOUND` (404 rather than 403 so approval ids are not probeable) |
+| GET | `/api/conversations/{conversation_id}/audit` | audit trail for the demo; same ownership rule (403) |
 | POST | `/webhooks/ticket` | ticketing `ticket.status_changed` (HMAC verified) → notifies user |
-| POST | `/webhooks/alert` | normalized alert from `mcp-monitoring` → proactive diagnosis |
+| POST | `/webhooks/alert` | normalized alert from `mcp-monitoring` → proactive diagnosis (HMAC verified exactly like `/webhooks/ticket`: `X-Webhook-Signature: sha256=<hmac(WEBHOOK_SECRET, body)>`, otherwise 401; `mcp-monitoring` signs the exact bytes it sends and, if `WEBHOOK_SECRET` is empty, warns and sends unsigned) |
 | GET | `/health` `/metrics` | |
 
 > Shared assistant-side vocabulary (enums, `Decision[T]`, `AdvisoryProfile`, `PolicyDecision`,

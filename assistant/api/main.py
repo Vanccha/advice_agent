@@ -18,6 +18,7 @@ import hmac
 import json
 import logging
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,8 @@ from starlette.concurrency import run_in_threadpool
 
 from audit.log import AuditLog
 from core_common.config import ConfigError, load_tenant_config
-from core_common.db import bootstrap_schema, get_engine, get_sessionmaker
+from core_common.db import bootstrap_schema, get_engine, get_sessionmaker, session_scope
+from core_common.models import Conversation, PendingApproval
 from core_common.settings import get_settings
 from decision.factory import get_decision_service
 from llm.base import ProviderConfigError
@@ -50,7 +52,13 @@ WEB_DIR = ASSISTANT_DIR / "web"
 COOKIE_NAME = "demo_customer_no"
 DEFAULT_CUSTOMER_PATTERN = r"^NS-\d{6}$"
 
-app = FastAPI(title="Support assistant API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    _startup()
+    yield
+
+
+app = FastAPI(title="Support assistant API", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
@@ -79,7 +87,6 @@ class AppState:
 state = AppState()
 
 
-@app.on_event("startup")
 def _startup() -> None:
     settings = get_settings()
     init_tracing(settings)
@@ -128,6 +135,37 @@ def _startup() -> None:
     )
 
 
+def _session_customer(request: Request) -> str | None:
+    """The only source of customer identity: the cookie `/api/login` set after its format
+    and existence checks. Request bodies and query strings are never consulted."""
+    return request.cookies.get(COOKIE_NAME) or None
+
+
+def _conversation_owner(conversation_id: str | None) -> tuple[bool, str | None]:
+    """(exists, bound customer_no) for a conversation, read straight from the assistant DB."""
+    if not conversation_id or state.session_factory is None:
+        return False, None
+    with session_scope(state.session_factory) as session:
+        row = session.query(Conversation).filter(Conversation.conversation_id == conversation_id).first()
+        if row is None:
+            return False, None
+        return True, row.customer_no
+
+
+def _forbidden() -> HTTPException:
+    return HTTPException(
+        status_code=403,
+        detail={"error": {"code": "FORBIDDEN", "message": "This conversation belongs to another customer"}},
+    )
+
+
+def _require_conversation_access(conversation_id: str | None, customer_no: str | None) -> None:
+    """403 unless the conversation is new, anonymous, or bound to `customer_no`."""
+    exists, owner = _conversation_owner(conversation_id)
+    if exists and owner is not None and owner != customer_no:
+        raise _forbidden()
+
+
 def _degraded_reply(conversation_id: str | None) -> dict[str, Any]:
     return {
         "conversation_id": conversation_id or "unavailable",
@@ -149,6 +187,8 @@ def _degraded_reply(conversation_id: str | None) -> dict[str, Any]:
 class ChatRequest(BaseModel):
     conversation_id: str | None = None
     message: str
+    # Accepted for backward compatibility only and NEVER trusted: the customer identity
+    # comes exclusively from the login cookie (see `_session_customer`).
     customer_no: str | None = None
 
 
@@ -269,9 +309,10 @@ def api_login(body: LoginRequest):
 
 @app.post("/api/chat")
 def api_chat(body: ChatRequest, request: Request):
-    customer_no = body.customer_no or request.cookies.get(COOKIE_NAME)
+    customer_no = _session_customer(request)
     if state.orchestrator is None:
         return JSONResponse(_degraded_reply(body.conversation_id))
+    _require_conversation_access(body.conversation_id, customer_no)
     result = state.orchestrator.handle_message(
         conversation_id=body.conversation_id, customer_no=customer_no, message=body.message
     )
@@ -280,7 +321,9 @@ def api_chat(body: ChatRequest, request: Request):
 
 @app.get("/api/chat/stream")
 async def api_chat_stream(request: Request, conversation_id: str | None = None, message: str = ""):
-    customer_no = request.cookies.get(COOKIE_NAME)
+    customer_no = _session_customer(request)
+    if state.orchestrator is not None:
+        await run_in_threadpool(_require_conversation_access, conversation_id, customer_no)
 
     async def event_generator():
         if state.orchestrator is None:
@@ -304,8 +347,31 @@ async def api_chat_stream(request: Request, conversation_id: str | None = None, 
     return EventSourceResponse(event_generator())
 
 
+def _require_approval_owner(approval_id: str, customer_no: str | None) -> None:
+    """The caller must be the customer the approval's conversation is bound to. Anything
+    else answers 404 (not 403) so an approval id's existence is not revealed. Unknown ids
+    fall through to the orchestrator, which answers 404 as well."""
+    try:
+        approval_pk = int(approval_id)
+    except (TypeError, ValueError):
+        return
+    if state.session_factory is None:
+        return
+    with session_scope(state.session_factory) as session:
+        approval = session.get(PendingApproval, approval_pk)
+        if approval is None:
+            return
+        conv_id = approval.conversation_id
+    _, owner = _conversation_owner(conv_id)
+    if owner is None or owner != customer_no:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "APPROVAL_NOT_FOUND", "message": "unknown approval"}},
+        )
+
+
 @app.post("/api/approvals/{approval_id}")
-def api_approval(approval_id: str, body: ApprovalRequest):
+def api_approval(approval_id: str, body: ApprovalRequest, request: Request):
     if body.decision not in ("granted", "denied"):
         raise HTTPException(
             status_code=400,
@@ -313,6 +379,7 @@ def api_approval(approval_id: str, body: ApprovalRequest):
         )
     if state.orchestrator is None:
         return JSONResponse(_degraded_reply(None))
+    _require_approval_owner(approval_id, _session_customer(request))
     try:
         result = state.orchestrator.resolve_approval(
             approval_id=approval_id, granted=(body.decision == "granted")
@@ -325,7 +392,8 @@ def api_approval(approval_id: str, body: ApprovalRequest):
 
 
 @app.get("/api/conversations/{conversation_id}/audit")
-def api_audit(conversation_id: str):
+def api_audit(conversation_id: str, request: Request):
+    _require_conversation_access(conversation_id, _session_customer(request))
     if state.audit_log is None:
         return JSONResponse([])
     entries = state.audit_log.timeline(conversation_id)
@@ -359,8 +427,9 @@ def _verify_webhook_signature(secret: str, body: bytes, signature: str | None) -
     return hmac.compare_digest(expected, signature)
 
 
-@app.post("/webhooks/ticket")
-async def webhook_ticket(request: Request):
+async def _verified_json(request: Request) -> Any:
+    """Read the raw body, verify `X-Webhook-Signature` (HMAC-SHA256 with WEBHOOK_SECRET;
+    401 when the secret is unset, the header is missing or wrong) and parse it as JSON."""
     settings = get_settings()
     raw_body = await request.body()
     signature = request.headers.get("X-Webhook-Signature")
@@ -369,10 +438,14 @@ async def webhook_ticket(request: Request):
             status_code=401, detail={"error": {"code": "INVALID_SIGNATURE", "message": "bad webhook signature"}}
         )
     try:
-        event = json.loads(raw_body or b"{}")
+        return json.loads(raw_body or b"{}")
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail={"error": {"code": "INVALID_BODY", "message": str(exc)}}) from exc
 
+
+@app.post("/webhooks/ticket")
+async def webhook_ticket(request: Request):
+    event = await _verified_json(request)
     if state.orchestrator is not None:
         await run_in_threadpool(state.orchestrator.handle_ticket_event, event)
     return {"status": "ok"}
@@ -380,7 +453,7 @@ async def webhook_ticket(request: Request):
 
 @app.post("/webhooks/alert")
 async def webhook_alert(request: Request):
-    alert = await request.json()
+    alert = await _verified_json(request)
     if state.orchestrator is not None:
         await run_in_threadpool(state.orchestrator.handle_alert, alert)
     return {"status": "ok"}

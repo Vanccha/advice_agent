@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from api.tests.conftest import login_as
+
 
 def test_approval_flow_for_outage_credit(client, fake_gateway) -> None:
+    login_as(client, "NS-100001")
     incident = {
         "incident_no": "INC-2026-030", "region_code": "LDN-CAM", "severity": "critical",
         "status": "open", "title": "Regional outage",
@@ -10,7 +13,7 @@ def test_approval_flow_for_outage_credit(client, fake_gateway) -> None:
 
     turn = client.post(
         "/api/chat",
-        json={"message": "My internet is not working, I think there is a problem in the area", "customer_no": "NS-100001"},
+        json={"message": "My internet is not working, I think there is a problem in the area"},
     ).json()
     assert turn["mode"] == "AWAITING_APPROVAL"
     assert turn["requires_approval"] is True
@@ -33,7 +36,8 @@ def test_approval_invalid_decision_returns_400(client) -> None:
 
 
 def test_audit_trail_endpoint_returns_steps(client) -> None:
-    turn = client.post("/api/chat", json={"message": "Hello", "customer_no": "NS-100001"}).json()
+    login_as(client, "NS-100001")
+    turn = client.post("/api/chat", json={"message": "Hello"}).json()
     response = client.get(f"/api/conversations/{turn['conversation_id']}/audit")
     assert response.status_code == 200
     steps = response.json()

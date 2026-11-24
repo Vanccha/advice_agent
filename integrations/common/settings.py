@@ -36,6 +36,10 @@ class AdapterSettings(BaseSettings):
     # it, but it belongs with the other deployment wiring rather than in os.environ.
     ASSISTANT_ALERT_WEBHOOK_URL: str = "http://assistant:8000/webhooks/alert"
 
+    # Shared HMAC secret for webhooks into the assistant (`X-Webhook-Signature`). Optional:
+    # when empty the monitoring adapter logs a warning and forwards alerts unsigned.
+    WEBHOOK_SECRET: str = ""
+
     # readonly_diag DSN (SELECT-only on schema `diag`).
     DIAG_DATABASE_URL: str
 

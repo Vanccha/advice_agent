@@ -76,3 +76,9 @@ def fake_gateway(client):
     import api.main as main_module
 
     return main_module.state.gateway
+
+
+def login_as(client, customer_no: str) -> None:
+    """Set the session cookie `/api/login` would set (identity comes only from the cookie)."""
+    client.cookies.clear()
+    client.cookies.set("demo_customer_no", customer_no)

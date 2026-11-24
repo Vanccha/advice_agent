@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from api.tests.conftest import login_as
+
 
 def test_chat_stuck_provisioning_fixed_without_ticket(client, fake_gateway) -> None:
+    login_as(client, "NS-100001")
     fake_gateway.set_response(
         "get_subscription_status",
         {
@@ -14,7 +17,7 @@ def test_chat_stuck_provisioning_fixed_without_ticket(client, fake_gateway) -> N
     )
     response = client.post(
         "/api/chat",
-        json={"message": "My internet still has not been switched on, there is a fault", "customer_no": "NS-100001"},
+        json={"message": "My internet still has not been switched on, there is a fault"},
     )
     assert response.status_code == 200
     body = response.json()
@@ -24,7 +27,8 @@ def test_chat_stuck_provisioning_fixed_without_ticket(client, fake_gateway) -> N
 
 
 def test_chat_persists_conversation_across_turns(client) -> None:
-    first = client.post("/api/chat", json={"message": "Hello", "customer_no": "NS-100001"})
+    login_as(client, "NS-100001")
+    first = client.post("/api/chat", json={"message": "Hello"})
     conv_id = first.json()["conversation_id"]
     assert first.json()["mode"] == "CLOSING"
 
@@ -36,6 +40,7 @@ def test_chat_persists_conversation_across_turns(client) -> None:
 
 
 def test_chat_stream_emits_token_and_final_events(client) -> None:
+    login_as(client, "NS-100001")
     with client.stream(
         "GET", "/api/chat/stream", params={"message": "Hello", "conversation_id": ""}
     ) as response:

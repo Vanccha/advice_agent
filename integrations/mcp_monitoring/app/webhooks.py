@@ -9,6 +9,9 @@ back from this endpoint so it does not spin retrying a webhook that "fails".
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
 from typing import Any
 
@@ -16,7 +19,7 @@ import httpx
 from fastapi import APIRouter
 from prometheus_client import Counter
 
-from .deps import alert_webhook_url, webhook_forward_client
+from .deps import alert_webhook_url, settings, webhook_forward_client
 from .models import AlertmanagerWebhookAlert, AlertmanagerWebhookPayload, NormalizedAlert
 
 logger = logging.getLogger(__name__)
@@ -51,8 +54,16 @@ async def forward_alert(normalized: NormalizedAlert) -> bool:
     whether the forward succeeded; never raises.
     """
     url = alert_webhook_url()
+    # Serialise once and sign exactly the bytes that go on the wire.
+    body = json.dumps(normalized.model_dump(), separators=(",", ":")).encode()
+    headers = {"Content-Type": "application/json"}
+    secret = settings().WEBHOOK_SECRET
+    if secret:
+        headers["X-Webhook-Signature"] = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    else:
+        logger.warning("WEBHOOK_SECRET is not set; forwarding alert %s unsigned", normalized.fingerprint)
     try:
-        response = await webhook_forward_client().post(url, json=normalized.model_dump())
+        response = await webhook_forward_client().post(url, content=body, headers=headers)
         success = 200 <= response.status_code < 300
         if not success:
             logger.warning(
