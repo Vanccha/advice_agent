@@ -1,3 +1,14 @@
+"""Audit trail for injected faults.
+
+Where this sits: called by scenarios whenever they change a subscription.
+
+Key ideas:
+- Every record a scenario creates or mutates leaves a
+  `subscription_events` row with `actor='chaos'`, so an injected fault can
+  always be told apart from organic data, and a reset can find it again.
+
+Read next: `scenarios/stuck_provisioning.py`.
+"""
 from __future__ import annotations
 
 import json
@@ -17,13 +28,11 @@ def record_chaos_event(
     reason: str,
     payload: dict[str, Any],
 ) -> None:
-    """Append a `core.subscription_events` row with actor='chaos'.
+    """Append a `core.subscription_events` row with actor `chaos`.
 
-    This is the audit trail required by the failure-injection spec: every record
-    chaos creates or mutates must be traceable back to a scenario run. `actor`
-    is already a first-class value in the `subscription_events` check constraint
-    (system, csr, api_client, job, chaos) -- this is not a new marker, it is the
-    documented way for this tool to leave a trace.
+    This is the audit trail: every record chaos creates or mutates must be
+    traceable to a scenario run. `chaos` is already an allowed `actor` value in
+    the table's check constraint, so no new marker is needed.
     """
     status = conn.execute(
         text("SELECT status FROM core.subscriptions WHERE id = :sid"),

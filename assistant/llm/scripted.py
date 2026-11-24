@@ -1,18 +1,18 @@
-"""Deterministic `LLMProvider` with no network access whatsoever (contracts §8:
-`EVAL_MODE=scripted`, and the default provider for `make eval` / tests).
+"""Deterministic ``LLMProvider`` with no network access (``EVAL_MODE=scripted``, the test default).
 
-Driven by a small fixture mapping: each `ScriptedRule` matches the *last user message*
-(regex search, or an exact match when `exact=True`) and supplies a canned reply
-(`complete`) and/or a canned structured payload per schema name (`structured`).
+Where this sits: ``llm`` package; selected by ``LLM_PROVIDER=scripted`` and used directly by
+unit tests and ``evals/``. Fixtures are ``ScriptedRule`` entries matched against the last
+user message (regex, or exact string when ``exact=True``).
 
-A prompt that matches nothing always raises `UnscriptedPromptError` naming the unmatched
-text — evaluation/test gaps must be loud, never silently papered over with a made-up
-default. `record=True` additionally collects every unmatched prompt into
-`self.unmatched_prompts` (still raising each time) so a test/eval harness that catches the
-exception per turn can report the *full* set of missing fixtures at the end of a run
-instead of only the first one.
+Key ideas:
+- Test double behind the same seam: real code paths run end to end without a model.
+- Loud gaps: a prompt that matches nothing raises ``UnscriptedPromptError``; it never
+  returns a made-up default. ``record=True`` also collects every unmatched prompt so a
+  harness can report all missing fixtures at the end of a run.
+- ``tool_script`` plays a fixed sequence of tool calls, one step per assistant tool turn.
 
-Import as: ``from llm.scripted import ScriptedProvider, ScriptedRule, UnscriptedPromptError``.
+Read next: ``llm/base.py``, ``llm/tests/test_scripted.py``.
+See: docs/contracts.md §8.
 """
 from __future__ import annotations
 
@@ -22,7 +22,14 @@ from typing import Any, Sequence, TypeVar
 
 from pydantic import BaseModel
 
-from llm.base import ChatMessage, ProviderHealth
+from llm.base import (
+    AgentMessage,
+    ChatMessage,
+    ProviderHealth,
+    ToolCall,
+    ToolDefinition,
+    ToolStep,
+)
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
@@ -46,6 +53,12 @@ class ScriptedRule:
     `match`: a regex pattern (searched, case-insensitive, over the last user message) by
     default, or an exact string when `exact=True`.
     `reply`: the canned text `complete()` returns when this rule matches.
+    `tool_script`: for `run_tool_step`, a list of steps; each step is a list of
+    ``{"name": ..., "arguments": {...}}`` tool calls the "model" requests in that step. The
+    step served is the number of assistant tool-call turns already in the conversation, so
+    the sequence plays out in order; the investigation's last step calls its
+    ``submit_finding`` tool. A rule without a script (or an exhausted one) raises
+    `UnscriptedPromptError`, which `modes.investigation` turns into its non-agentic fallback.
     `structured`: maps a Pydantic schema's class name to the canned payload `structured()`
     validates and returns when that schema is requested and this rule matches.
     """
@@ -54,6 +67,7 @@ class ScriptedRule:
     reply: str | None = None
     structured: dict[str, dict[str, Any]] = field(default_factory=dict)
     exact: bool = False
+    tool_script: tuple[tuple[dict[str, Any], ...], ...] = ()
 
 
 def _last_user_message(messages: Sequence[ChatMessage]) -> str:
@@ -121,6 +135,36 @@ class ScriptedProvider:
                 self.unmatched_prompts.append(prompt)
             raise UnscriptedPromptError(prompt, kind=f"structured:{schema_name}")
         return schema.model_validate(rule.structured[schema_name])
+
+    def run_tool_step(
+        self,
+        *,
+        system: str,
+        messages: Sequence[AgentMessage],
+        tools: Sequence[ToolDefinition],
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> ToolStep:
+        prompt = ""
+        for message in reversed(messages):
+            if message.role == "user":
+                prompt = message.content
+                break
+        rule = self._match(prompt)
+        step_index = sum(1 for m in messages if m.role == "assistant" and m.tool_calls)
+        if rule is None or step_index >= len(rule.tool_script):
+            if self._record:
+                self.unmatched_prompts.append(prompt)
+            raise UnscriptedPromptError(prompt, kind="tool_step")
+        calls = [
+            ToolCall(
+                id=f"scripted-{step_index}-{i}",
+                name=str(spec["name"]),
+                arguments=dict(spec.get("arguments") or {}),
+            )
+            for i, spec in enumerate(rule.tool_script[step_index])
+        ]
+        return ToolStep(tool_calls=calls)
 
     def health(self) -> ProviderHealth:
         return ProviderHealth(ok=True, provider=self.name, model=self.model)

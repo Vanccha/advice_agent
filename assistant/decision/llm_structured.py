@@ -1,13 +1,20 @@
-"""Default `DecisionService` (contracts §4.5: `DECISION_SERVICE=llm_structured`).
+"""Default ``DecisionService`` (``DECISION_SERVICE=llm_structured``): one structured LLM call per decision.
 
-One structured-output call per decision, each with a tight, English system
-prompt, returning the enum value plus a calibrated confidence and a rationale. The
-returned value is always validated against the target enum — an out-of-enum answer (or a
-failed provider call) becomes a confidence-0 `Decision`, never an exception that kills the
-turn; the caller (typically via `decision.fallback.apply_confidence_floor`) is responsible
-for escalating on low confidence.
+Where this sits: ``decision`` package. Built by ``decision.factory`` around an already
+PII-guarded ``LLMProvider``; called by ``modes``. It calls ``provider.structured()`` only.
 
-Import as: ``from decision.llm_structured import LLMStructuredDecisionService``.
+Key ideas:
+- Structured output: each call returns ``value``, ``confidence`` and ``rationale`` as a
+  Pydantic object, not prose to be parsed.
+- Enum validation: the returned ``value`` is checked against the target enum. An
+  out-of-enum answer or a failed provider call becomes a confidence-0 ``Decision`` with a safe
+  default, never an exception that kills the turn.
+- The service reports confidence; escalating on low confidence is the caller's job
+  (``decision.fallback``).
+- ``triage()`` asks for three decisions in one round-trip but validates each field on its own.
+
+Read next: ``decision/fallback.py``, ``llm/base.py``.
+See: docs/contracts.md §4.5.
 """
 from __future__ import annotations
 
@@ -15,14 +22,21 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from core_common.types import Decision, Department, Intent, IssueType, Priority
+from core_common.types import Decision, Department, Intent, IssueType, Priority, Triage
 from decision.base import DecisionContext
 from llm.base import ChatMessage, LLMProvider
 
 
+# --- Schemas the model must fill -------------------------------------------
+
+
 class _RawDecision(BaseModel):
-    """What we ask the model to return for every decision call — kept identical in shape
-    across the four decisions so the prompts stay simple and comparable."""
+    """What we ask the model to return for every decision call.
+
+    Identical in shape across the four decisions so the prompts stay simple and comparable.
+    ``value`` is a plain string here and validated against the enum afterwards, so a wrong
+    label does not fail schema parsing.
+    """
 
     value: str
     confidence: float = Field(ge=0.0, le=1.0)
@@ -44,6 +58,26 @@ class _UrgencyResult(_RawDecision):
 class _IssueTypeResult(_RawDecision):
     pass
 
+
+class _TriageField(BaseModel):
+    """One field of the combined triage answer.
+
+    Deliberately lenient (no confidence bounds): a bad field must be rejected per field,
+    never fail the whole schema. Confidence is clamped to [0, 1] after parsing.
+    """
+
+    value: str
+    confidence: float
+    rationale: str
+
+
+class _TriageResult(BaseModel):
+    issue_type: _TriageField
+    priority: _TriageField
+    department: _TriageField
+
+
+# --- Prompts ---------------------------------------------------------------
 
 _INTENT_SYSTEM = (
     "You are an intent classifier for a telecom ISP's customer support assistant. "
@@ -89,8 +123,32 @@ _ISSUE_TYPE_SYSTEM = (
     "exact spelling), `confidence` in [0, 1], and a one-sentence English `rationale`."
 )
 
+_TRIAGE_SYSTEM = (
+    "You are a triage classifier for a telecom ISP's customer support assistant. Given the "
+    "masked conversation, diagnosis and customer facts so far, make three independent "
+    "decisions. `issue_type`: exactly one of stuck_provisioning, paid_not_active, "
+    "regional_outage, double_charge, missed_installation, payment_system_down, "
+    "plan_change_request, refund_request, infrastructure_repair, other. `priority`: one of "
+    "LOW, NORMAL, HIGH, URGENT (URGENT is active money-loss or a total outage affecting the "
+    "customer right now; HIGH is clear unresolved harm such as a confirmed double charge or "
+    "a regional outage; NORMAL is a standard unresolved issue; LOW is minor or "
+    "non-blocking). `department`: one of TECHNICAL_INFRA (network/outages), BILLING "
+    "(payments, refunds, double charges), SUBSCRIPTION_OPS (provisioning, plan changes, "
+    "cancellations), FIELD_INSTALL (installation appointments). Return structured JSON with "
+    "the keys issue_type, priority and department, each an object with `value` (exact "
+    "spelling), `confidence` in [0, 1] calibrated to how certain you really are, and a "
+    "one-sentence English `rationale`."
+)
+
+
+# --- Service ---------------------------------------------------------------
+
 
 def _build_messages(ctx: DecisionContext) -> list[ChatMessage]:
+    """Turn the masked history plus known facts into chat turns ending on a user turn.
+
+    Some providers reject a conversation that ends on an assistant turn, hence the padding.
+    """
     messages: list[ChatMessage] = [
         ChatMessage(role=turn.get("role", "user"), content=turn.get("content", ""))
         for turn in ctx.history
@@ -115,7 +173,10 @@ def _build_messages(ctx: DecisionContext) -> list[ChatMessage]:
 
 
 class LLMStructuredDecisionService:
-    """Wraps any `LLMProvider` (already PII-guarded by `llm.factory.get_provider`)."""
+    """Implements ``DecisionService`` on top of any ``LLMProvider``.
+
+    The provider is expected to be PII-guarded already (``llm.factory.get_provider``).
+    """
 
     def __init__(self, provider: LLMProvider) -> None:
         self._provider = provider
@@ -134,7 +195,7 @@ class LLMStructuredDecisionService:
             result = self._provider.structured(
                 system=system_prompt, messages=messages, schema=result_schema, temperature=0.0
             )
-        except Exception as exc:  # the turn must survive a provider failure
+        except Exception as exc:  # a provider outage degrades to "unsure", it must not crash the turn
             return Decision(
                 value=invalid_fallback,
                 confidence=0.0,
@@ -201,3 +262,56 @@ class LLMStructuredDecisionService:
             enum_cls=IssueType,
             invalid_fallback=IssueType.OTHER,
         )
+
+    def triage(self, ctx: DecisionContext) -> Triage:
+        """One structured call for issue type, priority and department. Each field is
+        validated on its own, so one bad field only zeroes that field's confidence."""
+        model = getattr(self._provider, "model", "unknown")
+        specs = (
+            ("issue_type", IssueType, IssueType.OTHER),
+            ("priority", Priority, Priority.LOW),
+            ("department", Department, Department.SUBSCRIPTION_OPS),
+        )
+        try:
+            result = self._provider.structured(
+                system=_TRIAGE_SYSTEM, messages=_build_messages(ctx), schema=_TriageResult, temperature=0.0
+            )
+        except Exception as exc:  # a provider outage degrades to "unsure", it must not crash the turn
+            failed = {
+                name: Decision(
+                    value=fallback,
+                    confidence=0.0,
+                    rationale=f"decision provider call failed: {exc}",
+                    model=model,
+                    raw={},
+                )
+                for name, _enum, fallback in specs
+            }
+            return Triage(**failed)
+
+        decisions: dict[str, Decision] = {}
+        for name, enum_cls, fallback in specs:
+            part: _TriageField = getattr(result, name)
+            raw = part.model_dump(mode="json")
+            try:
+                value = enum_cls(part.value)
+            except ValueError:
+                decisions[name] = Decision(
+                    value=fallback,
+                    confidence=0.0,
+                    rationale=(
+                        f"model returned out-of-enum value {part.value!r}; treating as "
+                        f"unknown. Original rationale: {part.rationale}"
+                    ),
+                    model=model,
+                    raw=raw,
+                )
+                continue
+            decisions[name] = Decision(
+                value=value,
+                confidence=max(0.0, min(1.0, part.confidence)),
+                rationale=part.rationale,
+                model=model,
+                raw=raw,
+            )
+        return Triage(**decisions)

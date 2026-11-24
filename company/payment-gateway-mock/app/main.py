@@ -1,3 +1,14 @@
+"""Payment gateway app: wires settings, routers, metrics and the outage guard.
+
+Where this sits: `uvicorn app.main:app` in the payment-gateway container.
+
+Key ideas:
+- Routers are built by functions that receive their dependencies
+  (`build_router(session_factory, settings, registry)`), which keeps them
+  testable without module-level globals.
+
+Read next: `outage.py`.
+"""
 from __future__ import annotations
 
 from shared.app_factory import create_app

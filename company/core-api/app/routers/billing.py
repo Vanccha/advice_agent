@@ -1,3 +1,17 @@
+"""Refunds and goodwill credits.
+
+Where this sits: called by the CRM and, for credits, by partner integrations.
+
+Key ideas:
+- Authority is scoped: refunds need `billing:refund`, credits only
+  `credits:write`, and credits are capped per request.
+- Idempotent writes: a credit with a repeated `idempotency_key` returns the
+  original credit instead of paying twice.
+- The refund row is written before the processor is called, so a crash
+  between the two leaves evidence of the attempt.
+
+Read next: `webhooks.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -22,8 +36,9 @@ router = APIRouter(tags=["billing"])
 def create_refund(
     body: RefundRequest,
     principal: Principal = Depends(require_scope("billing:refund", get_registry())),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> dict:
+    """Refund a payment through the gateway; requires the `billing:refund` scope."""
     payment = db.get(Payment, body.payment_id)
     if payment is None:
         raise NotFound("PAYMENT_NOT_FOUND", f"Payment {body.payment_id} not found.")
@@ -79,8 +94,9 @@ def create_refund(
 def create_credit(
     body: CreditRequest,
     principal: Principal = Depends(require_scope("credits:write", get_registry())),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> dict:
+    """Grant a capped, idempotent goodwill credit; requires `credits:write`."""
     settings = get_settings()
     if body.amount_gbp > settings.credit_max_per_request_gbp:
         raise ApiError(

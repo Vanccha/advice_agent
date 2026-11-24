@@ -172,6 +172,7 @@ services:
       <<: *integration-env
       MCP_SERVER_NAME: netswift-monitoring
       ASSISTANT_ALERT_WEBHOOK_URL: ${ASSISTANT_ALERT_WEBHOOK_URL}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
     ports: ["9104:8000"]
     depends_on: [prometheus]
 
@@ -203,7 +204,6 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
       DECISION_SERVICE: ${DECISION_SERVICE:-llm_structured}
       DECISION_MIN_CONFIDENCE: ${DECISION_MIN_CONFIDENCE:-0.6}
-      MAX_TOOL_CALLS_PER_TURN: ${MAX_TOOL_CALLS_PER_TURN:-8}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET}
       LANGFUSE_ENABLED: ${LANGFUSE_ENABLED:-false}
       LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-http://langfuse-web:3000}

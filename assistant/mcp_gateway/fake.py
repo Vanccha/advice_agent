@@ -1,30 +1,37 @@
-"""`FakeGateway`: the same public surface as `gateway.ToolGateway`, backed by a dict of
-canned tool responses instead of live adapters — no containers, no network, no `mcp` SDK
-involved. The modes layer and `evals/` run against this.
+"""``FakeGateway``: the tool gateway's surface backed by canned answers, no network.
 
-Import as: ``from mcp_gateway.fake import FakeGateway``.
+Where this sits: ``mcp_gateway`` package. ``modes`` tests and ``evals/`` run against it instead
+of ``gateway.ToolGateway``; no containers and no MCP SDK are involved.
+
+Key ideas:
+- Same interface, different backend: code under test cannot tell the fake from the real thing
+  (``for_turn``, ``call``, ``call_sync``, ``catalog``), so tests exercise the real code paths.
+- Faithful failure: an unknown tool behaves like a dead adapter (``ok=False``,
+  ``ADAPTER_UNAVAILABLE``), and the per-turn budget is enforced the same way.
+- ``calls_made`` records every call, so tests can assert what the assistant asked for.
+
+Read next: ``mcp_gateway/gateway.py``.
+See: docs/contracts.md §3.
 """
 from __future__ import annotations
 
 import asyncio
 from typing import Any
 
-from audit.log import digest_tool_output
-from core_common.types import StepType
+from mcp_gateway.tool_audit import audit_tool_call
 from mcp_gateway.types import ToolBudgetExceeded, ToolCallOutcome, ToolSpec
-from privacy.masking import mask_payload
 
 CannedResponse = ToolCallOutcome | dict[str, Any]
 
 
 class FakeGateway:
-    """Construct with ``responses={tool_name: canned_value, ...}`` where `canned_value` is
-    either a ready-made `ToolCallOutcome` or a plain dict (wrapped as `ok=True,
-    data=<dict>`). `adapter_map` optionally says which adapter each tool "belongs to"
-    (defaults to `"fake"`), purely for `catalog()`/audit bookkeeping — it changes nothing
-    about how a call resolves. A tool name absent from `responses` behaves exactly like a
-    dead adapter in the real gateway: `ok=False, error_code="ADAPTER_UNAVAILABLE"`, never
-    an exception.
+    """Canned stand-in for `ToolGateway`.
+
+    Construct with ``responses={tool_name: canned_value, ...}`` where `canned_value` is a
+    ready-made `ToolCallOutcome` or a plain dict (wrapped as `ok=True, data=<dict>`).
+    `adapter_map` says which adapter each tool "belongs to" (default `"fake"`), purely for
+    `catalog()` and audit bookkeeping. A tool absent from `responses` behaves like a dead
+    adapter: `ok=False, error_code="ADAPTER_UNAVAILABLE"`, never an exception.
     """
 
     def __init__(
@@ -47,6 +54,22 @@ class FakeGateway:
         self.max_calls_per_turn = max_calls_per_turn
         self._calls_this_turn = 0
         self.calls_made: list[tuple[str, dict[str, Any]]] = []
+
+    def for_turn(self, conversation_id: str, *, actor: str | None = None) -> "FakeGateway":
+        """Per-turn view (mirrors `ToolGateway.for_turn`): shares the canned responses and
+        the `calls_made` record with this instance, but has its own conversation id and
+        call budget."""
+        view = FakeGateway(
+            audit_log=self._audit_log,
+            conversation_id=conversation_id,
+            tenant=self.tenant,
+            actor=actor or self.actor,
+            max_calls_per_turn=self.max_calls_per_turn,
+        )
+        view._responses = self._responses
+        view._adapter_map = self._adapter_map
+        view.calls_made = self.calls_made
+        return view
 
     def reset_turn_budget(self) -> None:
         self._calls_this_turn = 0
@@ -101,19 +124,12 @@ class FakeGateway:
     def _audit(self, tool_name: str, arguments: dict[str, Any], outcome: ToolCallOutcome) -> None:
         if self._audit_log is None:
             return
-        masked_arguments = mask_payload(arguments)
-        digest_source = outcome.data if outcome.ok else {"error_code": outcome.error_code}
-        digest = digest_tool_output(digest_source)
-        summary = f"called tool '{tool_name}'" if outcome.ok else f"called tool '{tool_name}' -> {outcome.error_code}"
-        self._audit_log.append(
-            self.conversation_id,
-            StepType.TOOL_CALL,
-            summary,
-            outcome.error_message if not outcome.ok else None,
-            {"adapter": outcome.adapter, "duration_ms": outcome.duration_ms},
+        audit_tool_call(
+            self._audit_log,
+            conversation_id=self.conversation_id,
             tenant=self.tenant,
             actor=self.actor,
             tool_name=tool_name,
-            tool_input=masked_arguments,
-            tool_output_digest=digest,
+            arguments=arguments,
+            outcome=outcome,
         )

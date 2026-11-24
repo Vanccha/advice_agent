@@ -1,3 +1,15 @@
+"""Worker process: a small FastAPI app plus a polling loop in the background.
+
+Where this sits: `uvicorn app.main:app`; the loop starts at app startup.
+
+Key ideas:
+- The app exists only for `/health` and `/metrics`; the real work is the loop.
+- One failed tick is logged and rolled back but never stops the loop.
+- The blocking tick runs in a thread so the event loop (and health checks)
+  stay responsive.
+
+Read next: `worker.py`.
+"""
 from __future__ import annotations
 
 import asyncio

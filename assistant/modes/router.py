@@ -1,8 +1,19 @@
-"""ROUTER mode (contracts §4.3): classify the customer's intent, apply the confidence
-floor, and map the result to the next mode. Below the floor, the router hands the
-conversation over rather than guessing (contracts §4.5/§4.6).
+"""ROUTER mode: classify the customer's intent and pick the next mode.
+
+Where this sits: first handler of every new conversation (and of any message after a
+conversation closed). Called by `modes.dispatch`; calls the `DecisionService` for the
+classification and `decision.fallback` for the confidence floor.
+
+Key ideas:
+- Fail-safe defaults: below the confidence floor the router hands over to a person rather
+  than guessing which flow to start (contracts §4.5/§4.6).
+- Terminal intents (small talk, out of scope) are answered here and open no working mode.
+- Distinguish "the model is down" from "the customer was unclear": the honest reply differs.
+
+Read next: modes/machine.py, modes/dispatch.py, modes/replies.py.
 
 Import as: ``from modes.router import route_intent, RouterResult``.
+See: docs/contracts.md §4.3.
 """
 from __future__ import annotations
 
@@ -11,6 +22,7 @@ from dataclasses import dataclass
 from core_common.types import Intent, Mode, StepType
 from decision.base import DecisionContext
 from decision.fallback import apply_confidence_floor
+from modes import replies
 from modes.context import TurnContext
 from observability.tracing import record_decision
 
@@ -24,29 +36,16 @@ _INTENT_TO_MODE: dict[Intent, Mode] = {
     Intent.OUT_OF_SCOPE: Mode.CLOSING,
 }
 
-_SMALLTALK_REPLY_EN = (
-    "Hello! I can help with package recommendations, diagnosing a fault, or the status of "
-    "an existing request. How can I help?"
-)
-_OUT_OF_SCOPE_REPLY_EN = (
-    "I cannot help with that, as I can only assist with NetSwift internet services. "
-    "Feel free to ask about your broadband package, your subscription or an existing request."
-)
-_HANDOVER_REPLY_EN = (
-    "I was not quite sure what you need help with, so I am passing you to an agent."
-)
-# When the model itself is unreachable the honest answer is not "I did not understand you" —
-# the customer wrote perfectly clearly. `LLMStructuredDecisionService` reports a failed
-# provider call as a confidence-0 decision whose rationale starts with this marker.
+# `LLMStructuredDecisionService` reports a failed provider call as a confidence-0 decision
+# whose rationale starts with this marker. The router uses it to tell "the model is down"
+# apart from "the customer was unclear", because the honest reply differs.
 _PROVIDER_FAILURE_MARKER = "decision provider call failed"
-_PROVIDER_DOWN_REPLY_EN = (
-    "I cannot reach my AI service right now, so I am unable to look at your request. "
-    "I am passing you to an agent; you are also welcome to try again shortly."
-)
 
 
 @dataclass
 class RouterResult:
+    """Outcome of classifying one message."""
+
     intent: Intent
     next_mode: Mode
     confidence: float
@@ -55,10 +54,15 @@ class RouterResult:
 
 
 def route_intent(ctx: TurnContext, masked_message: str) -> RouterResult:
+    """Classify the message, apply the confidence floor and pick the next mode.
+
+    Below the floor we hand over instead of guessing: entering the wrong mode would waste
+    the customer's turn and could trigger the wrong flow.
+    """
     decision_ctx = DecisionContext(
         conversation_id=ctx.conversation_id,
         tenant=ctx.tenant,
-        history=ctx.history + [{"role": "user", "content": masked_message}],
+        history=ctx.history,  # already ends with the current masked user message
         masked_customer_facts={},
         tenant_config_slice={"known_intents": [i.value for i in Intent]},
     )
@@ -94,9 +98,9 @@ def route_intent(ctx: TurnContext, masked_message: str) -> RouterResult:
             confidence=fallback.decision.confidence,
             escalated=True,
             reply_en=(
-                _PROVIDER_DOWN_REPLY_EN
+                replies.HANDOVER_PROVIDER_DOWN
                 if _PROVIDER_FAILURE_MARKER in (fallback.decision.rationale or "")
-                else _HANDOVER_REPLY_EN
+                else replies.HANDOVER_UNSURE
             ),
         )
 
@@ -104,9 +108,9 @@ def route_intent(ctx: TurnContext, masked_message: str) -> RouterResult:
     next_mode = _INTENT_TO_MODE[intent]
     reply_en = None
     if intent is Intent.SMALLTALK:
-        reply_en = _SMALLTALK_REPLY_EN
+        reply_en = replies.SMALLTALK
     elif intent is Intent.OUT_OF_SCOPE:
-        reply_en = _OUT_OF_SCOPE_REPLY_EN
+        reply_en = replies.OUT_OF_SCOPE
 
     return RouterResult(
         intent=intent,

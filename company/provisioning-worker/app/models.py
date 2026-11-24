@@ -1,7 +1,14 @@
-"""Minimal mappings onto tables owned (created) by core-api, schema `core`.
+"""Minimal mappings onto tables owned by core-api (schema `core`).
 
-The worker never creates or migrates these tables - core-api's bootstrap does that.
-This module only declares the columns the worker actually reads or writes.
+Where this sits: the worker reads and writes jobs, subscriptions, modems and
+appointments, but never creates or migrates these tables; core-api's bootstrap
+does that.
+
+Key ideas:
+- Declare only the columns this service uses, so the other service can add
+  columns without breaking the worker.
+
+Read next: `worker.py`.
 """
 from __future__ import annotations
 

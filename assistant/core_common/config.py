@@ -1,10 +1,18 @@
-"""Tenant configuration loader.
+"""Tenant configuration loader: YAML files on disk -> validated ``TenantConfig``.
 
-Reads ``<TENANT_CONFIG_DIR>/<tenant>/{tenant,policy,routing}.yaml``, expands ``${ENV_VAR}``
-placeholders from ``os.environ``, validates every file against a Pydantic model, and caches
-the result per tenant. Works unchanged for ``netswift`` and ``_example``.
+Where this sits: ``core_common`` (pure logic plus file I/O). Called at API start-up and by
+anything that needs policy, routing or persona. It validates into the models in
+``config_models.py``; those are re-exported here, so
+``from core_common.config import TenantConfig`` keeps working.
 
-Import as: ``from core_common.config import load_tenant_config, TenantConfig, ConfigError``.
+Key ideas:
+- Config as data: a new tenant is a new folder of YAML, no code change.
+- ``${ENV_VAR}`` placeholders are expanded before validation; an unset variable is a hard
+  ``ConfigError`` rather than a silent empty string.
+- Validate once at load, then cache per (tenant, config dir).
+
+Read next: ``core_common/config_models.py``, ``core_common/settings.py``.
+See: docs/contracts.md §2.
 """
 from __future__ import annotations
 
@@ -14,238 +22,38 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
+from core_common.config_models import (  # noqa: F401  (re-exported for existing importers)
+    ActionPolicy,
+    AdapterConfig,
+    Condition,
+    CustomerIdentifierConfig,
+    DecisionPolicyConfig,
+    DepartmentConfig,
+    IncidentHandlingConfig,
+    LimitsConfig,
+    OnConditionFail,
+    PersonaConfig,
+    PiiConfig,
+    PolicyFile,
+    RateLimit,
+    RecommendationConfig,
+    RecommendationWeights,
+    RoutingFile,
+    TenantConfig,
+    TenantFile,
+)
 from core_common.settings import get_settings
 
-# --------------------------------------------------------------------------------------
-# Errors
-# --------------------------------------------------------------------------------------
+# --- Errors ------------------------------------------------------------------
 
 
 class ConfigError(RuntimeError):
     """Raised for any missing/invalid tenant configuration (including unset env vars)."""
 
 
-# --------------------------------------------------------------------------------------
-# tenant.yaml
-# --------------------------------------------------------------------------------------
-
-
-class AdapterConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    transport: str
-    url: str
-    required: bool = True
-
-
-class DepartmentConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    display_name_en: str
-    channel: str
-
-
-class CustomerIdentifierConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    label_en: str
-    pattern: str
-    example: str
-
-
-class PersonaConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    name_en: str
-    tone_en: str
-    language: str
-    disclaimers_en: list[str] = Field(default_factory=list)
-
-
-class TenantFile(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    version: int
-    tenant: str
-    display_name: str
-    locale: str
-    timezone: str
-    currency: str
-    business_domain: str
-    customer_identifier: CustomerIdentifierConfig
-    adapters: dict[str, AdapterConfig]
-    departments: dict[str, DepartmentConfig]
-    persona: PersonaConfig
-
-
-# --------------------------------------------------------------------------------------
-# policy.yaml
-# --------------------------------------------------------------------------------------
-
-
-class Condition(BaseModel):
-    """One `conditions[]` entry, evaluated against a dotted path in the action context."""
-
-    model_config = ConfigDict(frozen=True, populate_by_name=True, extra="forbid")
-
-    field: str
-    eq: Any = None
-    in_: list[Any] | None = Field(default=None, alias="in")
-    lt: float | None = None
-    lte: float | None = None
-    gt: float | None = None
-    gte: float | None = None
-    ne: Any = None
-    exists: bool | None = None
-
-
-class OnConditionFail(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    escalate_to: str | None = None
-    reason_code: str | None = None
-
-
-class RateLimit(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    per_conversation: int | None = None
-    per_customer_per_day: int | None = None
-
-
-class ActionPolicy(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    allowed: bool
-    requires_confirmation: bool = False
-    description_en: str | None = None
-    conditions: list[Condition] = Field(default_factory=list)
-    on_condition_fail: OnConditionFail | None = None
-    rate_limit: RateLimit | None = None
-    max_amount_gbp: float | None = None
-    escalate_to: str | None = None
-    reason_code: str | None = None
-    reason_en: str | None = None
-
-
-class DecisionPolicyConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    min_confidence: float = 0.6
-    escalate_on_low_confidence: bool = True
-
-
-class LimitsConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    max_tool_calls_per_turn: int = 8
-    max_questions_advisory: int = 5
-    max_actions_per_conversation: int = 3
-
-
-class PiiConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    mask_before_model: list[str] = Field(default_factory=list)
-    allow_unmasked: list[str] = Field(default_factory=list)
-    mask_in_traces: bool = True
-    mask_in_tickets: bool = True
-
-
-class IncidentHandlingConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    attach_to_existing_incident: bool = True
-    create_ticket_for_known_incident: bool = False
-    max_tickets_per_incident: int = 1
-
-
-class PolicyFile(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    version: int
-    tenant: str
-    decision: DecisionPolicyConfig
-    limits: LimitsConfig
-    actions: dict[str, ActionPolicy]
-    pii: PiiConfig
-    incident_handling: IncidentHandlingConfig
-
-
-# --------------------------------------------------------------------------------------
-# routing.yaml
-# --------------------------------------------------------------------------------------
-
-
-class RecommendationWeights(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    speed_adequacy: float
-    budget_fit: float
-    profile_match: float
-    commitment_match: float
-    extras_match: float
-
-
-class RecommendationConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    weights: RecommendationWeights
-    mbps_per_device: float
-    budget_hard_filter_tolerance: float
-    min_mbps_floor: float
-    # A package offering less than this fraction of the household's required speed is not
-    # offered at all — unless nothing else survives the filters, in which case the customer
-    # still sees the closest option and the reply says it is tight.
-    speed_hard_filter_ratio: float = 0.5
-    usage_profile_map: dict[str, list[str]]
-    reason_codes_en: dict[str, str]
-
-
-class RoutingFile(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    version: int
-    tenant: str
-    recommendation: RecommendationConfig
-    issue_routing: dict[str, str]
-    urgency_floor: dict[str, str]
-    diagnostic_checklist: list[str]
-
-
-# --------------------------------------------------------------------------------------
-# Combined config
-# --------------------------------------------------------------------------------------
-
-
-class TenantConfig(BaseModel):
-    """Everything loaded for one tenant. Cached per (tenant, config_dir)."""
-
-    model_config = ConfigDict(frozen=True)
-
-    tenant_name: str
-    tenant: TenantFile
-    policy: PolicyFile
-    routing: RoutingFile
-
-    @property
-    def adapters(self) -> dict[str, AdapterConfig]:
-        return self.tenant.adapters
-
-    @property
-    def departments(self) -> dict[str, DepartmentConfig]:
-        return self.tenant.departments
-
-    @property
-    def persona(self) -> PersonaConfig:
-        return self.tenant.persona
-
-
-# --------------------------------------------------------------------------------------
-# Env var expansion
-# --------------------------------------------------------------------------------------
+# --- Env var expansion -------------------------------------------------------
 
 _ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
@@ -269,9 +77,7 @@ def _expand_env(node: Any) -> Any:
     return node
 
 
-# --------------------------------------------------------------------------------------
-# Loader
-# --------------------------------------------------------------------------------------
+# --- Loader ------------------------------------------------------------------
 
 _CACHE: dict[tuple[str, str], TenantConfig] = {}
 
@@ -314,12 +120,15 @@ def load_tenant_config(tenant: str | None = None, config_dir: str | os.PathLike[
     policy_file = _load_yaml_model(tenant_dir / "policy.yaml", PolicyFile, tenant_name)
     routing_file = _load_yaml_model(tenant_dir / "routing.yaml", RoutingFile, tenant_name)
 
-    config = TenantConfig(
-        tenant_name=tenant_name,
-        tenant=tenant_file,
-        policy=policy_file,
-        routing=routing_file,
-    )
+    try:
+        config = TenantConfig(
+            tenant_name=tenant_name,
+            tenant=tenant_file,
+            policy=policy_file,
+            routing=routing_file,
+        )
+    except ValidationError as exc:
+        raise ConfigError(f"Invalid tenant configuration for '{tenant_name}': {exc}") from exc
     _CACHE[cache_key] = config
     return config
 

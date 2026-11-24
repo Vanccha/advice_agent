@@ -1,3 +1,14 @@
+"""Provisioning job endpoints: list, retry and enqueue.
+
+Where this sits: jobs are executed by the separate provisioning worker; this
+router only changes their state in the shared table.
+
+Key ideas:
+- The API never provisions anything itself: it queues work, a worker does it.
+  That is why a job can sit `stuck` while the API stays healthy.
+
+Read next: `company/provisioning-worker/app/worker.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -26,7 +37,7 @@ def list_provisioning_jobs(
     status: str | None = Query(default=None),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> dict:
     stmt = select(ProvisioningJob)
     if subscription_id is not None:
@@ -41,7 +52,7 @@ def list_provisioning_jobs(
     "/v1/provisioning-jobs/{job_id}/retry",
     dependencies=[Depends(require_scope("provisioning:retry", get_registry()))],
 )
-def retry_provisioning_job(job_id: int, db: Session = Depends(get_db)) -> dict:
+def retry_provisioning_job(job_id: int, db: Session = Depends(get_db, scope="function")) -> dict:
     job = db.get(ProvisioningJob, job_id)
     if job is None:
         raise NotFound("PROVISIONING_JOB_NOT_FOUND", f"Provisioning job {job_id} not found.")
@@ -76,7 +87,7 @@ ACTIVE_JOB_STATUSES = ("queued", "running", "succeeded")
     dependencies=[Depends(require_scope("provisioning:retry", get_registry()))],
     status_code=201,
 )
-def enqueue_provisioning_job(subscription_id: int, db: Session = Depends(get_db)) -> dict:
+def enqueue_provisioning_job(subscription_id: int, db: Session = Depends(get_db, scope="function")) -> dict:
     subscription = db.get(Subscription, subscription_id)
     if subscription is None:
         raise NotFound("SUBSCRIPTION_NOT_FOUND", f"Subscription {subscription_id} not found.")

@@ -124,3 +124,34 @@ def test_health_and_metrics_still_reachable_alongside_the_webhook_route(client: 
     assert health.json()["status"] == "ok"
     assert metrics.status_code == 200
     assert b"mcp_monitoring_alert_forwards_total" in metrics.content
+
+
+def test_forward_signs_exact_bytes_sent(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    import hashlib
+    import hmac
+
+    from app import deps
+
+    monkeypatch.setattr(deps.settings(), "WEBHOOK_SECRET", "s3cret")
+    base, path = _split(alert_webhook_url())
+    with respx.mock(base_url=base, assert_all_called=False) as mock:
+        route = mock.post(path).mock(return_value=httpx.Response(200, json={"ok": True}))
+        response = client.post("/webhooks/alertmanager", json=_realistic_alertmanager_payload())
+
+    assert response.json()["results"][0]["forwarded"] is True
+    request = route.calls.last.request
+    expected = "sha256=" + hmac.new(b"s3cret", request.content, hashlib.sha256).hexdigest()
+    assert request.headers["X-Webhook-Signature"] == expected
+    assert request.headers["Content-Type"] == "application/json"
+
+
+def test_forward_without_secret_is_unsigned(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app import deps
+
+    monkeypatch.setattr(deps.settings(), "WEBHOOK_SECRET", "")
+    base, path = _split(alert_webhook_url())
+    with respx.mock(base_url=base, assert_all_called=False) as mock:
+        route = mock.post(path).mock(return_value=httpx.Response(200, json={"ok": True}))
+        client.post("/webhooks/alertmanager", json=_realistic_alertmanager_payload())
+
+    assert "X-Webhook-Signature" not in route.calls.last.request.headers

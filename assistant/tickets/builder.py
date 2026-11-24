@@ -1,9 +1,19 @@
-"""The structured ticket builder (contracts §4.1): produces exactly the payload the
-ticketing adapter's `create_structured_ticket` tool expects, written so the receiving
-department never has to ask the customer the same questions again.
+"""The structured ticket builder: one complete, masked, idempotent ticket payload.
 
-Import as: ``from tickets.builder import (build_structured_ticket, build_external_ref,
-StructuredTicket, TicketRequester, TicketEvidence, AttemptedStep)``.
+Where this sits: ``tickets`` package. ``modes.action`` / ``modes.escalation`` call
+``build_structured_ticket``; ``tickets.client.TicketService`` then sends the result to the
+ticketing adapter. Masking comes from ``tickets.masking_rules``.
+
+Key ideas:
+- Write for the receiving department: the body says what was checked, found and tried, so
+  nobody asks the customer the same questions again.
+- Idempotency key: ``external_ref = <conversation_id>:<issue_type>`` means a repeat build
+  maps to the same ticket instead of a duplicate.
+- A ticket is a PII boundary: masking happens while the payload is built, so a raw name or
+  phone number cannot survive into a ``StructuredTicket``.
+
+Read next: ``tickets/masking_rules.py``, ``tickets/client.py``.
+See: docs/contracts.md §4.1, §4.7.
 """
 from __future__ import annotations
 
@@ -16,6 +26,8 @@ from tickets.masking_rules import mask_ticket_payload
 
 
 class TicketRequester(BaseModel):
+    """Who the ticket is for. `name` and `contact` are masked; `customer_no` is not."""
+
     model_config = ConfigDict(frozen=True)
 
     customer_no: str
@@ -24,6 +36,8 @@ class TicketRequester(BaseModel):
 
 
 class TicketEvidence(BaseModel):
+    """Facts the assistant gathered: record ids, error codes, observations, sources queried."""
+
     model_config = ConfigDict(frozen=True)
 
     record_ids: dict[str, Any] = Field(default_factory=dict)
@@ -33,6 +47,8 @@ class TicketEvidence(BaseModel):
 
 
 class AttemptedStep(BaseModel):
+    """One thing the assistant already tried, so the department does not repeat it."""
+
     model_config = ConfigDict(frozen=True)
 
     step: str
@@ -62,10 +78,12 @@ class StructuredTicket(BaseModel):
 
 
 def build_external_ref(conversation_id: str, issue_type: IssueType | str) -> str:
-    """`<conversation_id>:<issue_type>` (contracts §4.1). Makes ticket creation
-    idempotent: building the same issue twice for the same conversation always produces
-    the same `external_ref`, and the ticketing API returns the existing ticket (HTTP 200,
-    not 201) for a repeat `external_ref` instead of opening a duplicate."""
+    """`<conversation_id>:<issue_type>` (contracts §4.1): the idempotency key.
+
+    The same issue in the same conversation always yields the same `external_ref`, and the
+    ticketing API answers a repeat with the existing ticket (HTTP 200, not 201) instead of
+    opening a duplicate.
+    """
     issue = issue_type.value if isinstance(issue_type, IssueType) else str(issue_type)
     return f"{conversation_id}:{issue}"
 
@@ -93,24 +111,20 @@ def build_structured_ticket(
     source: Literal["web", "phone", "api", "monitoring"] = "api",
     allow_unmasked: frozenset[str] | set[str] | None = None,
 ) -> StructuredTicket:
-    """Build one `StructuredTicket`, masked at construction time — a ticket is a UK GDPR
-    boundary exactly like a model call or a trace (contracts §4.7). Raw PII in
-    `requester_name`/`requester_contact`, or incidentally present in any free-text field
-    (`subject_en`, `body_en`, `evidence_observations`, `attempted_steps[].result`,
-    `suggested_next_step_en`, `urgency_reason_en`), never survives into the returned
-    `StructuredTicket`. `customer_no`/`subscription_id`/`ticket_key`/`region_code`/
-    `package_code` (`allow_unmasked`, normally the tenant's
-    `policy.yaml: pii.allow_unmasked`) survive intact — a masked customer number would be
-    useless to the receiving department.
+    """Build one `StructuredTicket`, masked at construction time.
 
-    `body_en` must be a human-readable plain-English narrative written for the receiving
-    department: what was checked, what was found, what was tried (and why the assistant
-    could not finish it, including any policy-blocked step) — so the department never has
-    to ask the customer the same questions again.
+    A ticket is a UK GDPR boundary just like a model call or a trace (contracts §4.7): raw PII
+    in `requester_name`/`requester_contact`, or incidentally in any free-text field, never
+    survives into the result. Fields named in `allow_unmasked` (normally the tenant's
+    `policy.yaml: pii.allow_unmasked`: customer_no, ticket_key, ...) stay intact, since a
+    masked customer number would be useless to the receiving department.
 
-    Calling this twice with the same `conversation_id` + `issue_type` (and otherwise
-    identical inputs) produces the same `external_ref`, which is exactly the point: ticket
-    creation is idempotent (contracts §4.1/§2.5).
+    `body_en` must be a plain-English narrative for that department: what was checked, what
+    was found, what was tried and why the assistant could not finish (including any
+    policy-blocked step).
+
+    Building twice with the same `conversation_id` and `issue_type` gives the same
+    `external_ref`, which is what makes ticket creation idempotent.
     """
     issue_type_enum = issue_type if isinstance(issue_type, IssueType) else IssueType(issue_type)
 

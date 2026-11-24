@@ -1,3 +1,10 @@
+"""Network incident endpoints.
+
+Where this sits: read by the CRM and partners (`incidents:read`); incidents are
+linked to affected subscriptions.
+
+Read next: `notifications.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -26,7 +33,7 @@ def list_incidents(
     severity: str | None = Query(default=None),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> dict:
     stmt = select(NetworkIncident)
     if region_code:
@@ -43,7 +50,7 @@ def list_incidents(
     "/v1/incidents/{incident_no}",
     dependencies=[Depends(require_scope("incidents:read", get_registry()))],
 )
-def get_incident(incident_no: str, db: Session = Depends(get_db)) -> dict:
+def get_incident(incident_no: str, db: Session = Depends(get_db, scope="function")) -> dict:
     incident = db.scalar(select(NetworkIncident).where(NetworkIncident.incident_no == incident_no))
     if incident is None:
         raise NotFound("INCIDENT_NOT_FOUND", f"Incident '{incident_no}' not found.")

@@ -1,3 +1,14 @@
+"""Ticketing JSON API under `/api/v1`.
+
+Where this sits: called by CRM tools and integrations with an `X-API-Key`.
+
+Key ideas:
+- Scopes per route: reads need `tickets:read`, writes `tickets:write`.
+- The registry is looked up per request from `app.state`, so tests can run
+  isolated apps with their own keys.
+
+Read next: `services.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response

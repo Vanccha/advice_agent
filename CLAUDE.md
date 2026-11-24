@@ -45,6 +45,8 @@ company/ ──REST + read-only SQL──> integrations/ (MCP servers) ──MCP
 - Everything is **English** — code, identifiers, comments, commit messages and logs, and also
   everything an end user or a department agent reads (UI strings, assistant replies, ticket
   bodies, policy `*_en` fields). User-facing text is British English; money is GBP.
+- The one deliberate exception is `docs/ogrenme/`: a learning guide written in Turkish for the
+  team. Code, comments and product text stay English; see `docs/STYLE.md` for the standard.
 
 ## Where things live
 
@@ -61,7 +63,7 @@ company/monitoring/   prometheus.yml, rules.yml, alertmanager.yml
 company/chaos/        failure injection CLI (make chaos SCENARIO=...)
 integrations/common/  http client, read-only db access, ToolResult envelope
 integrations/mcp_*/   one MCP server per company system
-assistant/core_common/     shared types, settings, tenant-config loader, assistant DB models
+assistant/core_common/     shared types, settings, tenant-config models + loader, assistant DB models
                       (named core_common, not common: the boundary test forbids the
                        top-level import name `common` inside assistant/)
 assistant/policy/     authority engine (policy.yaml interpreter)
@@ -69,13 +71,20 @@ assistant/recommendation/  deterministic package scoring (no LLM)
 assistant/privacy/    UK GDPR masking
 assistant/audit/      hash-chained, append-only audit log
 assistant/decision/   DecisionService interface (llm_structured | typesafe_jev stub)
-assistant/llm/        LLMProvider interface (openai_agents | anthropic | scripted)
-assistant/modes/      explicit state machine: router / advisory / diagnostic / action
+assistant/llm/        LLMProvider interface (openai_agents | anthropic | scripted) + *_mapping.py wire helpers
+assistant/modes/      explicit state machine: orchestrator (facade) | dispatch (mode routing) |
+                      state (typed ConversationState) | conversation_store | approvals | events |
+                      replies (customer-facing text catalogue) | router / status_query handlers |
+                      action/ advisory/ diagnostic/ investigation/ (handler packages: read each
+                      package's __init__.py for its entry points and reading order)
 assistant/tickets/    structured ticket builder
-assistant/mcp_gateway/  MCP client gateway + action runner (named mcp_gateway, NOT mcp:
+assistant/mcp_gateway/  MCP client gateway + fake + tool_audit + action runner (named mcp_gateway, NOT mcp:
                       a package called `mcp` would shadow the installed MCP client SDK)
 assistant/observability/  Langfuse + OTel wrapper (no-op when disabled)
-assistant/api/, assistant/web/   HTTP API + embedded chat widget
+assistant/api/      HTTP API: main.py (app factory) | state.py (composition root, startup) |
+                      security.py (cookie identity, ownership, webhook HMAC) | errors.py |
+                      templating.py | routes/ (pages, auth, chat, approvals, audit, webhooks, ops)
+assistant/web/      chat widget: Jinja templates + static JS/CSS (+ preview.py dev harness)
 config/tenants/       per-customer configuration (netswift, _example)
 evals/                scenario + advisory evaluations (make eval)
 evals/datasets/       the user messages and customer profiles under test

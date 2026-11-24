@@ -1,17 +1,29 @@
-"""The authority engine (contracts §4.6). The model never decides its own authority: every
-action name is checked here against `config/tenants/<tenant>/policy.yaml` before it may run.
+"""The authority engine: interprets a tenant's ``policy.yaml`` to allow or deny an action.
 
-Import as: ``from policy.engine import PolicyEngine``.
+Where this sits: ``policy`` package. Called by ``policy.executor`` (and ``modes`` for
+pre-checks). It reads a ``PolicyFile`` (``core_common.config_models``) and returns a
+``PolicyDecision``; it does no I/O.
+
+Key ideas:
+- Default-deny: an action not listed in ``policy.yaml`` is refused (``action_not_in_policy``).
+  The model never decides its own authority.
+- Fail-safe on missing data: a condition that refers to data we do not have counts as NOT
+  met, never as met.
+- Pure and stateless: same config and context in, same decision out, so it is easy to test.
+
+Read next: ``policy/executor.py``, ``config/tenants/netswift/policy.yaml``.
+See: docs/contracts.md §4.6.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from core_common.config import ActionPolicy, Condition, PolicyFile
+from core_common.config_models import ActionPolicy, Condition, PolicyFile
 from core_common.types import Department, PolicyDecision
 
 from policy.messages import reason_en_for
 
+# Sentinel distinct from None: lets a condition tell "key absent" from "key present but null".
 _MISSING = object()
 
 
@@ -27,6 +39,7 @@ def _get_path(context: dict[str, Any], path: str) -> Any:
 
 
 def _condition_holds(condition: Condition, context: dict[str, Any]) -> bool:
+    """True when every operator set on `condition` holds for the value at its path."""
     value = _get_path(context, condition.field)
 
     if condition.exists is not None:
@@ -59,13 +72,18 @@ def _condition_holds(condition: Condition, context: dict[str, Any]) -> bool:
 
 
 def _department(name: str | None) -> Department | None:
+    """Config string -> `Department` (raises on an invalid code, caught at config load time)."""
     if not name:
         return None
     return Department(name)
 
 
 class PolicyEngine:
-    """Interprets one tenant's `policy.yaml`. Stateless except for the loaded config."""
+    """Interprets one tenant's `policy.yaml`. Stateless except for the loaded config.
+
+    `check()` evaluates in a fixed order, and the first failure wins: unknown action, hard
+    deny, conditions, rate limit, amount cap; only then is the action allowed.
+    """
 
     def __init__(self, policy_config: PolicyFile) -> None:
         self._policy = policy_config
@@ -74,17 +92,23 @@ class PolicyEngine:
     def tenant(self) -> str:
         return self._policy.tenant
 
-    # -- public API ----------------------------------------------------------------
+    # --- Public API ---------------------------------------------------------
 
     def describe_allowed_actions(self) -> list[str]:
         """Names of actions whose top-level `allowed` flag is true (conditions aside)."""
         return [name for name, cfg in self._policy.actions.items() if cfg.allowed]
 
     def check(self, action_name: str, context: dict[str, Any] | None = None) -> PolicyDecision:
+        """Decide whether `action_name` may run now, given facts in `context`.
+
+        `context` carries the data conditions look at (nested dicts, addressed by dotted
+        paths), plus `usage` counters for rate limits and `amount_gbp` for the amount cap.
+        """
         context = context or {}
         action_cfg = self._policy.actions.get(action_name)
 
         if action_cfg is None:
+            # Default-deny: anything the tenant did not list is refused.
             return PolicyDecision(
                 allowed=False,
                 requires_confirmation=False,
@@ -127,7 +151,7 @@ class PolicyEngine:
             escalate_to=None,
         )
 
-    # -- internal checks -------------------------------------------------------------
+    # --- Individual checks --------------------------------------------------
 
     def _first_failing_condition(
         self, action_cfg: ActionPolicy, context: dict[str, Any]

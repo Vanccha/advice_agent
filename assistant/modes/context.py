@@ -1,10 +1,18 @@
-"""Shared per-turn context handed to every mode module (contracts §4.3).
+"""Per-turn context: the bag of collaborators and counters every mode handler receives.
 
-Not a database model — a plain bag of already-constructed collaborators plus this turn's
-masked inputs, so `router.py`/`advisory.py`/`diagnostic.py`/`action.py`/`status_query.py`
-never need to know how the orchestrator builds a gateway, policy engine or ticket service.
+Where this sits: built fresh for each turn by `Orchestrator.build_ctx`, passed to
+`modes.dispatch` and from there to every handler. Not a database model.
+
+Key ideas:
+- Dependency injection by parameter object: handlers never construct a gateway, policy
+  engine or ticket service, which keeps them unit-testable with fakes.
+- Per-turn budgets: `tool_calls_used` and the tool cache live here so one turn cannot
+  spend more than ``max_tool_calls_per_turn`` and repeated lookups cost one call.
+
+Read next: modes/orchestrator.py (where it is built), modes/dispatch.py.
 
 Import as: ``from modes.context import TurnContext``.
+See: docs/contracts.md §4.3.
 """
 from __future__ import annotations
 
@@ -39,9 +47,8 @@ class TurnContext:
     policy_engine: PolicyEngine
     action_executor: ActionExecutor
     ticket_service: TicketService
-    # contracts §4.3 advisory verbalization: the same (already PII-guarded) provider the
-    # rest of the turn uses, so ADVISORY can ask it to narrate `recommend_packages`'
-    # output in the tenant's language without any mode needing to know how the provider is constructed.
+    # The same (already PII-guarded) provider the rest of the turn uses, so ADVISORY can
+    # have `recommend_packages` output narrated without knowing how a provider is built.
     provider: LLMProvider
 
     customer_no: str | None

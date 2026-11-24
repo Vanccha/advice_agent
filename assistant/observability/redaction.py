@@ -1,15 +1,17 @@
-"""The only door out: every payload leaving the process for a trace passes through here.
+"""Redaction: the only door out for anything that becomes a trace.
 
-Contracts §4.7 / §4.9: nothing reaches Langfuse (or the local JSONL fallback) without first
-going through ``privacy.masking.mask_payload`` and being verified by
-``privacy.masking.assert_no_pii``. To make this impossible to bypass accidentally,
-``tracing.py`` never imports ``privacy.masking`` directly and never calls the Langfuse SDK or
-``fallback.append_fallback_record`` with anything that did not pass through
-``redact_payload``/``redact_metadata`` first.
+Where this sits: ``observability`` package. ``tracing.py`` passes every payload through
+``redact_payload`` / ``redact_metadata`` before it reaches Langfuse or the JSONL fallback; this
+is the only observability module that imports ``privacy.masking``, so a payload cannot reach a
+trace without masking.
 
-This module never raises: if masking itself fails, or a masked payload still looks like PII
-(a field name the masking rules don't recognise), the offending value is replaced with a
-placeholder and a warning is logged once — tracing must never block a conversation turn.
+Key ideas:
+- Mask, then verify: ``mask_payload`` first, then ``assert_no_pii`` on the result.
+- Fail-closed content, fail-open flow: if masking fails or PII still shows, the value is
+  replaced by a placeholder and a warning is logged; tracing never blocks a turn.
+
+Read next: ``observability/tracing.py``, ``privacy/masking.py``.
+See: docs/contracts.md §4.7, §4.9.
 """
 from __future__ import annotations
 

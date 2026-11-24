@@ -1,15 +1,22 @@
-"""Regex/validator primitives for UK GDPR masking (contracts §4.7).
+"""Regex and checksum primitives that find PII in free text.
 
-Each detector is intentionally narrow: it is better to miss an edge case than to mask (or
-fail to mask) the wrong thing. Composition and substitution happen in `masking.py`.
+Where this sits: ``privacy`` package, lowest level. Only ``privacy.masking`` calls these
+finders; each returns ``(start, end, cleaned_value)`` spans and never rewrites text itself.
+
+Key ideas:
+- Narrow on purpose: a detector should miss an edge case rather than mask the wrong thing.
+- Luhn check: a 13-19 number run is only called a card number if it passes the Luhn checksum,
+  so an order number of the same length is left alone.
+- Names are never guessed from capitalisation; only an explicit list is matched.
+
+Read next: ``privacy/masking.py``.
+See: docs/contracts.md §4.7.
 """
 from __future__ import annotations
 
 import re
 
-# --------------------------------------------------------------------------------------
-# Patterns
-# --------------------------------------------------------------------------------------
+# --- Patterns ----------------------------------------------------------------
 
 # UK National Insurance number: two prefix letters, six digits, a suffix letter A-D,
 # optionally written in pairs ("QQ 12 34 56 C"). Upper case only, so ordinary words
@@ -32,9 +39,7 @@ IBAN_RE = re.compile(r"\bGB\d{2} ?[A-Z]{4}(?: ?\d{4}){3} ?\d{2}\b")
 _CARD_CANDIDATE_RE = re.compile(r"\b\d(?:[ -]?\d){12,18}\b")
 
 
-# --------------------------------------------------------------------------------------
-# Luhn check
-# --------------------------------------------------------------------------------------
+# --- Luhn check --------------------------------------------------------------
 
 
 def luhn_is_valid(digits: str) -> bool:
@@ -52,30 +57,34 @@ def luhn_is_valid(digits: str) -> bool:
     return total % 10 == 0
 
 
-# --------------------------------------------------------------------------------------
-# Finders — each returns (start, end, cleaned_value) spans over the given text
-# --------------------------------------------------------------------------------------
+# --- Finders — each returns (start, end, cleaned_value) spans over the given text ---
 
 
 def find_emails(text: str) -> list[tuple[int, int, str]]:
+    """Spans of e-mail addresses."""
     return [(m.start(), m.end(), m.group()) for m in EMAIL_RE.finditer(text)]
 
 
 def find_ibans(text: str) -> list[tuple[int, int, str]]:
+    """Spans of UK IBANs (value has spaces removed)."""
     return [(m.start(), m.end(), re.sub(r"\s", "", m.group())) for m in IBAN_RE.finditer(text)]
 
 
 def find_phones(text: str) -> list[tuple[int, int, str]]:
+    """Spans of UK mobile numbers (value is numbers only)."""
     return [(m.start(), m.end(), re.sub(r"\D", "", m.group())) for m in PHONE_RE.finditer(text)]
 
 
 def find_national_ids(text: str) -> list[tuple[int, int, str]]:
+    """Spans of UK National Insurance numbers."""
     return [(m.start(), m.end(), m.group()) for m in NATIONAL_ID_RE.finditer(text)]
 
 
 def find_card_numbers(text: str) -> list[tuple[int, int, str]]:
-    """Only digit runs of length 13-19 that also pass Luhn — e.g. a 16-digit order number
-    that fails Luhn is correctly left alone."""
+    """Spans of number runs of length 13-19 that also pass Luhn.
+
+    A 16-long order number that fails the checksum is correctly left alone.
+    """
     results: list[tuple[int, int, str]] = []
     for m in _CARD_CANDIDATE_RE.finditer(text):
         digits = re.sub(r"[ -]", "", m.group())
@@ -85,9 +94,11 @@ def find_card_numbers(text: str) -> list[tuple[int, int, str]]:
 
 
 def find_full_names(text: str, names: list[str]) -> list[tuple[int, int, str]]:
-    """Match only names from an explicitly injected list — never a guess at capitalized
-    free-text words (contracts §4.7: masking of names must be driven by a list or by
-    structured field names, not pattern-guessed)."""
+    """Spans of names from an explicitly injected list.
+
+    Never a guess at capitalised words (contracts §4.7): a pattern would mask place names
+    and miss lower-case ones. Longest names first so "Ann Lee" wins over "Ann".
+    """
     candidates = sorted({n for n in names if n.strip()}, key=len, reverse=True)
     if not candidates:
         return []

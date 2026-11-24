@@ -1,27 +1,26 @@
-"""Tracing wrapper around ``openinference-instrumentation-openai-agents`` + Langfuse SDK v3
-(contracts §4.9, `docs/observability.md`).
+"""Tracing: one span tree per conversation turn, in Langfuse or the local fallback.
 
-``init_tracing()`` is a no-op when ``LANGFUSE_ENABLED`` is false, and **fail-open** when the
-configured Langfuse host is unreachable or misconfigured: the problem is logged once at
-WARNING and the process falls back to the local JSONL sink (`observability.fallback`) for the
-rest of its life — it never raises, and a turn is never blocked or failed by an
-observability problem.
+Where this sits: ``observability`` package. ``api`` calls ``init_tracing`` once at start-up and
+``trace_turn`` around each turn; ``modes`` and ``mcp_gateway`` callers use the ``record_*``
+helpers. Output goes to Langfuse SDK v3 (with the OpenAI Agents instrumentation) or, when that
+is off or unreachable, to ``observability.fallback``. Payloads are redacted first
+(``observability.redaction``).
 
-Every attribute/metadata value that reaches Langfuse or the fallback sink has already gone
-through ``observability.redaction`` (masked + leak-checked) — see that module's docstring for
-why this wrapper never imports ``privacy.masking`` directly.
+Key ideas:
+- No-op when disabled: ``LANGFUSE_ENABLED=false`` means helpers still work and write locally.
+- Fail-open: an unreachable or misconfigured Langfuse is logged once and the process falls
+  back to the local sink; no tracing problem may fail a customer turn.
+- Mask before egress: every attribute and metadata value is redacted before it is emitted.
+- Filterable tags per turn: tenant, masked customer reference, mode and chaos scenario.
 
-Usage (by `assistant/api` / `assistant/modes`, built in parallel):
+Usage:
 
-    from observability.tracing import init_tracing, trace_turn, record_event, record_decision, record_tool_call
+    handle = init_tracing(get_settings())            # once, at process start-up
+    with trace_turn(masked_customer_ref=ref, conversation_id=cid, mode=mode.value):
+        record_event("mode_decision", {...})         # also record_decision / record_tool_call
 
-    handle = init_tracing(get_settings())   # once, at process startup
-
-    with trace_turn(
-        masked_customer_ref=masked_ref, conversation_id=conv_id, mode=mode.value,
-        chaos_scenario=chaos_scenario, metadata={"tenant": tenant},
-    ):
-        ...                                  # record_event/_decision/_tool_call as you go
+Read next: ``observability/redaction.py``, ``observability/fallback.py``, docs/observability.md.
+See: docs/contracts.md §4.9.
 """
 from __future__ import annotations
 
@@ -38,15 +37,17 @@ from observability.redaction import redact_metadata, redact_payload
 
 logger = logging.getLogger("assistant.observability.tracing")
 
-#: Blocking network calls (Langfuse client construction's implicit health check is lazy, but
-#: ``auth_check()`` is synchronous) are capped so a down Langfuse host cannot stall a demo.
+# ``auth_check()`` is a blocking network call; cap it so a down Langfuse host cannot stall start-up.
 _AUTH_CHECK_TIMEOUT_SECONDS = 5
 
 
 @dataclass
 class TracingHandle:
-    """Returned by ``init_tracing()``; passed around (or fetched via
-    ``get_tracing_handle()``) by every other helper in this module."""
+    """State of tracing for this process, as returned by ``init_tracing()``.
+
+    Other helpers in this module fetch it via ``get_tracing_handle()``. ``enabled`` is False
+    when tracing is off or Langfuse could not be reached (the fallback sink is used).
+    """
 
     enabled: bool
     tenant: str
@@ -54,6 +55,7 @@ class TracingHandle:
     _warned_runtime: bool = field(default=False, repr=False)
 
     def warn_once(self, message: str) -> None:
+        """Log a runtime problem the first time only, so a broken backend is not noisy."""
         if self._warned_runtime:
             return
         self._warned_runtime = True
@@ -90,6 +92,7 @@ def init_tracing(settings: Any) -> TracingHandle:
 
 
 def _try_init_langfuse(settings: Any, tenant: str) -> TracingHandle:
+    """Connect to Langfuse; on any failure return a disabled handle (fail-open)."""
     public_key = getattr(settings, "LANGFUSE_PUBLIC_KEY", None)
     secret_key = getattr(settings, "LANGFUSE_SECRET_KEY", None)
     base_url = getattr(settings, "LANGFUSE_BASE_URL", None)
@@ -101,10 +104,10 @@ def _try_init_langfuse(settings: Any, tenant: str) -> TracingHandle:
                 "LANGFUSE_BASE_URL are not fully configured"
             )
 
-        # Registers this (public_key, secret_key, host) as the process's Langfuse instance;
-        # get_client(public_key=...) below returns the same bound client (see langfuse's
-        # LangfuseResourceManager — the reason we pass public_key explicitly rather than
-        # relying on env-var auto-discovery, which this repo's settings names don't match).
+        # Constructing Langfuse registers these credentials as the process's instance;
+        # get_client(public_key=...) then returns the same client. The key is passed
+        # explicitly because the SDK's env-var auto-discovery uses different variable names
+        # than this repo's settings.
         Langfuse(
             public_key=public_key,
             secret_key=secret_key,
@@ -132,8 +135,10 @@ def _try_init_langfuse(settings: Any, tenant: str) -> TracingHandle:
 
 
 def _instrument_openai_agents() -> None:
-    """Best-effort: a failure here must not take down tracing entirely (the Langfuse side
-    of the handle may still be healthy even if this particular instrumentation isn't)."""
+    """Auto-capture OpenAI Agents SDK spans (best effort).
+
+    A failure must not take tracing down: explicit ``record_*`` calls work without it.
+    """
     try:
         from openinference.instrumentation.openai_agents import OpenAIAgentsInstrumentor
 
@@ -160,9 +165,7 @@ def reset_tracing_for_tests() -> None:
         _current_handle = _DISABLED_HANDLE
 
 
-# --------------------------------------------------------------------------------------
-# Per-turn context
-# --------------------------------------------------------------------------------------
+# --- Per-turn context --------------------------------------------------------
 
 
 @contextmanager
@@ -184,9 +187,9 @@ def trace_turn(
     """
     handle = get_tracing_handle()
     effective_tenant = tenant or handle.tenant
-    # Four filterable tags, as the demo needs: tenant, masked customer reference, mode and
-    # chaos scenario. The masked reference is also set as Langfuse's own user_id, but a tag
-    # is what makes it filterable alongside the others in one query.
+    # Four filterable tags: tenant, masked customer reference, mode and chaos scenario. The
+    # masked reference is also Langfuse's user_id, but only a tag can be filtered together
+    # with the others in one query.
     tags = [effective_tenant, masked_customer_ref or "anonymous", mode, chaos_scenario or "none"]
     safe_metadata = redact_metadata(metadata)
 
@@ -204,10 +207,9 @@ def trace_turn(
         yield
         return
 
-    # propagate_attributes() is documented to never raise (invalid values are logged and
-    # dropped by the SDK itself) — see langfuse's own docstring — so no try/except is needed
-    # around the turn body here. We still mirror to the fallback sink so a demo has the
-    # reasoning trail available locally even when Langfuse is also receiving it.
+    # `propagate_attributes()` never raises (the SDK drops invalid values itself), so the turn
+    # body needs no try/except. The fallback sink is written too, so the trail is also
+    # available locally while Langfuse is receiving it.
     append_fallback_record(fallback_record)
     with propagate_attributes(
         user_id=masked_customer_ref,
@@ -218,9 +220,7 @@ def trace_turn(
         yield
 
 
-# --------------------------------------------------------------------------------------
-# Span-level helpers
-# --------------------------------------------------------------------------------------
+# --- Span-level helpers ------------------------------------------------------
 
 
 def _emit(name: str, *, input: Any = None, output: Any = None) -> None:

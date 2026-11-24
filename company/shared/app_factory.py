@@ -1,3 +1,17 @@
+"""`create_app`: the house-standard FastAPI app every NetSwift service starts from.
+
+Where this sits: called by each service's `main.py`; it wires `errors.py` and
+`metrics.py` into a fresh FastAPI app.
+
+Key ideas:
+- Convention over copy-paste: every service gets `/health`, `/metrics`, the
+  shared error envelope and the same logging format without repeating them.
+- Startup work (create tables, seed, register API keys) is passed in as
+  `on_startup` and runs in the FastAPI lifespan, so importing the module never
+  touches the database.
+
+Read next: `errors.py`, `metrics.py`.
+"""
 from __future__ import annotations
 
 import logging
@@ -11,6 +25,7 @@ from shared.metrics import install_metrics
 
 
 def configure_logging(level: str = "INFO") -> None:
+    """Set up root logging once with the house format."""
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)-7s %(name)s | %(message)s",

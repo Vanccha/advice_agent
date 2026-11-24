@@ -1,18 +1,42 @@
-"""Alternate `LLMProvider` (contracts §8: `LLM_PROVIDER=anthropic`) over the `anthropic`
-SDK. Model comes from `ANTHROPIC_MODEL`, key from `ANTHROPIC_API_KEY`.
+"""Alternate ``LLMProvider`` (``LLM_PROVIDER=anthropic``) over the ``anthropic`` SDK.
 
-Same import-time-safety contract as `llm.openai_agents`: importing this module never
-requires network/credentials; only constructing `AnthropicProvider` does, and it fails
-with a clear `ProviderConfigError` when the key is missing or empty.
+Where this sits: ``llm`` package; selected by ``llm.factory.get_provider`` and wrapped in
+``MaskingProvider``. Message/tool translation lives in ``llm/anthropic_mapping.py``.
+Model comes from ``ANTHROPIC_MODEL``, key from ``ANTHROPIC_API_KEY``.
+
+Key ideas:
+- Same seam as every provider: callers see ``LLMProvider``, not Anthropic types.
+- Structured output without a native mode: force one tool call whose input schema is the
+  Pydantic model's JSON schema, then validate the tool input back into that model.
+- The tool-calling loop is the caller's job; ``run_tool_step`` performs exactly ONE step.
+- Import safety: importing never needs credentials or network; only constructing the class
+  does, and it raises ``ProviderConfigError`` when the key is missing.
+
+Read next: ``llm/anthropic_mapping.py``, ``llm/openai_agents.py`` (the default provider).
+See: docs/contracts.md §8.
 """
 from __future__ import annotations
 
-from typing import Sequence, TypeVar
+from typing import Any, Sequence, TypeVar
 
 from pydantic import BaseModel
 
 from core_common.settings import get_settings
-from llm.base import ChatMessage, ProviderConfigError, ProviderError, ProviderHealth
+from llm.anthropic_mapping import (
+    anthropic_agent_messages,
+    anthropic_messages,
+    anthropic_tool_specs,
+    parse_anthropic_tool_step,
+)
+from llm.base import (
+    AgentMessage,
+    ChatMessage,
+    ProviderConfigError,
+    ProviderError,
+    ProviderHealth,
+    ToolDefinition,
+    ToolStep,
+)
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
@@ -20,6 +44,8 @@ DEFAULT_MODEL = "claude-sonnet-4-5"
 
 
 class AnthropicProvider:
+    """``LLMProvider`` backed by the Anthropic Messages API."""
+
     name = "anthropic"
 
     def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
@@ -49,7 +75,7 @@ class AnthropicProvider:
             response = self._client.messages.create(
                 model=self.model,
                 system=system,
-                messages=_anthropic_messages(messages),
+                messages=anthropic_messages(messages),
                 max_tokens=max_tokens or 1024,
                 temperature=temperature,
             )
@@ -65,9 +91,7 @@ class AnthropicProvider:
         schema: type[TModel],
         temperature: float = 0.0,
     ) -> TModel:
-        # Anthropic has no native structured-output mode; force a single tool call whose
-        # input schema is the Pydantic model's JSON schema, then validate the tool's
-        # input arguments back into that model.
+        # Forcing a tool call is how Anthropic returns schema-shaped data (no native mode).
         tool_name = f"emit_{schema.__name__.lower()}"
         tool = {
             "name": tool_name,
@@ -78,7 +102,7 @@ class AnthropicProvider:
             response = self._client.messages.create(
                 model=self.model,
                 system=system,
-                messages=_anthropic_messages(messages),
+                messages=anthropic_messages(messages),
                 max_tokens=1024,
                 temperature=temperature,
                 tools=[tool],
@@ -93,15 +117,33 @@ class AnthropicProvider:
             f"{self.name}: model did not call '{tool_name}'; cannot produce {schema.__name__}"
         )
 
+    def run_tool_step(
+        self,
+        *,
+        system: str,
+        messages: Sequence[AgentMessage],
+        tools: Sequence[ToolDefinition],
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> ToolStep:
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "system": system,
+            "messages": anthropic_agent_messages(messages),
+            "max_tokens": max_tokens or 1024,
+            "temperature": temperature,
+        }
+        if tools:
+            kwargs["tools"] = anthropic_tool_specs(tools)
+        try:
+            response = self._client.messages.create(**kwargs)
+        except Exception as exc:  # pragma: no cover - depends on live infra
+            raise ProviderError(f"{self.name}: tool step failed: {exc}") from exc
+        return parse_anthropic_tool_step(response)
+
     def health(self) -> ProviderHealth:
         try:
             self._client.models.list(limit=1)
             return ProviderHealth(ok=True, provider=self.name, model=self.model)
         except Exception as exc:  # pragma: no cover - depends on live infra
             return ProviderHealth(ok=False, provider=self.name, model=self.model, detail=str(exc))
-
-
-def _anthropic_messages(messages: Sequence[ChatMessage]) -> list[dict[str, str]]:
-    # Anthropic's `system` is a separate top-level parameter; only user/assistant turns
-    # go in `messages`.
-    return [{"role": m.role, "content": m.content} for m in messages if m.role != "system"]

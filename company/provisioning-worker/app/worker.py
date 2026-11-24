@@ -1,3 +1,20 @@
+"""The job engine: claim, work, heartbeat, finish and sweep.
+
+Where this sits: called once per tick by `main.py`; reads and updates
+`core.provisioning_jobs` and moves the subscription through its lifecycle.
+
+Key ideas:
+- Safe concurrent claiming: `SELECT ... FOR UPDATE SKIP LOCKED` lets several
+  workers poll one queue without ever taking the same job.
+- Heartbeats: a running job updates `heartbeat_at` as it works, which is how
+  a dead worker is told apart from a slow one.
+- Stuck-job sweep: `running` jobs whose heartbeat is older than
+  `stuck_after_seconds` are marked `stuck`, which raises the monitoring alert.
+- Failure is a normal outcome: a failed job records an error code and
+  message for people to act on.
+
+Read next: `company/monitoring/rules.yml`.
+"""
 from __future__ import annotations
 
 import logging
@@ -56,7 +73,7 @@ def _record_subscription_event(session: Session, subscription: Subscription, to_
 
 
 def claim_job(session: Session) -> ProvisioningJob | None:
-    """Claim exactly one queued job with SELECT ... FOR UPDATE SKIP LOCKED."""
+    """Claim exactly one queued job with `SELECT ... FOR UPDATE SKIP LOCKED`."""
     job = session.execute(
         select(ProvisioningJob)
         .where(ProvisioningJob.status == "queued")
@@ -84,6 +101,7 @@ def claim_job(session: Session) -> ProvisioningJob | None:
 
 
 def heartbeat(session: Session, job: ProvisioningJob) -> None:
+    """Record that a running job is still alive."""
     job.heartbeat_at = utcnow()
     job.updated_at = utcnow()
     session.add(job)
@@ -114,6 +132,7 @@ def _assign_modem(session: Session, subscription_id: int) -> Modem:
 
 
 def complete_job_success(session: Session, job: ProvisioningJob, rng: random.Random) -> None:
+    """Finish a job, assign a modem, schedule installation and advance the subscription."""
     now = utcnow()
     job.status = "succeeded"
     job.finished_at = now
@@ -150,6 +169,7 @@ def complete_job_success(session: Session, job: ProvisioningJob, rng: random.Ran
 
 
 def complete_job_failure(session: Session, job: ProvisioningJob, rng: random.Random) -> None:
+    """Finish a job as failed with a random simulated error code."""
     now = utcnow()
     error_code = rng.choice(ERROR_CODES)
     job.status = "failed"
@@ -170,7 +190,7 @@ def run_job_to_completion(
     rng: random.Random,
     sleeper=time.sleep,
 ) -> None:
-    """Simulate 2-6s of provisioning work, heartbeating roughly every second."""
+    """Simulate 2-6 seconds of work, heartbeating about once a second, then succeed or fail."""
     work_seconds = rng.uniform(settings.min_work_seconds, settings.max_work_seconds)
     started = time.monotonic()
     elapsed = 0.0
@@ -190,7 +210,7 @@ def run_job_to_completion(
 
 
 def sweep_stuck_jobs(session: Session, settings: WorkerSettings) -> int:
-    """Mark stale `running` jobs as `stuck`. Never touches a CHAOS_HOLD job."""
+    """Mark stale `running` jobs as `stuck`; never touches a job held by a chaos scenario."""
     cutoff = utcnow() - timedelta(seconds=settings.stuck_after_seconds)
     candidates = session.scalars(
         select(ProvisioningJob).where(
@@ -222,7 +242,7 @@ def sweep_stuck_jobs(session: Session, settings: WorkerSettings) -> int:
 def run_once(
     session: Session, settings: WorkerSettings, rng: random.Random, sleeper=time.sleep
 ) -> bool:
-    """One full tick: sweep stuck jobs, then claim and process at most one job."""
+    """One tick: sweep stuck jobs, then claim and process at most one job."""
     sweep_stuck_jobs(session, settings)
     job = claim_job(session)
     if job is None:

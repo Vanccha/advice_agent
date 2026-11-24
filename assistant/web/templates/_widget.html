@@ -1,6 +1,15 @@
-{# Embeddable chat widget partial — no <html>/<body>, so it can be dropped into any host
-   page (see site.html) or served on its own. Everything is scoped under the
-   "nh-assist-" / "nh-widget" prefixes so it cannot collide with a host page's CSS.
+{# Chat widget partial: the markup that static/widget.js brings to life.
+
+   Where this sits: included by site.html (and rendered alone by preview.py). No <html>/<body>,
+   so it can be dropped into any host page.
+
+   Key ideas:
+   - Stable data-testid / id hooks are a contract (docs/contracts.md section 4.2): the JS and
+     UI tests find elements by them, so rename them only together.
+   - Everything is scoped under the "nh-assist-" / "nh-widget" prefixes so it cannot collide
+     with a host page's CSS.
+
+   Read next: static/widget.js.
 
    Jinja variables (all optional, used for local greeting only — never trusted as
    authentication; the real session lives in the cookie set by POST /api/login):
@@ -48,10 +57,9 @@
     <div class="nh-widget__body">
       <ol id="chat-messages" class="nh-widget__messages" data-testid="chat-messages" aria-live="polite">
         <li class="nh-msg nh-msg--assistant" data-role="assistant">
-          <div class="nh-msg__bubble">
-            Hello! I am NetSwift's digital support assistant. You can ask me about billing,
-            faults, installation or changing your package.
-          </div>
+          {# No whitespace inside the bubble: it uses `white-space: pre-wrap`, so template
+             indentation would be rendered as visible spaces. #}
+          <div class="nh-msg__bubble">Hello! I am NetSwift's digital support assistant. You can ask me about billing, faults, installation or changing your package.</div>
           <time class="nh-msg__time"></time>
         </li>
       </ol>

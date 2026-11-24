@@ -1,5 +1,14 @@
-"""Pydantic input/output models for every `mcp-monitoring` tool
-(docs/contracts.md §3, §2.7)."""
+"""Pydantic models for the `mcp-monitoring` tools and the Alertmanager webhook payload.
+
+Where this sits: imported by `tools.py` and `webhooks.py`
+(docs/contracts.md section 3 and 2.7).
+
+Key ideas:
+- The Alertmanager payload model is the inbound contract; `NormalizedAlert` is
+  the outbound one. The adapter translates between them.
+
+Read next: `webhooks.py`.
+"""
 from __future__ import annotations
 
 from typing import Any, Literal, Optional
@@ -19,9 +28,7 @@ MONITORED_SERVICES: list[str] = [
 ]
 
 
-# --------------------------------------------------------------------------
-# get_service_health
-# --------------------------------------------------------------------------
+# --- get_service_health ---------------------------------------------------
 
 
 class GetServiceHealthInput(BaseModel):
@@ -49,9 +56,7 @@ class GetServiceHealthOutput(BaseModel):
     )
 
 
-# --------------------------------------------------------------------------
-# query_metric
-# --------------------------------------------------------------------------
+# --- query_metric ---------------------------------------------------------
 
 
 class QueryMetricInput(BaseModel):
@@ -64,9 +69,7 @@ class QueryMetricOutput(BaseModel):
     result: Any = Field(description="raw Prometheus result for result_type, passed through unchanged")
 
 
-# --------------------------------------------------------------------------
-# list_active_alerts
-# --------------------------------------------------------------------------
+# --- list_active_alerts ---------------------------------------------------
 
 
 class ListActiveAlertsInput(BaseModel):

@@ -1,3 +1,15 @@
+"""Prometheus metrics for the gateway: charges, refunds, latency and the outage flag.
+
+Where this sits: scraped via `/metrics`; the `PaymentGatewayDown` and
+`HighPaymentFailureRate` alert rules read these series.
+
+Key ideas:
+- `psp_charges_total{status}` makes failure ratio a rate query, not a log search.
+- `psp_outage` exposes deliberate outage mode, so alerts can tell "down on
+  purpose" from "crashed".
+
+Read next: `company/monitoring/rules.yml`.
+"""
 from __future__ import annotations
 
 import time
@@ -29,10 +41,12 @@ psp_outage = Gauge(
 
 
 def set_outage_gauge(active: bool) -> None:
+    """Mirror the outage flag into `psp_outage`."""
     psp_outage.set(1 if active else 0)
 
 
 def install_psp_metrics(app: FastAPI) -> None:
+    """Add middleware that times every request."""
     @app.middleware("http")
     async def _psp_timing(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]

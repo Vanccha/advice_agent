@@ -1,6 +1,26 @@
-"""Read-only `mcp-core` tools. All but `list_packages` read `diag.*` views
-through the `readonly_diag` role; `list_packages` has no view (it's public
-reference data) so it reads the core REST catalogue instead.
+"""Read-only `mcp-core` tools.
+
+Where this sits: registered by `main.py`; called by the assistant over MCP.
+Reads `diag.*` views through the `readonly_diag` role (via `diag.py`);
+`list_packages` has no view (public reference data) so it reads the core REST
+catalogue instead.
+
+Key ideas:
+- Read-only DB role enforced by the database, not by code: even a bug here
+  cannot write.
+- Every handler follows one shape: validate input, run one bound-parameter
+  SQL statement, map rows into an output model, return a `ToolResult`.
+  Failures become `DIAG_DB_ERROR`, never exceptions.
+- SQL uses `CAST(:param AS type) IS NULL OR ...` so one statement serves
+  optional filters while keeping parameters bound.
+
+Table of contents: find_customer, get_subscription_status,
+get_subscription_timeline, get_provisioning_status, get_installation_status,
+get_modem_status, get_active_incidents_for_region, get_incident_detail,
+list_packages, get_notification_history, get_credit_history, get_region_health, and
+finally `register_read_tools` (names and descriptions of all twelve).
+
+Read next: `tools_write.py`.
 """
 from __future__ import annotations
 
@@ -13,11 +33,14 @@ from .deps import core_api_client
 from .diag import DiagQueryError, query_diag
 from .models import (
     AffectedSubscription,
+    CreditHistoryEntry,
     CustomerSummary,
     FindCustomerInput,
     FindCustomerOutput,
     GetActiveIncidentsForRegionInput,
     GetActiveIncidentsForRegionOutput,
+    GetCreditHistoryInput,
+    GetCreditHistoryOutput,
     GetIncidentDetailInput,
     GetIncidentDetailOutput,
     GetInstallationStatusInput,
@@ -52,9 +75,7 @@ SOURCE_DIAG = "diag_db"
 SOURCE_CORE = "core_api"
 
 
-# --------------------------------------------------------------------------
-# find_customer
-# --------------------------------------------------------------------------
+# --- find_customer --------------------------------------------------------
 
 _FIND_CUSTOMER_SQL = """
     SELECT customer_no, full_name, phone, email, district, city, region_code,
@@ -69,6 +90,7 @@ _FIND_CUSTOMER_SQL = """
 
 
 async def handle_find_customer(inp: FindCustomerInput) -> ToolResult[Any]:
+    """Look a customer up by number, phone or email (at least one is required); never returns the national id."""
     if not (inp.customer_no or inp.phone or inp.email):
         return fail("INVALID_INPUT", "provide at least one of customer_no, phone, email", SOURCE_DIAG)
     try:
@@ -82,9 +104,7 @@ async def handle_find_customer(inp: FindCustomerInput) -> ToolResult[Any]:
     return ok(FindCustomerOutput(customers=customers), SOURCE_DIAG)
 
 
-# --------------------------------------------------------------------------
-# get_subscription_status
-# --------------------------------------------------------------------------
+# --- get_subscription_status ----------------------------------------------
 
 _SUBSCRIPTION_STATUS_SQL = """
     SELECT customer_no, subscription_id, package_code, package_name, status,
@@ -98,6 +118,7 @@ _SUBSCRIPTION_STATUS_SQL = """
 
 
 async def handle_get_subscription_status(inp: GetSubscriptionStatusInput) -> ToolResult[Any]:
+    """Subscription status and plan details by customer number or subscription id."""
     if not (inp.customer_no or inp.subscription_id):
         return fail("INVALID_INPUT", "provide customer_no or subscription_id", SOURCE_DIAG)
     try:
@@ -111,9 +132,7 @@ async def handle_get_subscription_status(inp: GetSubscriptionStatusInput) -> Too
     return ok(GetSubscriptionStatusOutput(subscriptions=subs), SOURCE_DIAG)
 
 
-# --------------------------------------------------------------------------
-# get_subscription_timeline
-# --------------------------------------------------------------------------
+# --- get_subscription_timeline --------------------------------------------
 
 _TIMELINE_SQL = """
     SELECT customer_no, subscription_id, event_type, from_status, to_status,
@@ -125,6 +144,7 @@ _TIMELINE_SQL = """
 
 
 async def handle_get_subscription_timeline(inp: GetSubscriptionTimelineInput) -> ToolResult[Any]:
+    """Lifecycle events of one subscription, oldest first."""
     try:
         rows = query_diag(_TIMELINE_SQL, {"subscription_id": inp.subscription_id})
     except DiagQueryError as exc:
@@ -133,9 +153,7 @@ async def handle_get_subscription_timeline(inp: GetSubscriptionTimelineInput) ->
     return ok(GetSubscriptionTimelineOutput(events=events), SOURCE_DIAG)
 
 
-# --------------------------------------------------------------------------
-# get_provisioning_status
-# --------------------------------------------------------------------------
+# --- get_provisioning_status ----------------------------------------------
 
 _PROVISIONING_STATUS_SQL = """
     SELECT customer_no, subscription_id, job_id, status, attempt_count,
@@ -148,6 +166,7 @@ _PROVISIONING_STATUS_SQL = """
 
 
 async def handle_get_provisioning_status(inp: GetProvisioningStatusInput) -> ToolResult[Any]:
+    """Provisioning jobs of one subscription, including the stuck flag computed by the view."""
     try:
         rows = query_diag(_PROVISIONING_STATUS_SQL, {"subscription_id": inp.subscription_id})
     except DiagQueryError as exc:
@@ -156,9 +175,7 @@ async def handle_get_provisioning_status(inp: GetProvisioningStatusInput) -> Too
     return ok(GetProvisioningStatusOutput(jobs=jobs), SOURCE_DIAG)
 
 
-# --------------------------------------------------------------------------
-# get_installation_status
-# --------------------------------------------------------------------------
+# --- get_installation_status ----------------------------------------------
 
 _INSTALLATION_STATUS_SQL = """
     SELECT customer_no, subscription_id, appointment_id, scheduled_date,
@@ -170,6 +187,7 @@ _INSTALLATION_STATUS_SQL = """
 
 
 async def handle_get_installation_status(inp: GetInstallationStatusInput) -> ToolResult[Any]:
+    """Installation appointments of one subscription."""
     try:
         rows = query_diag(_INSTALLATION_STATUS_SQL, {"subscription_id": inp.subscription_id})
     except DiagQueryError as exc:
@@ -178,9 +196,7 @@ async def handle_get_installation_status(inp: GetInstallationStatusInput) -> Too
     return ok(GetInstallationStatusOutput(appointments=appointments), SOURCE_DIAG)
 
 
-# --------------------------------------------------------------------------
-# get_modem_status
-# --------------------------------------------------------------------------
+# --- get_modem_status -----------------------------------------------------
 
 _MODEM_STATUS_SQL = """
     SELECT customer_no, subscription_id, serial_no, model, firmware, status,
@@ -192,6 +208,7 @@ _MODEM_STATUS_SQL = """
 
 
 async def handle_get_modem_status(inp: GetModemStatusInput) -> ToolResult[Any]:
+    """Modem (CPE) records of one subscription."""
     try:
         rows = query_diag(_MODEM_STATUS_SQL, {"subscription_id": inp.subscription_id})
     except DiagQueryError as exc:
@@ -200,9 +217,7 @@ async def handle_get_modem_status(inp: GetModemStatusInput) -> ToolResult[Any]:
     return ok(GetModemStatusOutput(modems=modems), SOURCE_DIAG)
 
 
-# --------------------------------------------------------------------------
-# get_active_incidents_for_region
-# --------------------------------------------------------------------------
+# --- get_active_incidents_for_region --------------------------------------
 
 _ACTIVE_INCIDENTS_FOR_REGION_SQL = """
     SELECT incident_no, region_code, severity, status, title, description,
@@ -214,6 +229,7 @@ _ACTIVE_INCIDENTS_FOR_REGION_SQL = """
 
 
 async def handle_get_active_incidents_for_region(inp: GetActiveIncidentsForRegionInput) -> ToolResult[Any]:
+    """Open or monitoring incidents in one region, newest first."""
     try:
         rows = query_diag(_ACTIVE_INCIDENTS_FOR_REGION_SQL, {"region_code": inp.region_code})
     except DiagQueryError as exc:
@@ -222,9 +238,7 @@ async def handle_get_active_incidents_for_region(inp: GetActiveIncidentsForRegio
     return ok(GetActiveIncidentsForRegionOutput(incidents=incidents), SOURCE_DIAG)
 
 
-# --------------------------------------------------------------------------
-# get_incident_detail
-# --------------------------------------------------------------------------
+# --- get_incident_detail --------------------------------------------------
 
 _INCIDENT_SQL = """
     SELECT incident_no, region_code, severity, status, title, description,
@@ -242,6 +256,7 @@ _INCIDENT_AFFECTED_SQL = """
 
 
 async def handle_get_incident_detail(inp: GetIncidentDetailInput) -> ToolResult[Any]:
+    """One incident plus its affected customers; resolved incidents are still answerable."""
     try:
         incident_rows = query_diag(_INCIDENT_SQL, {"incident_no": inp.incident_no})
         affected_rows = query_diag(_INCIDENT_AFFECTED_SQL, {"incident_no": inp.incident_no})
@@ -257,12 +272,11 @@ async def handle_get_incident_detail(inp: GetIncidentDetailInput) -> ToolResult[
     return ok(GetIncidentDetailOutput(incident=detail), SOURCE_DIAG)
 
 
-# --------------------------------------------------------------------------
-# list_packages (core REST — public catalogue, no diag view)
-# --------------------------------------------------------------------------
+# --- list_packages (core REST — public catalogue, no diag view) -----------
 
 
 async def handle_list_packages(inp: ListPackagesInput) -> ToolResult[Any]:
+    """Public package catalogue from the core REST API, with optional filters."""
     params: dict[str, Any] = {}
     if inp.profile is not None:
         params["profile"] = inp.profile
@@ -278,9 +292,7 @@ async def handle_list_packages(inp: ListPackagesInput) -> ToolResult[Any]:
     return ok(ListPackagesOutput(packages=packages, total=body.get("total", len(packages))), SOURCE_CORE)
 
 
-# --------------------------------------------------------------------------
-# get_notification_history
-# --------------------------------------------------------------------------
+# --- get_notification_history ---------------------------------------------
 
 _NOTIFICATION_HISTORY_SQL = """
     SELECT customer_no, subscription_id, channel, template_code, status, sent_at
@@ -292,6 +304,7 @@ _NOTIFICATION_HISTORY_SQL = """
 
 
 async def handle_get_notification_history(inp: GetNotificationHistoryInput) -> ToolResult[Any]:
+    """Notifications sent to a customer, newest first."""
     try:
         rows = query_diag(
             _NOTIFICATION_HISTORY_SQL,
@@ -303,9 +316,32 @@ async def handle_get_notification_history(inp: GetNotificationHistoryInput) -> T
     return ok(GetNotificationHistoryOutput(notifications=notifications), SOURCE_DIAG)
 
 
-# --------------------------------------------------------------------------
-# get_region_health
-# --------------------------------------------------------------------------
+# --- get_credit_history ---------------------------------------------------
+
+_CREDIT_HISTORY_SQL = """
+    SELECT customer_no, subscription_id, amount_gbp, reason, created_at
+    FROM diag.credit_history
+    WHERE customer_no = :customer_no
+      AND created_at >= now() - make_interval(days => CAST(:days AS int))
+    ORDER BY created_at DESC
+"""
+
+
+async def handle_get_credit_history(inp: GetCreditHistoryInput) -> ToolResult[Any]:
+    """Goodwill credits granted to a customer inside the look-back window, newest first.
+
+    The assistant's policy counts these (`credit.existing_count_30d`) before it offers
+    another credit, so the answer must come from the company's own records.
+    """
+    try:
+        rows = query_diag(_CREDIT_HISTORY_SQL, {"customer_no": inp.customer_no, "days": inp.days})
+    except DiagQueryError as exc:
+        return fail("DIAG_DB_ERROR", exc.message, SOURCE_DIAG)
+    credits = [CreditHistoryEntry(**row) for row in rows]
+    return ok(GetCreditHistoryOutput(days=inp.days, count=len(credits), credits=credits), SOURCE_DIAG)
+
+
+# --- get_region_health ----------------------------------------------------
 
 _REGION_HEALTH_SQL = """
     SELECT region_code, total_subscriptions, active_subscriptions,
@@ -317,6 +353,7 @@ _REGION_HEALTH_SQL = """
 
 
 async def handle_get_region_health(inp: GetRegionHealthInput) -> ToolResult[Any]:
+    """Aggregate health of one region, or of every region when none is given."""
     try:
         rows = query_diag(_REGION_HEALTH_SQL, {"region_code": inp.region_code})
     except DiagQueryError as exc:
@@ -326,6 +363,7 @@ async def handle_get_region_health(inp: GetRegionHealthInput) -> ToolResult[Any]
 
 
 def register_read_tools(mcp: Any) -> None:
+    """Register all twelve read tools (names and descriptions are part of the public contract)."""
     register_tool(
         mcp,
         name="find_customer",
@@ -405,6 +443,14 @@ def register_read_tools(mcp: Any) -> None:
         input_model=GetNotificationHistoryInput,
         output_model=GetNotificationHistoryOutput,
         handler=handle_get_notification_history,
+    )
+    register_tool(
+        mcp,
+        name="get_credit_history",
+        description="Get the goodwill credits granted to a customer in the last N days (default 30).",
+        input_model=GetCreditHistoryInput,
+        output_model=GetCreditHistoryOutput,
+        handler=handle_get_credit_history,
     )
     register_tool(
         mcp,

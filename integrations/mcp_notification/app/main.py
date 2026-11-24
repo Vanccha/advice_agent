@@ -1,8 +1,12 @@
 """`mcp-notification` entrypoint: `uvicorn app.main:app`.
 
-Exposes the 2 tools listed for `mcp-notification` in docs/contracts.md §3
-over MCP streamable HTTP at `POST /mcp`, plus `GET /health` and `GET
-/metrics`.
+Where this sits: process entry point of the `mcp-notification` container.
+
+Key ideas:
+- MCP server exposes tools with JSON schemas at `POST /mcp`, plus `/health`
+  and `/metrics`.
+
+Read next: `tools.py`.
 """
 from __future__ import annotations
 

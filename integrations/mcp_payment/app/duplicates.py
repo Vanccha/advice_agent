@@ -1,11 +1,15 @@
-"""Pure, deterministic duplicate-charge detection — the logic
-`detect_duplicate_charges` is built on, kept separate from any HTTP/DB code
-so it can be unit-tested with planted data (docs/contracts.md §3: "the
-assistant's double-charge diagnosis depends on it").
+"""Pure, deterministic duplicate-charge detection.
 
-A duplicate group is two or more `succeeded` charges for the same customer
-with the same amount, all within `window_minutes` of the first charge in
-the group.
+Where this sits: used by `detect_duplicate_charges` in `tools.py`; the
+assistant's double-charge diagnosis depends on it (docs/contracts.md section 3).
+
+Key ideas:
+- Keep logic free of HTTP/DB code so it can be unit-tested with planted data.
+- A duplicate group is two or more `succeeded` charges for the same customer
+  with the same amount, all within `window_minutes` of the first charge in the
+  group (anchored on the first charge, so a long chain does not drift).
+
+Read next: `tests/test_duplicate_detection.py`.
 """
 from __future__ import annotations
 
@@ -20,10 +24,11 @@ def _parse_timestamp(value: str) -> datetime.datetime:
 
 
 def find_duplicate_groups(charges: list[dict[str, Any]], window_minutes: int) -> list[dict[str, Any]]:
-    """Group `succeeded` charges by amount, then cluster each amount's charges
-    by time: a new cluster starts whenever a charge is more than
-    `window_minutes` after the *first* charge of the current cluster. Only
-    clusters with 2+ charges are returned (a lone charge isn't a duplicate).
+    """Group `succeeded` charges by amount, then cluster each amount's charges by time.
+
+    A new cluster starts whenever a charge is more than `window_minutes` after the
+    first charge of the current cluster. Only clusters with 2+ charges are
+    returned, since a lone charge is not a duplicate.
     """
     window = datetime.timedelta(minutes=window_minutes)
 

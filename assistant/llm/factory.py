@@ -1,10 +1,17 @@
-"""`get_provider()` selects an `LLMProvider` implementation by `LLM_PROVIDER` (contracts
-§8: `openai_agents | anthropic | scripted`) and always wraps it in the PII guard.
+"""``get_provider()``: pick the configured ``LLMProvider`` and always wrap it in the PII guard.
 
-Import as: ``from llm.factory import get_provider``.
+Where this sits: ``llm`` package; called once at start-up by ``api`` and by evals. It reads
+``LLM_PROVIDER`` (``openai_agents | anthropic | scripted``) and builds the matching class.
 
-Importing this module is always safe (no network, no credential checks) — only calling
-`get_provider()` for a live provider can raise `ProviderConfigError`, and only then.
+Key ideas:
+- Factory + lazy imports: a vendor module is imported only when selected, so a missing
+  optional SDK cannot break the other providers.
+- Always wrapped: callers never receive an unguarded provider (``MaskingProvider``).
+- Importing this module is safe (no network, no credential checks); only ``get_provider()``
+  can raise ``ProviderConfigError``.
+
+Read next: ``llm/guard.py``, ``llm/openai_agents.py``.
+See: docs/contracts.md §8.
 """
 from __future__ import annotations
 

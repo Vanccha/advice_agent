@@ -1,10 +1,15 @@
 """`mcp-monitoring` entrypoint: `uvicorn app.main:app`.
 
-Exposes the three tools listed for `mcp-monitoring` in docs/contracts.md §3 over MCP
-streamable HTTP at `POST /mcp`, plus `GET /health`, `GET /metrics` and the one plain
-(non-MCP) HTTP endpoint this adapter needs: `POST /webhooks/alertmanager`, which the
-company's Alertmanager posts to. That route is passed to `build_server` as
-`extra_routes` so it is registered before the MCP app's catch-all mount at "/".
+Where this sits: process entry point of the `mcp-monitoring` container.
+
+Key ideas:
+- MCP server exposes three tools with JSON schemas at `POST /mcp`, plus
+  `/health`, `/metrics` and one plain HTTP endpoint,
+  `POST /webhooks/alertmanager`.
+- That route is passed as `extra_routes` so it is registered before the MCP
+  app's catch-all mount at "/".
+
+Read next: `webhooks.py`, `tools.py`.
 """
 from __future__ import annotations
 

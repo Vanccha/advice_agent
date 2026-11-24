@@ -5,7 +5,7 @@ file's shared `invariants`. As a secondary, best-effort check (`conversation_en`
 profile is also driven through the real `Orchestrator`'s ADVISORY mode, to confirm the
 verbalised reply never names a package outside the live catalogue — this does not
 have to reproduce `expected_best` (the deterministic field-by-field parser in
-`modes/advisory.py` does not pretend to be an NLU model), so it is scored as an additional,
+`modes/advisory/` does not pretend to be an NLU model), so it is scored as an additional,
 separate check rather than folded into the primary pass/fail for `expected_best`.
 
 Import as: ``from evals.advisory_suite import run_advisory_suite``.
@@ -68,7 +68,7 @@ def _check_conversation_honesty(
         return
 
     reply = turn.reply_en or ""
-    # `modes/advisory.py:_format_offer` renders each offer as "• <name> — <down>/<up> Mbps,
+    # `modes/advisory/narration.py:_format_offer` renders each offer as "• <name> — <down>/<up> Mbps,
     # <price>/month" — parse that exact bullet shape to recover which package names the reply
     # actually names, without re-deriving the profile ourselves.
     mentioned = [line[2:].split(" — ")[0].strip() for line in reply.split("\n") if line.startswith("• ")]

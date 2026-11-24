@@ -1,9 +1,20 @@
-"""Mutating `mcp-core` tools. Every one of these goes through core-api's REST
-API with the `partner-integration` key — never SQL. Two of them
-(`request_refund`, `reschedule_installation`) call endpoints the partner
-account has no scope for (`billing:refund`, `appointments:write`) and are
-expected to always come back `ToolResult.fail("SCOPE_DENIED", ...)`: that is
-the hard boundary this layer exists to prove, not a bug.
+"""Mutating `mcp-core` tools.
+
+Where this sits: registered by `main.py`; every call goes to core-api's REST
+API with the `partner-integration` key, never SQL.
+
+Key ideas:
+- Authority belongs to the company: `request_refund` and
+  `reschedule_installation` call endpoints the partner account has no scope
+  for (`billing:refund`, `appointments:write`) and always come back
+  `ToolResult.fail("SCOPE_DENIED", ...)`. That is the boundary this layer
+  exists to prove, not a bug.
+- Idempotency keys: `apply_outage_credit` sends a key (caller-supplied or
+  generated) so a retried call cannot credit the customer twice.
+- Handlers translate response bodies into output models explicitly, so the
+  company can add fields without changing the tool contract.
+
+Read next: `models.py` for the schemas.
 """
 from __future__ import annotations
 
@@ -17,6 +28,8 @@ from .deps import core_api_client
 from .models import (
     ApplyOutageCreditInput,
     ApplyOutageCreditOutput,
+    EnqueueProvisioningJobInput,
+    EnqueueProvisioningJobOutput,
     RequestRefundInput,
     RequestRefundOutput,
     RescheduleInstallationInput,
@@ -26,12 +39,12 @@ from .models import (
     RetryProvisioningJobInput,
     RetryProvisioningJobOutput,
 )
-from app.models import EnqueueProvisioningJobInput, EnqueueProvisioningJobOutput
 
 SOURCE_CORE = "core_api"
 
 
 async def handle_retry_provisioning_job(inp: RetryProvisioningJobInput) -> ToolResult[Any]:
+    """Re-queue a failed or stuck provisioning job through core-api."""
     result = await core_api_client().post(f"/v1/provisioning-jobs/{inp.job_id}/retry", SOURCE_CORE)
     if not result.ok:
         return result
@@ -49,6 +62,7 @@ async def handle_retry_provisioning_job(inp: RetryProvisioningJobInput) -> ToolR
 
 
 async def handle_enqueue_provisioning_job(inp: EnqueueProvisioningJobInput) -> ToolResult[Any]:
+    """Queue a first provisioning job for a subscription through core-api."""
     result = await core_api_client().post(
         f"/v1/subscriptions/{inp.subscription_id}/provisioning-jobs", SOURCE_CORE
     )
@@ -68,6 +82,7 @@ async def handle_enqueue_provisioning_job(inp: EnqueueProvisioningJobInput) -> T
 
 
 async def handle_resend_activation_notification(inp: ResendActivationNotificationInput) -> ToolResult[Any]:
+    """Resend a customer notification; core-api enforces the resend cooldown."""
     payload = {
         "customer_no": inp.customer_no,
         "template_code": inp.template_code,
@@ -91,6 +106,7 @@ async def handle_resend_activation_notification(inp: ResendActivationNotificatio
 
 
 async def handle_apply_outage_credit(inp: ApplyOutageCreditInput) -> ToolResult[Any]:
+    """Grant a goodwill credit; sends an idempotency key so a retry cannot pay twice."""
     idempotency_key = inp.idempotency_key or f"mcp-core-credit-{uuid.uuid4()}"
     payload = {
         "subscription_id": inp.subscription_id,
@@ -165,6 +181,7 @@ async def handle_reschedule_installation(inp: RescheduleInstallationInput) -> To
 
 
 def register_write_tools(mcp: Any) -> None:
+    """Register the mutating tools (names and descriptions are part of the public contract)."""
     register_tool(
         mcp,
         name="retry_provisioning_job",

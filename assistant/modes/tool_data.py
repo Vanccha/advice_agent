@@ -1,14 +1,20 @@
-"""Shared helpers for reading a tool call's payload (contracts §3).
+"""Helpers for reading a tool call's payload, whatever shape it arrives in.
 
-``ToolCallOutcome.data`` holds the adapter's **own** ``ToolResult`` envelope
-(``{ok, data, error, source}``) — a second layer underneath the gateway's own
-``ToolCallOutcome`` — and that inner ``data`` is in turn often a dict wrapping a single
-named collection (e.g. ``{"customers": [...]}``, ``{"subscriptions": [...]}``) rather than
-the bare record. `FakeGateway`-backed tests hand back already-flat dicts (or a bare
-``{"items": [...]}``), so every helper here degrades gracefully when there is no adapter
-envelope to unwrap, which keeps both shapes working unchanged.
+Where this sits: used by every handler that calls the gateway (`diagnostic`,
+`status_query`, `advisory`, `dispatch`) and by `api/` and `evals/`. Pure functions.
 
-Import as: ``from modes.tool_data import unwrap, first_record, as_list``.
+Key ideas:
+- Two envelopes: `ToolCallOutcome.data` holds the adapter's own ``{ok, data, error, source}``
+  result, and that inner ``data`` often wraps one named collection
+  (``{"customers": [...]}``) rather than the bare record.
+- Be liberal in what you read: tests hand back already-flat dicts or ``{"items": [...]}``,
+  so every helper degrades gracefully when there is no envelope to unwrap.
+- Failure collapses to "nothing" (None / empty list): callers decide how to react.
+
+Read next: modes/diagnostic/ (the main consumer).
+
+Import as: ``from modes.tool_data import unwrap, first_record, as_list, raw_payload``.
+See: docs/contracts.md §3.
 """
 from __future__ import annotations
 

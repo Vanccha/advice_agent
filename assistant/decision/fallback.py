@@ -1,9 +1,16 @@
-"""The confidence floor (contracts §4.5 / §4.6): a `DecisionService` call below
-`policy.decision.min_confidence` must never silently drive routing or urgency. Replace it
-with the deterministic table in `routing.yaml` and flag it so the caller hands over to a
-human instead of guessing.
+"""The confidence floor: never let a low-confidence model answer drive routing or urgency.
 
-Import as: ``from decision.fallback import apply_confidence_floor, FallbackResult``.
+Where this sits: ``decision`` package. Callers in ``modes`` pass each ``Decision`` through
+``apply_confidence_floor`` together with ``routing.yaml`` (``RoutingFile``).
+
+Key ideas:
+- Confidence floor: below ``policy.decision.min_confidence`` the model's guess is replaced by
+  the deterministic table in ``routing.yaml`` and flagged, so a human takes over.
+- Urgency only ever moves up (``urgency_floor``), never down, on a doubtful answer.
+- Fail safe: with no table to fall back on, the decision is returned but marked ``escalated``.
+
+Read next: ``decision/llm_structured.py``, ``core_common/config_models.py`` (``RoutingFile``).
+See: docs/contracts.md §4.5, §4.6.
 """
 from __future__ import annotations
 
@@ -11,15 +18,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from core_common.config import RoutingFile
+from core_common.config_models import RoutingFile
 from core_common.types import Decision, Department, Priority
 
-#: Public so callers that need to enforce `routing.yaml: urgency_floor` themselves (e.g.
-#: `modes.action`, which must never let urgency drop below the floor even for a *confident*
-#: decision — this function only raises-to-floor in the low-confidence branch below) can
-#: reuse the same ranking instead of redefining it.
+# Public: callers such as `modes.action` must enforce `urgency_floor` even for a *confident*
+# decision (this module only raises-to-floor on low confidence), and reuse this ranking.
 PRIORITY_ORDER = {"LOW": 0, "NORMAL": 1, "HIGH": 2, "URGENT": 3}
-_PRIORITY_ORDER = PRIORITY_ORDER
 
 
 class FallbackResult(BaseModel):
@@ -81,7 +85,7 @@ def apply_confidence_floor(
     if isinstance(decision.value, Priority):
         if issue_type and issue_type in routing_config.urgency_floor:
             floor_priority = Priority(routing_config.urgency_floor[issue_type])
-            if _PRIORITY_ORDER[floor_priority.value] > _PRIORITY_ORDER[decision.value.value]:
+            if PRIORITY_ORDER[floor_priority.value] > PRIORITY_ORDER[decision.value.value]:
                 replaced = Decision(
                     value=floor_priority,
                     confidence=0.0,

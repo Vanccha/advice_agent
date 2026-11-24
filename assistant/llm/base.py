@@ -1,30 +1,89 @@
-"""The provider seam: every model call in the assistant goes through this `Protocol`
-(contracts §8: `LLM_PROVIDER ∈ {openai_agents, anthropic, scripted}`).
+"""The provider seam: the ``LLMProvider`` Protocol and the neutral types around it.
 
-Import as: ``from llm.base import ChatMessage, LLMProvider, ProviderHealth, ProviderError,
-ProviderConfigError``.
+Where this sits: bottom of the ``llm`` package. Every model call in the assistant goes
+through this Protocol; ``decision`` and ``modes`` call it, the vendor modules implement it,
+``factory.get_provider()`` selects one and wraps it in ``guard.MaskingProvider``.
+Nothing here does I/O.
 
-Nothing here does I/O. Concrete providers live in sibling modules
-(`openai_agents.py`, `anthropic_provider.py`, `scripted.py`); `factory.get_provider()`
-selects one and wraps it in the PII guard (`guard.MaskingProvider`) before handing it out.
+Key ideas:
+- Provider seam / dependency inversion: callers depend on this interface, never on OpenAI or
+  Anthropic types, so a vendor can be swapped by changing ``LLM_PROVIDER``.
+- Structured output: ``structured()`` returns a validated Pydantic object, not free text.
+- Tool calling loop is the caller's job: ``run_tool_step()`` is exactly ONE model step; the
+  caller runs the tools (through policy and audit) and calls again.
+
+Read next: ``llm/factory.py``, ``llm/guard.py``, ``llm/scripted.py``.
+See: docs/contracts.md §8.
 """
 from __future__ import annotations
 
-from typing import Literal, Protocol, Sequence, TypeVar, runtime_checkable
+from typing import Any, Literal, Protocol, Sequence, TypeVar, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
 
 class ChatMessage(BaseModel):
+    """One plain chat turn (no tools). Content must already be masked."""
+
     model_config = ConfigDict(frozen=True)
 
     role: Literal["system", "user", "assistant"]
     content: str
 
 
+class ToolDefinition(BaseModel):
+    """One function-style tool offered to a model for `run_tool_step` (name, description and
+    a JSON-schema for its arguments). Provider-neutral; each provider maps it to its own
+    wire format."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    description: str = ""
+    input_schema: dict[str, Any] = Field(
+        default_factory=lambda: {"type": "object", "properties": {}}
+    )
+
+
+class ToolCall(BaseModel):
+    """A tool invocation requested by the model. `id` pairs it with its result message."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentMessage(BaseModel):
+    """One turn of a tool-using conversation: a user message, an assistant message (text
+    and/or the tool calls it made) or a tool result (`tool_call_id` + `tool_name` + the
+    result as text). Everything in `content` must already be masked."""
+
+    model_config = ConfigDict(frozen=True)
+
+    role: Literal["user", "assistant", "tool"]
+    content: str = ""
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    tool_call_id: str | None = None
+    tool_name: str | None = None
+
+
+class ToolStep(BaseModel):
+    """What the model did in one `run_tool_step`: requested tool calls (possibly several)
+    and/or said something in plain text. No tool calls means the model is done talking."""
+
+    model_config = ConfigDict(frozen=True)
+
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    text: str | None = None
+
+
 class ProviderHealth(BaseModel):
+    """Result of `LLMProvider.health()`: reachable and configured, or why not."""
+
     model_config = ConfigDict(frozen=True)
 
     ok: bool
@@ -76,6 +135,21 @@ class LLMProvider(Protocol):
     ) -> TModel:
         """One structured-output call, validated against `schema`. Used by
         `decision.llm_structured` for every `DecisionService` call."""
+        ...
+
+    def run_tool_step(
+        self,
+        *,
+        system: str,
+        messages: Sequence[AgentMessage],
+        tools: Sequence[ToolDefinition],
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> ToolStep:
+        """ONE model step of a tool-using loop (contracts §8): the model sees the
+        conversation so far (including earlier tool calls and their results) and either
+        requests tool calls or answers in text. The *caller* executes tools and loops; the
+        provider never runs a tool itself."""
         ...
 
     def health(self) -> ProviderHealth:

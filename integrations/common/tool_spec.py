@@ -1,16 +1,21 @@
-"""Register an MCP tool from a Pydantic input model, a Pydantic output model
-and an async handler, guaranteeing every tool on every server in this layer
-looks the same: snake_case name, one-line description, a flat input schema
-(not a single nested object), and a `ToolResult[OutputModel]` output schema.
+"""`register_tool`: register an MCP tool from input model, output model and handler.
 
-Why the dynamic signature: the installed `mcp` SDK (2.x, `MCPServer`, formerly
-`FastMCP`) builds a tool's input schema from `inspect.signature(fn)`. A
-function whose only parameter is a Pydantic model produces a schema that
-nests all fields under that one parameter name (`{"inp": {...}}`), which is
-not how MCP clients expect to call a tool. Building a synthetic flat
-signature from `input_model.model_fields` gives clients the flat
-`{"field": value, ...}` shape while the handler still receives one validated
-`input_model` instance.
+Where this sits: called by each adapter's `register_tools(mcp)`; the `mcp`
+object is built in `server.py`.
+
+Key ideas:
+- MCP server exposes tools with JSON schemas: the schema is derived from the
+  Pydantic models, so the models are the contract and cannot drift from the
+  code.
+- Flat input schema: the SDK builds a tool's schema from the function
+  signature, and a function taking one Pydantic model would nest everything
+  under one parameter name. A synthetic flat signature gives clients the
+  `{"field": value}` shape they expect while the handler still receives one
+  validated model instance.
+- Consistency is enforced at registration time: snake_case names and
+  one-line descriptions are checked, so a malformed tool fails at startup.
+
+Read next: `result.py`, then a concrete adapter such as `mcp_payment/app/tools.py`.
 """
 from __future__ import annotations
 
@@ -42,7 +47,8 @@ def register_tool(
     """Register `handler` as tool `name` on the given `MCPServer` instance.
 
     `handler(input_model_instance) -> ToolResult` must never raise; it should
-    catch its own failures and return `common.result.fail(...)`.
+    catch its own failures and return `common.result.fail(...)`, because an
+    exception would surface to the MCP client as an opaque transport error.
     """
     if not _SNAKE_CASE.match(name):
         raise ValueError(f"tool name {name!r} must be snake_case")

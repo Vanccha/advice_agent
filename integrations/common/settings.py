@@ -1,10 +1,19 @@
-"""Adapter-wide settings, loaded from the environment (see docker-compose.yml's
-`x-integration-env` anchor and docs/contracts.md §8).
+"""Adapter-wide settings loaded from the environment.
 
-Every `integrations/mcp_*` server imports `get_settings()` from here instead of
-reading `os.environ` directly, so that adding a sixth company integration or
-retargeting the product at a different tenant only means pointing these env
-vars somewhere else.
+Where this sits: imported by every adapter's `deps.py` via `get_settings()`.
+Values come from the compose `x-integration-env` anchor (docs/contracts.md
+section 8).
+
+Key ideas:
+- Configuration, not code, decides which company the adapters talk to:
+  retargeting the product at another tenant means pointing these variables
+  elsewhere, never editing tool code.
+- Settings are read once and cached (`lru_cache`); nobody reads `os.environ`
+  directly, so tests can set variables before the first call.
+- Keys are least-privilege: each adapter has its own optional key and falls
+  back to the shared `COMPANY_API_KEY`.
+
+Read next: `http.py`, which consumes the base URLs and keys.
 """
 from __future__ import annotations
 
@@ -35,6 +44,10 @@ class AdapterSettings(BaseSettings):
     # Where the monitoring adapter forwards a normalized alert. Only that adapter uses
     # it, but it belongs with the other deployment wiring rather than in os.environ.
     ASSISTANT_ALERT_WEBHOOK_URL: str = "http://assistant:8000/webhooks/alert"
+
+    # Shared HMAC secret for webhooks into the assistant (`X-Webhook-Signature`). Optional:
+    # when empty the monitoring adapter logs a warning and forwards alerts unsigned.
+    WEBHOOK_SECRET: str = ""
 
     # readonly_diag DSN (SELECT-only on schema `diag`).
     DIAG_DATABASE_URL: str

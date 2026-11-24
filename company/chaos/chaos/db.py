@@ -1,3 +1,14 @@
+"""Cached database engines for the chaos tool (core and payment databases).
+
+Where this sits: used by `cli.py` and the scenarios.
+
+Key ideas:
+- One engine per database, created on first use and reused.
+- Transaction helpers commit on success and roll back on error, so a scenario
+  never half-applies a fault.
+
+Read next: `scenarios/common.py`.
+"""
 from __future__ import annotations
 
 from collections.abc import Generator
@@ -14,6 +25,7 @@ _payment_engine: Engine | None = None
 
 
 def core_engine(settings: ChaosSettings) -> Engine:
+    """Engine for the core database (created on first use)."""
     global _core_engine
     if _core_engine is None:
         _core_engine = make_engine(settings.database_url)
@@ -21,6 +33,7 @@ def core_engine(settings: ChaosSettings) -> Engine:
 
 
 def payment_engine(settings: ChaosSettings) -> Engine:
+    """Engine for the payment gateway database (created on first use)."""
     global _payment_engine
     if _payment_engine is None:
         _payment_engine = make_engine(settings.payment_database_url)
@@ -29,7 +42,7 @@ def payment_engine(settings: ChaosSettings) -> Engine:
 
 @contextmanager
 def core_tx(settings: ChaosSettings) -> Generator[Connection, None, None]:
-    """One transaction against netswift_core. Commits on success, rolls back on error."""
+    """One transaction against the core database; commits on success, rolls back on error."""
     engine = core_engine(settings)
     with engine.begin() as conn:
         yield conn
@@ -37,14 +50,14 @@ def core_tx(settings: ChaosSettings) -> Generator[Connection, None, None]:
 
 @contextmanager
 def payment_tx(settings: ChaosSettings) -> Generator[Connection, None, None]:
-    """One transaction against netswift_payment."""
+    """One transaction against the payment database."""
     engine = payment_engine(settings)
     with engine.begin() as conn:
         yield conn
 
 
 def reset_engines() -> None:
-    """Dispose cached engines (used by tests between scenarios)."""
+    """Dispose cached engines (tests call this between scenarios)."""
     global _core_engine, _payment_engine
     if _core_engine is not None:
         _core_engine.dispose()

@@ -1,15 +1,23 @@
-"""The only way the product touches the company (contracts §3). `ToolGateway` is built
-from one tenant's `adapters` config (never a hardcoded hostname — contracts §4 hard rule
-4), connects over streamable HTTP via the `mcp` client SDK, and degrades gracefully: a
-dead/absent adapter yields `ok=False, error_code="ADAPTER_UNAVAILABLE"` rather than raising,
-so the modes layer can run even before every adapter exists (`mcp-ticketing`,
-`mcp-monitoring`, `mcp-notification` are built later than `mcp-core`/`mcp-payment`).
+"""The live tool gateway: the only way the assistant reaches the company's systems.
 
-A `ToolGateway` instance is scoped to one turn (its `max_calls_per_turn` budget resets via
-`reset_turn_budget()` — construct a fresh gateway per turn, or call that explicitly at the
-start of each new turn on a reused instance).
+Where this sits: ``mcp_gateway`` package. ``modes`` (and ``policy.executor`` through
+``action_runner``) call ``ToolGateway.call``; it talks MCP over streamable HTTP to the adapters
+in ``integrations/`` and records each call with ``tool_audit``. ``fake.FakeGateway`` has the
+same surface for tests.
 
-Import as: ``from mcp_gateway.gateway import ToolGateway``.
+Key ideas:
+- Per-turn scoping: a gateway (or its ``for_turn`` view) has a call budget of
+  ``policy.yaml: limits.max_tool_calls_per_turn``; call N+1 raises ``ToolBudgetExceeded`` so a runaway model loop
+  cannot hammer company systems.
+- Graceful degradation: a dead or absent adapter yields ``ok=False,
+  error_code="ADAPTER_UNAVAILABLE"`` instead of raising, so the assistant still runs when
+  some adapters are down.
+- Config, not hostnames: adapter URLs come from the tenant's ``adapters`` config (hard rule 4).
+- Discovery by catalogue: tools are discovered from the adapters (``list_tools``) and routed
+  by name; the catalogue is shared between turn views.
+
+Read next: ``mcp_gateway/fake.py``, ``mcp_gateway/tool_audit.py``, ``mcp_gateway/types.py``.
+See: docs/contracts.md §3.
 """
 from __future__ import annotations
 
@@ -17,11 +25,11 @@ import asyncio
 import time
 from typing import Any
 
-from audit.log import digest_tool_output
-from core_common.config import AdapterConfig, TenantConfig
-from core_common.types import StepType
-# The third-party MCP client SDK. This package is deliberately NOT named `mcp` so that a
-# plain import resolves to the installed SDK instead of shadowing it.
+from core_common.config_models import AdapterConfig, TenantConfig
+
+# The third-party MCP client SDK. This package is deliberately NOT named `mcp`, so this
+# import resolves to the installed SDK instead of shadowing it. A missing SDK degrades to
+# "no tools discovered" rather than breaking import.
 try:
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
@@ -32,8 +40,8 @@ except Exception as _sdk_exc:  # pragma: no cover - only when the SDK is absent
     streamable_http_client = None  # type: ignore[assignment]
     MCP_SDK_AVAILABLE = False
     MCP_SDK_IMPORT_ERROR = _sdk_exc
+from mcp_gateway.tool_audit import audit_tool_call
 from mcp_gateway.types import ToolBudgetExceeded, ToolCallOutcome, ToolSpec
-from privacy.masking import mask_payload
 
 # contracts §3: each adapter's ToolResult `source` tag.
 _ADAPTER_SOURCE = {
@@ -56,6 +64,14 @@ def _content_to_text(content: Any) -> str:
 
 
 class ToolGateway:
+    """Calls company tools through MCP adapters, with a per-turn budget and an audit trail.
+
+    Args:
+        adapters: adapter key -> `AdapterConfig` (URL from tenant config).
+        audit_log: receives one entry per call.
+        max_calls_per_turn: the budget; reset with `reset_turn_budget()` or use `for_turn()`.
+    """
+
     def __init__(
         self,
         adapters: dict[str, AdapterConfig],
@@ -75,6 +91,22 @@ class ToolGateway:
         self._calls_this_turn = 0
         self._tool_index: dict[str, str] | None = None  # tool_name -> adapter key
         self._tool_specs: dict[str, list[ToolSpec]] = {}
+        # Turn views share the root gateway's tool catalogue, so discovery runs once.
+        self._catalog_owner: ToolGateway = self
+
+    def for_turn(self, conversation_id: str, *, actor: str | None = None) -> "ToolGateway":
+        """A per-turn view: same adapters, audit log and (shared) tool catalog, but its own
+        `conversation_id`, `actor` and call budget. Cheap; build one per turn/request."""
+        view = ToolGateway(
+            self._adapters,
+            self._audit_log,
+            conversation_id=conversation_id,
+            tenant=self.tenant,
+            actor=actor or self.actor,
+            max_calls_per_turn=self.max_calls_per_turn,
+        )
+        view._catalog_owner = self._catalog_owner
+        return view
 
     @classmethod
     def from_tenant_config(
@@ -86,6 +118,7 @@ class ToolGateway:
         actor: str = "assistant",
         max_calls_per_turn: int | None = None,
     ) -> "ToolGateway":
+        """Build a gateway from a tenant's adapters; the budget defaults to the policy limit."""
         limit = (
             max_calls_per_turn
             if max_calls_per_turn is not None
@@ -101,11 +134,13 @@ class ToolGateway:
         )
 
     def reset_turn_budget(self) -> None:
+        """Start a new turn's call budget on a reused instance."""
         self._calls_this_turn = 0
 
-    # -- discovery --------------------------------------------------------------------
+    # --- Discovery ----------------------------------------------------------
 
     async def _discover_adapter(self, adapter_key: str, adapter_cfg: AdapterConfig) -> list[ToolSpec]:
+        """List one adapter's tools; an unreachable adapter simply contributes none."""
         if not MCP_SDK_AVAILABLE:
             return []
         try:
@@ -114,7 +149,7 @@ class ToolGateway:
                     await session.initialize()
                     result = await session.list_tools()
         except Exception:
-            return []  # adapter down/unreachable — degrade gracefully, not an error here
+            return []  # adapter down: degrade gracefully, the rest of the turn still works
         return [
             ToolSpec(
                 name=tool.name,
@@ -126,6 +161,12 @@ class ToolGateway:
         ]
 
     async def _ensure_catalog(self) -> None:
+        """Discover tools on first use (turn views delegate to the root gateway)."""
+        owner = self._catalog_owner
+        if owner is not self:
+            await owner._ensure_catalog()
+            self._tool_index, self._tool_specs = owner._tool_index, owner._tool_specs
+            return
         if self._tool_index is not None:
             return
         await self.refresh_catalog()
@@ -133,6 +174,10 @@ class ToolGateway:
     async def refresh_catalog(self) -> None:
         """Re-run discovery against every configured adapter. Safe to call repeatedly
         (e.g. after an adapter that was down comes back up mid-conversation)."""
+        if self._catalog_owner is not self:
+            await self._catalog_owner.refresh_catalog()
+            await self._ensure_catalog()
+            return
         index: dict[str, str] = {}
         specs_by_adapter: dict[str, list[ToolSpec]] = {}
         adapter_items = list(self._adapters.items())
@@ -147,6 +192,7 @@ class ToolGateway:
         self._tool_specs = specs_by_adapter
 
     async def list_tools(self) -> list[ToolSpec]:
+        """Every tool every reachable adapter advertises."""
         await self._ensure_catalog()
         return [spec for specs in self._tool_specs.values() for spec in specs]
 
@@ -156,9 +202,15 @@ class ToolGateway:
         await self._ensure_catalog()
         return dict(self._tool_specs)
 
-    # -- calling ------------------------------------------------------------------------
+    # --- Calling ------------------------------------------------------------
 
     async def call(self, tool_name: str, arguments: dict[str, Any]) -> ToolCallOutcome:
+        """Call one tool, route it to its adapter and audit the result.
+
+        Raises `ToolBudgetExceeded` once the turn's budget is spent. Every other failure
+        (no adapter advertises the tool, connection error, tool error) is returned as an
+        `ok=False` outcome.
+        """
         if self._calls_this_turn >= self.max_calls_per_turn:
             raise ToolBudgetExceeded(tool_name, self.max_calls_per_turn)
         self._calls_this_turn += 1
@@ -223,22 +275,15 @@ class ToolGateway:
         inside a running event loop (use `await gateway.call(...)` there instead)."""
         return asyncio.run(self.call(tool_name, arguments))
 
-    # -- audit ----------------------------------------------------------------------------
+    # --- Audit --------------------------------------------------------------
 
     def _audit(self, tool_name: str, arguments: dict[str, Any], outcome: ToolCallOutcome) -> None:
-        masked_arguments = mask_payload(arguments)
-        digest_source = outcome.data if outcome.ok else {"error_code": outcome.error_code}
-        digest = digest_tool_output(digest_source)
-        summary = f"called tool '{tool_name}'" if outcome.ok else f"called tool '{tool_name}' -> {outcome.error_code}"
-        self._audit_log.append(
-            self.conversation_id,
-            StepType.TOOL_CALL,
-            summary,
-            outcome.error_message if not outcome.ok else None,
-            {"adapter": outcome.adapter, "duration_ms": outcome.duration_ms},
+        audit_tool_call(
+            self._audit_log,
+            conversation_id=self.conversation_id,
             tenant=self.tenant,
             actor=self.actor,
             tool_name=tool_name,
-            tool_input=masked_arguments,
-            tool_output_digest=digest,
+            arguments=arguments,
+            outcome=outcome,
         )

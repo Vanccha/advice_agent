@@ -44,25 +44,26 @@ def client(tmp_path, monkeypatch: pytest.MonkeyPatch):
     get_engine.cache_clear()
     clear_tenant_config_cache()
 
-    import api.main as main_module
+    import api.main as api_main
+    import api.state as state_module
 
-    with TestClient(main_module.app) as test_client:
+    with TestClient(api_main.app) as test_client:
         # Startup already built a real orchestrator wired to a scripted provider (no
         # fixtures loaded) and a real `ToolGateway` (no live adapters reachable here).
         # Swap in a `FakeGateway` + a `ScriptedProvider` with routing fixtures so chat
         # tests are fully deterministic and offline, exactly like `modes/tests/`.
-        fake_gateway = FakeGateway(default_responses())
+        fake_gateway = FakeGateway(default_responses(), max_calls_per_turn=14)
         provider = ScriptedProvider(INTENT_RULES)
         decision_service = LLMStructuredDecisionService(provider)
-        main_module.state.gateway = fake_gateway
-        main_module.state.orchestrator = Orchestrator(
-            tenant_config=main_module.state.tenant_config,
+        state_module.state.gateway = fake_gateway
+        state_module.state.orchestrator = Orchestrator(
+            tenant_config=state_module.state.tenant_config,
             settings=get_settings(),
             provider=provider,
             decision_service=decision_service,
             gateway=fake_gateway,
-            audit_log=main_module.state.audit_log,
-            session_factory=main_module.state.session_factory,
+            audit_log=state_module.state.audit_log,
+            session_factory=state_module.state.session_factory,
         )
         yield test_client
 
@@ -73,6 +74,12 @@ def client(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture()
 def fake_gateway(client):
-    import api.main as main_module
+    from api.state import state
 
-    return main_module.state.gateway
+    return state.gateway
+
+
+def login_as(client, customer_no: str) -> None:
+    """Set the session cookie `/api/login` would set (identity comes only from the cookie)."""
+    client.cookies.clear()
+    client.cookies.set("demo_customer_no", customer_no)

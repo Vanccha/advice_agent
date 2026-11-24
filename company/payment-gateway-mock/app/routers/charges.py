@@ -1,3 +1,15 @@
+"""Charge and refund endpoints under `/psp/v1`.
+
+Where this sits: called by core-api; after a charge it triggers the webhook
+back to core-api as a background task.
+
+Key ideas:
+- Idempotent create: the same key returns the original charge.
+- The webhook is sent after the response is built, so a slow receiver cannot
+  slow the caller.
+
+Read next: `webhooks.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
@@ -42,6 +54,7 @@ def build_router(
     settings: Settings,
     registry: ApiKeyRegistry,
 ) -> APIRouter:
+    """Build the charge/refund router with its dependencies injected."""
     router = APIRouter(prefix="/psp/v1", tags=["charges"])
     require_key = require_scope("psp:access", registry)
 

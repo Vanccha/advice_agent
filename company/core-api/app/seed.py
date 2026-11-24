@@ -1,7 +1,16 @@
-"""Deterministic, idempotent seed data for netswift_core.
+"""Deterministic demo data: regions, packages, service accounts, customers and subscriptions.
 
-Run standalone with `python -m app.seed`, or via `app.bootstrap` on service startup
-when SEED_ON_STARTUP=true. Safe to call repeatedly: skips if customers already exist.
+Where this sits: run by `bootstrap.py` at startup (reference data always;
+demo customers only when `seed_on_startup` is true), or standalone with
+`python -m app.seed`. Safe to call repeatedly: skips if customers already exist.
+
+Key ideas:
+- Seeded randomness (`random.Random(seed)`) makes the demo data identical on
+  every run, so scenarios and tests can name specific customers.
+- Reference data (regions, packages, accounts) is separate from demo data
+  because the API cannot work without it.
+
+Read next: `bootstrap.py`.
 """
 from __future__ import annotations
 
@@ -390,8 +399,7 @@ def _advance_subscription(session, subscription, target_status, rng, now, custom
 
 
 def seed_reference_data(session: Session, settings) -> None:
-    """Regions, packages and service accounts: always required for the API to function,
-    independent of whether the 200 demo customers get seeded."""
+    """Seed regions, packages and service accounts (always needed for the API to work)."""
     _seed_regions(session)
     _seed_packages(session)
     _seed_service_accounts(session, settings)
@@ -399,7 +407,7 @@ def seed_reference_data(session: Session, settings) -> None:
 
 
 def run_seed(session: Session, settings) -> bool:
-    """Returns True if seeding actually ran, False if skipped (already seeded)."""
+    """Seed demo customers; returns True if it ran, False if data already existed."""
     seed_reference_data(session, settings)
 
     existing_customers = session.scalar(select(Customer.id).limit(1))

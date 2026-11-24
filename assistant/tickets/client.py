@@ -1,8 +1,19 @@
-"""`TicketService`: the assistant-side client for the ticketing adapter's MCP tools
-(contracts §3 `mcp-ticketing`), built on whatever gateway the caller wires in —
-`mcp.gateway.ToolGateway` in production, `mcp.fake.FakeGateway` in tests/evals.
+"""``TicketService``: the assistant-side client for the ticketing adapter's MCP tools.
 
-Import as: ``from tickets.client import TicketService, TicketRef, TicketServiceError``.
+Where this sits: ``tickets`` package. ``modes`` call it to create and look up tickets. It
+works over any gateway with ``call_sync`` (``mcp_gateway.ToolGateway`` in production,
+``mcp_gateway.FakeGateway`` in tests and evals) and never talks to the ticketing system directly.
+
+Key ideas:
+- Gateway as dependency: the client only needs the small ``_CallableGateway`` protocol, so it
+  is tested without a network.
+- Idempotent create: a repeat ``external_ref`` returns the existing ticket with
+  ``TicketRef.created=False``; that is a normal result, not an error.
+- Tolerant of envelopes: adapter answers arrive wrapped (ToolResult, then a named record), and
+  flat dicts from fakes are accepted too.
+
+Read next: ``tickets/builder.py``, ``mcp_gateway/types.py``.
+See: docs/contracts.md §3, §2.5.
 """
 from __future__ import annotations
 
@@ -15,6 +26,8 @@ from tickets.builder import StructuredTicket
 
 
 class _CallableGateway(Protocol):
+    """The one gateway method this client needs."""
+
     def call_sync(self, tool_name: str, arguments: dict[str, Any]) -> ToolCallOutcome: ...
 
 
@@ -27,15 +40,16 @@ class TicketRef(BaseModel):
     department: str
     status: str
     priority: str | None = None
-    # False when `create()` returned an *existing* ticket — the external_ref-based
-    # idempotent replay (contracts §2.5: "200, not 201, when external_ref already exists").
+    # False when `create()` returned an existing ticket (idempotent replay by external_ref).
     created: bool = True
 
 
 class TicketServiceError(RuntimeError):
-    """Raised when the ticketing adapter is unreachable or returns an unexpected shape.
-    Never raised for "ticket already existed" — that is the normal idempotent `create()`
-    path (`TicketRef.created=False`), not an error."""
+    """The ticketing adapter is unreachable or returned an unexpected shape.
+
+    Not raised for "ticket already existed": that is the normal idempotent `create()` path
+    (`TicketRef.created=False`).
+    """
 
     def __init__(self, tool_name: str, outcome: ToolCallOutcome) -> None:
         super().__init__(
@@ -73,6 +87,7 @@ def _record(data: Any, key: str = "ticket") -> dict[str, Any]:
 
 
 def _as_items(data: Any) -> list[dict[str, Any]]:
+    """The list of ticket records, whichever collection key the adapter used."""
     payload = _payload(data)
     if isinstance(payload, dict):
         for key in _COLLECTION_KEYS:
@@ -86,10 +101,13 @@ def _as_items(data: Any) -> list[dict[str, Any]]:
 
 
 class TicketService:
+    """Create and look up tickets through the ticketing adapter."""
+
     def __init__(self, gateway: _CallableGateway) -> None:
         self._gateway = gateway
 
     def create(self, ticket: StructuredTicket) -> TicketRef:
+        """Create the ticket, or return the existing one for the same `external_ref`."""
         outcome = self._gateway.call_sync(
             "create_structured_ticket", ticket.model_dump(mode="json")
         )
@@ -118,12 +136,14 @@ class TicketService:
         )
 
     def get(self, ticket_key: str) -> dict[str, Any]:
+        """One ticket record by key."""
         outcome = self._gateway.call_sync("get_ticket", {"ticket_key": ticket_key})
         if not outcome.ok:
             raise TicketServiceError("get_ticket", outcome)
         return _record(outcome.data)
 
     def list_for_customer(self, customer_no: str) -> list[dict[str, Any]]:
+        """All tickets of one customer (used by status queries)."""
         outcome = self._gateway.call_sync(
             "list_customer_tickets", {"customer_no": customer_no}
         )
@@ -132,9 +152,11 @@ class TicketService:
         return _as_items(outcome.data)
 
     def find_for_incident(self, incident_no: str) -> list[dict[str, Any]]:
-        """Used to avoid opening a second ticket for a known regional outage (contracts
-        §4.3/§5 scenario c: every customer in an affected region attaches to the one
-        existing incident ticket, never a new per-customer ticket)."""
+        """Tickets already attached to an incident.
+
+        Lets the assistant avoid opening a second ticket for a known regional outage: every
+        affected customer attaches to the one incident ticket (contracts §4.3).
+        """
         outcome = self._gateway.call_sync(
             "find_tickets_by_incident", {"incident_no": incident_no}
         )

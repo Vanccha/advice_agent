@@ -1,3 +1,18 @@
+"""Idempotent startup: schemas, tables, diagnostic views, grants and seed data.
+
+Where this sits: called from `main.py`'s startup hook on every boot.
+
+Key ideas:
+- Diagnostic views are the read-only surface for outside readers. Views hide
+  internals (no national id, address or card secrets) and give outsiders a
+  stable contract even if the tables change.
+- The read-only role is enforced by the database: all rights on schema `core`
+  are revoked from it and only `SELECT` on schema `diag` is granted.
+- Everything here is safe to run repeatedly (`IF NOT EXISTS`,
+  `CREATE OR REPLACE`), because containers restart at any time.
+
+Read next: `seed.py`.
+"""
 from __future__ import annotations
 
 import logging
@@ -94,6 +109,13 @@ DIAG_VIEW_STATEMENTS = [
     SELECT c.customer_no, n.subscription_id, n.channel, n.template_code, n.status, n.sent_at
     FROM core.notification_log n
     JOIN core.customers c ON c.id = n.customer_id
+    """,
+    """
+    CREATE OR REPLACE VIEW diag.credit_history AS
+    SELECT c.customer_no, cr.subscription_id, cr.amount_gbp, cr.reason, cr.created_at
+    FROM core.credits cr
+    JOIN core.subscriptions s ON s.id = cr.subscription_id
+    JOIN core.customers c ON c.id = s.customer_id
     """,
     """
     CREATE OR REPLACE VIEW diag.subscription_timeline AS

@@ -13,6 +13,8 @@ recommendation:
   mbps_per_device: 20
   budget_hard_filter_tolerance: 0.15   # >15% over budget → excluded
   min_mbps_floor: 50
+  # Used only when the customer gave a household size but no device count.
+  devices_per_person: 3
   # Packages below this fraction of the household's required speed are not offered,
   # unless filtering would leave nothing to recommend.
   speed_hard_filter_ratio: 0.5
@@ -24,8 +26,10 @@ recommendation:
     streaming: [family, premium]
     basic: [basic, student]
   reason_codes_en:
-    speed_ok: "{down_mbps} Mbps is plenty for the {device_count} devices in your home."
-    speed_tight: "{down_mbps} Mbps may be tight for {device_count} devices."
+    speed_ok: "{down_mbps} Mbps is plenty for the {devices_en} in your home."
+    speed_ok_household: "{down_mbps} Mbps is plenty for a household of {household_size}."
+    speed_tight: "{down_mbps} Mbps may be tight for {devices_en}."
+    speed_tight_household: "{down_mbps} Mbps may be tight for a household of {household_size}."
     budget_ok: "At {monthly_price_gbp} a month, it is within your budget."
     budget_over: "At {monthly_price_gbp} a month, it is slightly over your budget."
     profile_match: "A package designed for {profile_en} use."
@@ -58,12 +62,27 @@ urgency_floor:
   paid_not_active: NORMAL
   other: LOW
 
-# ── Diagnostic checklist order (diagnostic mode is a fixed sequence) ────────
-diagnostic_checklist:
+# ── Agentic investigation (modes/investigation.py) ──────────────────────────
+# When the fixed checklist finds nothing, a model may investigate with ONLY these
+# read-only tools. Write tools are never listed here (validated at load time).
+investigation_tools:
   - find_customer
   - get_subscription_status
-  - get_payment_status
+  - get_subscription_timeline
   - get_provisioning_status
   - get_installation_status
+  - get_modem_status
   - get_active_incidents_for_region
+  - get_incident_detail
+  - get_notification_history
+  - get_credit_history
+  - get_region_health
+  - get_payment_status
+  - list_customer_charges
+  - detect_duplicate_charges
+  - get_gateway_health
+  - list_customer_tickets
+  - find_tickets_by_incident
+  - get_ticket
   - get_service_health
+  - list_active_alerts

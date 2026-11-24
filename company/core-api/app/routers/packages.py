@@ -1,3 +1,9 @@
+"""Public package catalogue endpoints.
+
+Where this sits: reference data used to quote and sell plans.
+
+Read next: `regions.py`.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -21,7 +27,7 @@ def list_packages(
     is_active: bool | None = Query(default=None),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> dict:
     stmt = select(Package)
     if profile:
@@ -35,7 +41,7 @@ def list_packages(
 
 
 @router.get("/v1/packages/{code}")
-def get_package(code: str, db: Session = Depends(get_db)) -> dict:
+def get_package(code: str, db: Session = Depends(get_db, scope="function")) -> dict:
     pkg = db.scalar(select(Package).where(Package.code == code))
     if pkg is None:
         raise NotFound("PACKAGE_NOT_FOUND", f"Package '{code}' not found.")

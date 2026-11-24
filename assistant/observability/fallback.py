@@ -1,12 +1,17 @@
-"""Local JSONL fallback sink for trace spans (contracts §4.9).
+"""Local JSONL fallback sink for trace spans.
 
-Used whenever Langfuse is disabled or unreachable, so a demo run without the observability
-overlay still shows the reasoning trail. Every record appended here has already passed
-through ``observability.redaction`` — this module does no masking of its own, it only
-persists what it is given.
+Where this sits: ``observability`` package. ``tracing`` writes here whenever Langfuse is
+disabled or unreachable, so a demo without the observability stack still shows the reasoning
+trail. Records arrive already redacted (``observability.redaction``); this module does no
+masking, it only persists.
 
-Must never raise: a read-only or missing directory degrades to a single logged warning and
-a dropped record, never a crashed turn.
+Key ideas:
+- Fail-open: a read-only or missing directory logs one warning and drops the record; it never
+  crashes a customer turn.
+- One file per UTC day, one JSON object per line (easy to grep, append-only).
+
+Read next: ``observability/tracing.py``, ``observability/redaction.py``.
+See: docs/contracts.md §4.9.
 """
 from __future__ import annotations
 
@@ -20,8 +25,7 @@ from typing import Any
 
 logger = logging.getLogger("assistant.observability.fallback")
 
-#: Overridable via env for container deployments; tests pass ``trace_dir=`` explicitly instead
-#: of touching this module global.
+# Overridable via env for container deployments; tests pass ``trace_dir=`` explicitly instead.
 DEFAULT_TRACE_DIR = Path(os.environ.get("ASSISTANT_TRACE_DIR", "/app/var/traces"))
 
 _warned_dirs: set[str] = set()
@@ -29,6 +33,7 @@ _warn_lock = threading.Lock()
 
 
 def _warn_once(key: str, message: str) -> None:
+    """Log a warning once per directory, so a broken sink does not flood the logs."""
     with _warn_lock:
         if key in _warned_dirs:
             return

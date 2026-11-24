@@ -1,3 +1,14 @@
+"""Customer notification resend endpoint.
+
+Where this sits: called by the CRM and partner integrations
+(`notifications:resend`).
+
+Key ideas:
+- Resend cooldown: repeats within `resend_cooldown_seconds` are refused
+  (`RESEND_COOLDOWN`), so a retry loop cannot spam a customer.
+
+Read next: `packages.py`.
+"""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -24,7 +35,7 @@ router = APIRouter(tags=["notifications"])
     status_code=201,
     dependencies=[Depends(require_scope("notifications:resend", get_registry()))],
 )
-def resend_notification(body: NotificationResendRequest, db: Session = Depends(get_db)) -> dict:
+def resend_notification(body: NotificationResendRequest, db: Session = Depends(get_db, scope="function")) -> dict:
     customer = db.scalar(select(Customer).where(Customer.customer_no == body.customer_no))
     if customer is None:
         raise NotFound("CUSTOMER_NOT_FOUND", f"Customer '{body.customer_no}' not found.")

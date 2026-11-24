@@ -1,10 +1,20 @@
-"""The `ToolResult` envelope every MCP tool returns (docs/contracts.md §3).
+"""The `ToolResult` envelope every MCP tool returns (docs/contracts.md section 3).
 
-Every tool in this integration layer returns this shape — `{ok, data, error,
-source}` — and never lets a raw exception escape to the MCP transport. `source`
-tells the caller which system actually answered the question, which matters
-because the whole point of this layer is "reads via diag_db, writes via the
-company's own REST API, never SQL writes."
+Where this sits: built by every tool handler on every adapter and consumed by
+the assistant's MCP gateway; `source` tells the consumer which company system
+actually answered.
+
+Key ideas:
+- One shape for success and failure, `{ok, data, error, source}`, so callers
+  never parse ad-hoc payloads and never see a raw exception from the MCP
+  transport. Failures are values, not exceptions.
+- Error codes are preserved from the company when the failure came from its
+  REST API (`SCOPE_DENIED`, `ILLEGAL_TRANSITION`, ...) and adapter-local
+  otherwise (`INVALID_INPUT`, `NOT_FOUND`, ...).
+- `source` is explicit provenance: reads via `diag_db`, writes via a company
+  `*_api`.
+
+Read next: `http.py` (maps REST errors into this envelope) and `tool_spec.py`.
 """
 from __future__ import annotations
 
@@ -25,11 +35,14 @@ T = TypeVar("T")
 
 
 class ToolError(BaseModel):
-    """The error half of the envelope. `code` is preserved verbatim from the
-    company's own error envelope when the failure came from a REST call (e.g.
-    `SCOPE_DENIED`, `ILLEGAL_TRANSITION`, `CREDIT_LIMIT_EXCEEDED`,
-    `RESEND_COOLDOWN`, `UPSTREAM_UNAVAILABLE`), or an adapter-local code
-    (`INVALID_INPUT`, `NOT_FOUND`, `READ_ONLY_VIOLATION`, ...) otherwise.
+    """The error half of the envelope.
+
+    `code` is preserved verbatim from the company's own error envelope when the
+    failure came from a REST call (`SCOPE_DENIED`, `ILLEGAL_TRANSITION`,
+    `CREDIT_LIMIT_EXCEEDED`, `RESEND_COOLDOWN`, `UPSTREAM_UNAVAILABLE`), and is an
+    adapter-local code (`INVALID_INPUT`, `NOT_FOUND`, `READ_ONLY_VIOLATION`, ...)
+    otherwise. Keeping the company's code means the consumer can react to it
+    without the adapter translating (and possibly distorting) it.
     """
 
     code: str
@@ -38,10 +51,10 @@ class ToolError(BaseModel):
 
 
 class ToolResult(BaseModel, Generic[T]):
-    """`{ok, data, error, source}` — see docs/contracts.md §3.
+    """`{ok, data, error, source}`: see docs/contracts.md section 3.
 
-    Tool handlers should not construct this directly; use `ok(...)` / `fail(...)`
-    below so every tool produces the envelope the same way.
+    Handlers should not construct this directly; use `ok(...)` / `fail(...)` so
+    every tool builds the envelope the same way.
     """
 
     ok: bool

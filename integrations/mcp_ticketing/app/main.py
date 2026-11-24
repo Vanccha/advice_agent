@@ -1,7 +1,12 @@
 """`mcp-ticketing` entrypoint: `uvicorn app.main:app`.
 
-Exposes the 5 tools listed for `mcp-ticketing` in docs/contracts.md §3 over
-MCP streamable HTTP at `POST /mcp`, plus `GET /health` and `GET /metrics`.
+Where this sits: process entry point of the `mcp-ticketing` container.
+
+Key ideas:
+- MCP server exposes tools with JSON schemas at `POST /mcp` (tool list in
+  docs/contracts.md section 3), plus `/health` and `/metrics`.
+
+Read next: `tools.py`.
 """
 from __future__ import annotations
 

@@ -1,3 +1,13 @@
+{#-
+Ticket list page: filters plus a table of tickets.
+
+Where this sits: rendered by `agent_ticket_list` in routers/ui.py; extends base.html.
+
+Key ideas:
+- The filter form uses a plain GET, so every filtered view is a shareable URL.
+
+Read next: agent_detail.html.
+-#}
 {% extends "base.html" %}
 {% block title %}Tickets — NetSwift Service Desk{% endblock %}
 {% block content %}

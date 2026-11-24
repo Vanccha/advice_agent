@@ -1,3 +1,14 @@
+"""SQLAlchemy models for the `psp` schema: charges, refunds, webhook deliveries, control flags.
+
+Where this sits: the gateway's own database.
+
+Key ideas:
+- A unique `idempotency_key` column lets the database enforce
+  one-charge-per-request.
+- Control flags are key/value rows, so new switches need no migration.
+
+Read next: `engine.py`.
+"""
 from __future__ import annotations
 
 from datetime import datetime

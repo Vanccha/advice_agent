@@ -1,3 +1,15 @@
+"""Idempotent startup: schema, tables and default control flags.
+
+Where this sits: called from the app's startup hook.
+
+Key ideas:
+- Control flags live in the database, not in memory, so every worker process
+  sees the same outage state and it survives restarts.
+- Only missing flags are seeded, so an operator's setting is never overwritten
+  by a restart.
+
+Read next: `engine.py`.
+"""
 from __future__ import annotations
 
 import logging

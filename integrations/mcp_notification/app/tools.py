@@ -1,4 +1,15 @@
-"""`mcp-notification` tools (docs/contracts.md §3)."""
+"""`mcp-notification` tools (docs/contracts.md section 3).
+
+Where this sits: registered by `main.py`; calls notification-hub's REST API.
+
+Key ideas:
+- Errors from the company pass through verbatim: an unknown channel comes
+  back as `CHANNEL_NOT_FOUND` with no special-casing in the adapter.
+- The adapter names itself in the hub's free-text `source` field so messages
+  can be traced to their origin.
+
+Read next: `models.py`.
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -26,6 +37,7 @@ _SOURCE_LABEL = "mcp-notification"
 
 
 async def handle_post_department_message(inp: PostDepartmentMessageInput) -> ToolResult[Any]:
+    """Post a message to a department channel."""
     payload: dict[str, Any] = {
         "title": inp.title,
         "text": inp.text,
@@ -45,6 +57,7 @@ async def handle_post_department_message(inp: PostDepartmentMessageInput) -> Too
 
 
 async def handle_list_channel_messages(inp: ListChannelMessagesInput) -> ToolResult[Any]:
+    """Most recent messages in a department channel."""
     result = await notification_api_client().get(
         f"/api/v1/channels/{inp.channel}/messages", SOURCE_NOTIFICATION, params={"limit": inp.limit}
     )
@@ -59,6 +72,7 @@ async def handle_list_channel_messages(inp: ListChannelMessagesInput) -> ToolRes
 
 
 def register_tools(mcp: Any) -> None:
+    """Register the two `mcp-notification` tools."""
     register_tool(
         mcp,
         name="post_department_message",

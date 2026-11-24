@@ -200,6 +200,8 @@ diag.incidents(...same columns plus resolved_at...)
                       -- every status, so a resolved outage can still be explained afterwards
 diag.incident_affected(incident_no, customer_no, subscription_id, region_code)
 diag.notification_history(customer_no, subscription_id, channel, template_code, status, sent_at)
+diag.credit_history(customer_no, subscription_id, amount_gbp, reason, created_at)
+                      -- goodwill credits already granted (policy counts them per customer)
 diag.subscription_timeline(customer_no, subscription_id, event_type, from_status, to_status,
                            actor, reason, created_at)
 diag.region_health(region_code, total_subscriptions, active_subscriptions,
@@ -295,6 +297,10 @@ alert_events(id PK, alert_fingerprint text, alertname text, severity text, statu
 ```
 `audit_entries` is append-only: a BEFORE UPDATE/DELETE trigger raises an exception, and
 `entry_hash = sha256(prev_hash || canonical_json(entry_without_hash))`.
+Appends are serialised (`seq` is global and each row chains from its conversation's previous row):
+PostgreSQL takes a transaction-scoped advisory lock (`pg_advisory_xact_lock`) before reading the
+predecessor; other dialects use a process-level lock. `seq` has no DB-level unique constraint
+(no migration story for existing databases); uniqueness comes from the serialised append.
 
 ---
 
@@ -465,7 +471,7 @@ Rules:
 
 | Server (port) | Tools |
 |---|---|
-| `mcp-core` (9101) | `find_customer`, `get_subscription_status`, `get_subscription_timeline`, `get_provisioning_status`, `get_installation_status`, `get_modem_status`, `get_active_incidents_for_region`, `get_incident_detail`, `list_packages`, `get_notification_history`, `get_region_health`, `retry_provisioning_job`*, `enqueue_provisioning_job`*, `resend_activation_notification`*, `apply_outage_credit`*, `request_refund`* (always returns the 403 from core-api — proves the hard boundary), `reschedule_installation`* |
+| `mcp-core` (9101) | `find_customer`, `get_subscription_status`, `get_subscription_timeline`, `get_provisioning_status`, `get_installation_status`, `get_modem_status`, `get_active_incidents_for_region`, `get_incident_detail`, `list_packages`, `get_notification_history`, `get_credit_history`, `get_region_health`, `retry_provisioning_job`*, `enqueue_provisioning_job`*, `resend_activation_notification`*, `apply_outage_credit`*, `request_refund`* (always returns the 403 from core-api — proves the hard boundary), `reschedule_installation`* |
 | `mcp-payment` (9102) | `get_payment_status`, `list_customer_charges`, `detect_duplicate_charges`, `get_gateway_health` |
 | `mcp-ticketing` (9103) | `create_structured_ticket`, `get_ticket`, `list_customer_tickets`, `find_tickets_by_incident`, `add_ticket_comment` |
 | `mcp-monitoring` (9104) | `get_service_health`, `query_metric`, `list_active_alerts`, plus `POST /webhooks/alertmanager` → forwards normalized alert to `ASSISTANT_ALERT_WEBHOOK_URL` |
@@ -523,12 +529,13 @@ Normalized alert payload forwarded to the assistant:
 |---|---|---|
 | GET | `/` | demo page: fake login by `customer_no` + embedded chat widget |
 | POST | `/api/login` | body: `{customer_no}` → session cookie (demo only, no password) |
-| POST | `/api/chat` | body: `{conversation_id?, message, customer_no?}` → `{conversation_id, mode, reply_en, actions[], ticket_key?, requires_approval?, approval_id?}`. Each `actions[]` entry is self-describing: `{label_en, action_name, executed, policy_allowed, awaiting_confirmation?, escalated_to?, ticket_key?}` — a customer-facing label for the widget plus what was actually attempted and whether policy permitted it. |
-| GET | `/api/chat/stream?conversation_id=&message=` | SSE stream of the same turn. Event framing: `event: token` (plain-text chunk, appended by the client), `event: final` (JSON, identical body to `POST /api/chat`), `event: error` (any payload; the client falls back to `POST /api/chat`). |
-| POST | `/api/approvals/{approval_id}` | `{decision: "granted"\|"denied"}` |
-| GET | `/api/conversations/{conversation_id}/audit` | audit trail for the demo |
+| POST | `/api/chat` | body: `{conversation_id?, message}` (a `customer_no` in the body is ignored; identity comes only from the login cookie) → `{conversation_id, mode, reply_en, actions[], ticket_key?, requires_approval?, approval_id?}`. Each `actions[]` entry is self-describing: `{label_en, action_name, executed, policy_allowed, awaiting_confirmation?, escalated_to?, ticket_key?}` — a customer-facing label for the widget plus what was actually attempted and whether policy permitted it. |
+| GET | `/api/chat/stream?conversation_id=&message=` | SSE delivery of the same turn. This is not token streaming: the whole reply is computed first, and only then delivered as word-sized events once the turn has completed. Event framing: `event: token` (a word-sized plain-text chunk, appended by the client), `event: final` (JSON, identical body to `POST /api/chat`), `event: error` (any payload; the client falls back to `POST /api/chat`). |
+| | | **Ownership:** a `conversation_id` that is already bound to a customer can only be continued by that customer (login cookie); anyone else gets `403 {"error": {"code": "FORBIDDEN", ...}}`. Anonymous conversations may be continued and bind to the first logged-in customer. Applies to `/api/chat`, `/api/chat/stream` and the audit endpoint. |
+| POST | `/api/approvals/{approval_id}` | `{decision: "granted"\|"denied"}`; the cookie customer must own the approval's conversation, otherwise `404 APPROVAL_NOT_FOUND` (404 rather than 403 so approval ids are not probeable) |
+| GET | `/api/conversations/{conversation_id}/audit` | audit trail for the demo; same ownership rule (403) |
 | POST | `/webhooks/ticket` | ticketing `ticket.status_changed` (HMAC verified) → notifies user |
-| POST | `/webhooks/alert` | normalized alert from `mcp-monitoring` → proactive diagnosis |
+| POST | `/webhooks/alert` | normalized alert from `mcp-monitoring` → proactive diagnosis (HMAC verified exactly like `/webhooks/ticket`: `X-Webhook-Signature: sha256=<hmac(WEBHOOK_SECRET, body)>`, otherwise 401; `mcp-monitoring` signs the exact bytes it sends and, if `WEBHOOK_SECRET` is empty, warns and sends unsigned) |
 | GET | `/health` `/metrics` | |
 
 > Shared assistant-side vocabulary (enums, `Decision[T]`, `AdvisoryProfile`, `PolicyDecision`,
@@ -546,9 +553,29 @@ The audit endpoint may return a bare array or `{steps:[…]}`; each step is read
 `{step_type, summary, reason}`.
 
 ### 4.3 Modes (explicit state machine, `assistant/modes/machine.py`)
+
+Code layout (`assistant/modes/`): `orchestrator.py` is the public facade (`Orchestrator`,
+`TurnResult`; turn lifecycle only); `dispatch.py` routes a turn through the mode handlers;
+`conversation_store.py` persists state and messages; `approvals.py` resolves pending approvals;
+`events.py` handles ticket-status webhooks and monitoring alerts; `state.py` holds the typed
+`ConversationState` (the JSON in `asst.conversations.state`: unknown keys are ignored and
+missing keys defaulted, so older rows still load); `replies.py` is the catalogue of fixed
+customer-facing sentences (the seam for translations). The four large mode handlers are
+packages whose `__init__.py` names the public entry points and a reading order:
+`action/` (`handle_action`: `known_causes`, `triage`, `escalation`, `outage`,
+`investigation_outcome`), `advisory/` (`handle_turn`: `parsing`, `extraction`, `narration`,
+`flow`), `investigation/` (`plan_turn`: `tools`, `prompts`, `loop`, `finding`) and
+`diagnostic/` (`run_diagnosis`: `checklist`, `payment_checks`). Department-facing ticket text
+lives in `action/escalation.py`; `Diagnosis.root_cause` values are `core_common.types.RootCause`.
+
+Tool calls are scoped per turn: the startup `ToolGateway` is a shared root (adapter config +
+discovered catalog); the orchestrator calls `gateway.for_turn(conversation_id)` for every turn
+(message, approval, alert), giving each its own `conversation_id` (tool-call audit entries land
+in the real conversation) and its own `max_tool_calls_per_turn` budget. The turn's decision
+calls see the current masked user message as the last entry of `history`.
 States: `ROUTER → {ADVISORY, DIAGNOSTIC, STATUS_QUERY} → ACTION → CLOSING`,
 plus `AWAITING_APPROVAL` and `ESCALATED`. Transitions are table-driven; no free-form loop.
-`MAX_TURNS_PER_MODE`, `MAX_TOOL_CALLS_PER_TURN` (default 8) are config.
+The per-turn tool-call budget, the question cap and the per-conversation action cap are `policy.yaml: limits` (per tenant), not environment settings.
 
 - `ROUTER` → `DecisionService.classify_intent` → one of
   `advisory | problem_report | status_query | smalltalk | out_of_scope`.
@@ -560,10 +587,48 @@ plus `AWAITING_APPROVAL` and `ESCALATED`. Transitions are table-driven; no free-
   provisioning status → installation status → regional incidents → service health.
   Produces a `Diagnosis` with `root_cause`, `scope ∈ {customer_specific, regional_incident,
   system_wide}`, `confidence`, `evidence`.
+  **Agentic investigation** (`assistant/modes/investigation/`): only when the checklist ends in
+  `no_issue_found` (never for a known root cause, never for `customer_not_found`), a bounded
+  tool-using model reads the customer's actual message. It sees the masked conversation
+  (the current message last), the customer number and a masked summary of the checklist
+  evidence, and may call **only** the read-only tools in `routing.yaml: investigation_tools`
+  (∩ the gateway catalogue; any other tool name, e.g. a write tool, is refused and audited;
+  `customer_no` arguments are forced to the signed-in customer; tool results are masked with
+  `mask_payload` before the model sees them). It runs at most
+  `policy.yaml: limits.max_investigation_steps` model steps (default 4) plus one final
+  "conclude" step restricted to the local `submit_finding` tool, and respects the per-turn
+  tool budget (`ToolBudgetExceeded` ends the lookups, not the turn). It ends with an
+  `InvestigationFinding` — `outcome ∈ {needs_more_info, escalate, resolved_info}`,
+  `summary_en` (ticket text, no PII), `customer_reply_en`, `clarifying_question_en`,
+  `suggested_department`, `confidence`, `evidence` (ids/statuses only):
+  - `needs_more_info` → the reply carries the question and the conversation **stays in
+    `DIAGNOSTIC`**; the next message continues the investigation with the history. State key
+    `investigation_rounds` counts the questions; after `limits.max_clarification_rounds`
+    (default 2) the finding is converted to `escalate`.
+  - `escalate` → `ACTION` builds a structured ticket (`issue_type=other`, priority
+    `NORMAL` or the `urgency_floor`, department from the finding — an unknown one falls back to
+    `routing.yaml: issue_routing[other]`) whose body holds the investigation summary and
+    evidence; mode `ESCALATED`.
+  - `resolved_info` → informational answer, mode `CLOSING`.
+  - Confidence below `policy.yaml: decision.min_confidence` turns a `resolved_info` into an
+    escalation (a clarifying question is not a guess, so it is exempt).
+  - If the provider cannot take a tool step (scripted without a matching rule, provider
+    error, `PIILeakError`, no finding within the step limit) the assistant asks the customer
+    for more detail and stays in `DIAGNOSTIC` (counted as a clarification round; after the
+    cap a ticket is created) instead of closing silently.
+  The investigation never executes a write action: its outcome only shapes a reply or a
+  ticket; actions remain the policy engine's business (§4.6). Every model step is audited
+  (`decision_service` / `mode_decision`) and traced; tool calls are audited by the gateway.
 - `ACTION`: candidate action → **policy engine** → execute | ask approval | escalate (ticket).
 - `STATUS_QUERY`: reports on existing ticket(s)/subscription without opening anything new.
 
 ### 4.4 `recommend_packages` (deterministic, `assistant/recommendation/engine.py`)
+The opening message that routes a customer into ADVISORY is read too: every field it already
+states (model extraction `_ExtractedFields`, plus clearly labelled patterns such as `£50`,
+"four of us", "8 devices", "no contract" when the model is unavailable — never a positional
+guess, so a bare number is not a device count) is stored, and only the still-missing questions
+are asked. If that completes the profile the recommendation follows immediately.
+
 Pure function, no LLM. Input `AdvisoryProfile`:
 ```
 usage: list[student|family|home_office|gaming|streaming|basic]
@@ -571,7 +636,7 @@ household_size: int ; device_count: int ; budget_gbp: float|None
 commitment_preference: none|12|24|any ; needs_static_ip: bool ; needs_tv: bool
 ```
 Score per package = weighted sum (weights in `config/tenants/netswift/routing.yaml`):
-speed adequacy (device_count × 25 Mbps target, 35 %), budget fit (25 %, hard filter when
+speed adequacy (device_count × 25 Mbps target, 35 %; when `device_count` is unknown it is estimated as `household_size × devices_per_person` (routing.yaml, default 3), 1 only if neither is known, and the reason then reads "household of N" instead of claiming a device count), budget fit (25 %, hard filter when
 `budget_gbp` exceeded by > 15 %), profile match (20 %), commitment match (10 %),
 extras match (10 %). Returns top-3 with `score`, `reasons[]` (customer-facing reason codes resolved
 from a table, not generated), `is_best`. Ties broken by lower price, then shorter commitment.
@@ -583,7 +648,18 @@ class DecisionService(Protocol):
     def choose_department(self, ctx: DecisionContext) -> Decision[Department]: ...
     def assess_urgency(self, ctx: DecisionContext) -> Decision[Priority]: ...
     def classify_issue_type(self, ctx: DecisionContext) -> Decision[IssueType]: ...
+    def triage(self, ctx: DecisionContext) -> Triage: ...   # issue_type + priority + department
 ```
+`Triage = {issue_type: Decision[IssueType], priority: Decision[Priority], department:
+Decision[Department]}` (`core_common.types`). ACTION mode calls `triage` **once** per
+escalation (one LLM round-trip instead of three) and feeds the existing per-field logic from
+it: deterministic root-cause fallbacks, the confidence floor, `routing.yaml` fallbacks and
+`urgency_floor`, and one audit entry plus one `record_decision` trace per field, exactly as
+with three separate calls. `llm_structured.triage` makes one structured call (schema
+`_TriageResult`: value + confidence + rationale per field) and validates each field on its own:
+an out-of-enum field becomes a confidence-0 `Decision` without affecting the others, and a
+provider failure makes all three confidence 0. Services that only implement the three
+single methods use `decision.base.triage_via_individual_calls(service, ctx)`.
 `Decision[T] = {value: T, confidence: float, rationale: str, model: str, raw: dict}`.
 Implementations: `llm_structured` (default), `typesafe_jev` (stub raising
 `NotImplementedError` with a documented adapter surface), selected via
@@ -600,6 +676,8 @@ decision:
 limits:
   max_tool_calls_per_turn: 8
   max_questions_advisory: 5
+  max_investigation_steps: 4     # model steps in the agentic investigation (§4.3)
+  max_clarification_rounds: 2    # clarifying questions before handing over to a human
 actions:
   retry_provisioning_job:
     allowed: true
@@ -639,6 +717,19 @@ API: `engine.check(action_name, context) -> PolicyDecision{allowed, requires_con
 reason_code, reason_en, escalate_to, limit_applied}`. The model never decides authority:
 `ActionExecutor.execute()` calls `check()` first and raises `PolicyDenied` otherwise —
 unknown action names default to **deny**. Every check is written to the audit log.
+
+Where the facts come from (a condition on a missing fact counts as not met, never as met):
+- `amount_gbp` is the amount in the action's own params (what is checked is what runs).
+- `credit.existing_count_30d` comes from the company via `get_credit_history`
+  (`diag.credit_history`); if that call fails the fact is omitted and the engine denies.
+- `usage.per_conversation` / `usage.per_customer_per_day` are computed by `ActionExecutor`
+  from `asst.action_records` (`executed = true`, UTC day); callers cannot supply them.
+- `limits.max_actions_per_conversation` is enforced by `ActionExecutor` (via
+  `StateMachine.check_actions_per_conversation`, raising `LimitExceeded`) before an allowed
+  action runs or asks for confirmation. `max_tool_calls_per_turn` is enforced by the gateway
+  (`ToolBudgetExceeded`) and `max_questions_advisory` by the advisory flow.
+- Every action a tenant's `policy.yaml` allows must have an entry in
+  `mcp_gateway.action_runner.ACTION_TOOL_MAP` (tested in `test_config_consistency.py`).
 
 ### 4.7 Masking (`assistant/privacy/masking.py`)
 `mask_text(text) -> (masked_text, mapping)` and `mask_payload(dict)`.
@@ -733,7 +824,35 @@ Company: `COMPANY_DB_*`, `CORE_API_KEY_CRM`, `CORE_API_KEY_PARTNER`, `PSP_API_KE
 `RESEND_COOLDOWN_SECONDS`, `ALERT_INTEGRATION_WEBHOOK_URL`.
 Assistant: `ASSISTANT_DB_*`, `TENANT=netswift`, `LLM_PROVIDER=openai_agents`,
 `LLM_MODEL=gpt-4.1-mini`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`,
-`DECISION_SERVICE=llm_structured`, `DECISION_MIN_CONFIDENCE`, `MAX_TOOL_CALLS_PER_TURN`,
+`DECISION_SERVICE=llm_structured`, `DECISION_MIN_CONFIDENCE`,
 `MCP_*_URL`, `COMPANY_API_KEY` (= partner key), `DIAG_DATABASE_URL`,
 `LANGFUSE_ENABLED`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`,
 `EVAL_MODE=scripted|live`.
+
+### 8.1 Provider seam (`assistant/llm/base.py`)
+
+`LLMProvider` = `complete` (free text), `structured` (schema-validated, used by every
+`DecisionService` call), `health`, and `run_tool_step` — ONE step of a tool-using loop:
+
+```python
+def run_tool_step(*, system: str, messages: Sequence[AgentMessage],
+                  tools: Sequence[ToolDefinition], temperature=0.0,
+                  max_tokens=None) -> ToolStep   # ToolStep(tool_calls: [ToolCall], text: str | None)
+```
+
+`AgentMessage` is a user / assistant (text and/or `tool_calls`) / tool-result message. The
+caller executes tools and loops; a provider never runs a tool. Mappings: OpenAI uses
+`chat.completions.create(tools=[{"type": "function", ...}])` (not the Agents SDK `Runner`),
+Anthropic uses `tools=` with `tool_use` / `tool_result` blocks, and `scripted` plays
+`ScriptedRule.tool_script` (a list of steps, each a list of `{name, arguments}`; it raises
+`UnscriptedPromptError` when nothing matches, which the investigation turns into its
+fallback). `llm.guard.MaskingProvider.run_tool_step` runs the PII check over the system
+prompt, every message, earlier tool-call arguments and every tool result before the inner
+provider is called.
+
+### 8.2 Tenant routing: `investigation_tools`
+
+`config/tenants/<tenant>/routing.yaml: investigation_tools` is the explicit read-only
+allowlist of tool names the investigation model may call. The loader rejects duplicates,
+names that appear in `policy.yaml: actions`, and names with a write-style prefix
+(`create_`, `post_`, `add_`, `retry_`, `enqueue_`, `resend_`, `apply_`, `request_`, ...).

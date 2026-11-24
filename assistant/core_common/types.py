@@ -1,12 +1,18 @@
-"""Shared vocabulary for the assistant's pure-logic core.
+"""Shared vocabulary (enums and data models) for the assistant's pure-logic core.
 
-Every other package under ``assistant/`` (policy, recommendation, privacy, audit, and —
-built in parallel by other agents — decision, modes, llm, api) imports these types.
-Keep this module free of any I/O, LLM, or network dependency: it is pure data.
+Where this sits: ``core_common``; imported by policy, recommendation, privacy, audit,
+decision, modes, llm and api. It is pure data: no I/O, LLM or network dependency.
 
-Import style: this package is imported as a top-level module named ``core_common``
-(e.g. ``from core_common.types import Mode``), never as ``common`` — the architecture
-boundary test forbids the top-level import name ``common`` under ``assistant/``.
+Key ideas:
+- ``StrEnum`` values double as the strings stored in the DB and sent to the model, so there
+  is exactly one spelling of each mode, intent and issue type.
+- ``Decision[T]`` pairs every model answer with a confidence and rationale, so callers can
+  apply a confidence floor instead of trusting the value blindly.
+- Frozen models for results (cannot be mutated by accident); ``AdvisoryProfile`` is the one
+  mutable exception because it fills in turn by turn.
+
+Read next: ``decision/base.py``, ``policy/engine.py``.
+See: docs/contracts.md §4.
 """
 from __future__ import annotations
 
@@ -15,9 +21,7 @@ from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# --------------------------------------------------------------------------------------
-# Enums
-# --------------------------------------------------------------------------------------
+# --- Enums -------------------------------------------------------------------
 
 
 class Mode(StrEnum):
@@ -76,6 +80,29 @@ class IssueType(StrEnum):
     OTHER = "other"
 
 
+class RootCause(StrEnum):
+    """What diagnostic mode concluded about a problem report (`Diagnosis.root_cause`).
+
+    The first six members are the same words as the `IssueType` members of the same name:
+    a root cause the checklist can name becomes a ticket of that issue type. The last two are
+    outcomes with no ticket type of their own: ``NO_ISSUE_FOUND`` (the checklist found no
+    fault, so the agentic investigation takes over) and ``CUSTOMER_NOT_FOUND``.
+
+    It is a `StrEnum`, so it compares equal to the plain strings stored in conversation
+    state, audit rows and API payloads; `Diagnosis.root_cause` itself stays a plain `str`
+    field and pydantic stores the value, so JSON and `repr` output are unchanged.
+    """
+
+    STUCK_PROVISIONING = "stuck_provisioning"
+    PAID_NOT_ACTIVE = "paid_not_active"
+    DOUBLE_CHARGE = "double_charge"
+    MISSED_INSTALLATION = "missed_installation"
+    REGIONAL_OUTAGE = "regional_outage"
+    PAYMENT_SYSTEM_DOWN = "payment_system_down"
+    NO_ISSUE_FOUND = "no_issue_found"
+    CUSTOMER_NOT_FOUND = "customer_not_found"
+
+
 class DiagnosisScope(StrEnum):
     """Scope of a `Diagnosis` (contracts §4.3)."""
 
@@ -121,9 +148,7 @@ class StepType(StrEnum):
     ESCALATION = "escalation"
 
 
-# --------------------------------------------------------------------------------------
-# Generic Decision[T] (contracts §4.5)
-# --------------------------------------------------------------------------------------
+# --- Generic Decision[T] (contracts §4.5) ------------------------------------
 
 T = TypeVar("T")
 
@@ -140,9 +165,18 @@ class Decision(BaseModel, Generic[T]):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
-# --------------------------------------------------------------------------------------
-# Advisory / recommendation (contracts §4.4)
-# --------------------------------------------------------------------------------------
+class Triage(BaseModel):
+    """Result of the combined `DecisionService.triage` call: the three escalation decisions
+    (issue type, priority, department) made from one shared context in one round-trip."""
+
+    model_config = ConfigDict(frozen=True)
+
+    issue_type: Decision[IssueType]
+    priority: Decision[Priority]
+    department: Decision[Department]
+
+
+# --- Advisory / recommendation (contracts §4.4) ------------------------------
 
 
 class AdvisoryProfile(BaseModel):
@@ -176,12 +210,12 @@ class PackageOffer(BaseModel):
     is_best: bool
 
 
-# --------------------------------------------------------------------------------------
-# Diagnostic mode (contracts §4.3)
-# --------------------------------------------------------------------------------------
+# --- Diagnostic mode (contracts §4.3) ----------------------------------------
 
 
 class Diagnosis(BaseModel):
+    """What diagnostic mode concluded: root cause, scope, confidence and the evidence."""
+
     model_config = ConfigDict(frozen=True)
 
     root_cause: str
@@ -192,12 +226,15 @@ class Diagnosis(BaseModel):
     incident_no: str | None = None
 
 
-# --------------------------------------------------------------------------------------
-# Policy engine (contracts §4.6)
-# --------------------------------------------------------------------------------------
+# --- Policy engine (contracts §4.6) ------------------------------------------
 
 
 class PolicyDecision(BaseModel):
+    """Answer of `PolicyEngine.check`: allowed or not, whether confirmation is needed, and why.
+
+    `reason_code` is for logic and audit, `reason_en` is the sentence a customer may read.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     allowed: bool
@@ -209,9 +246,7 @@ class PolicyDecision(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-# --------------------------------------------------------------------------------------
-# Audit (contracts §1.5, §4.8)
-# --------------------------------------------------------------------------------------
+# --- Audit (contracts §1.5, §4.8) --------------------------------------------
 
 
 class AuditStep(BaseModel):
@@ -236,8 +271,7 @@ class AuditStep(BaseModel):
     tool_output_digest: str | None = None
 
 
-# --------------------------------------------------------------------------------------
-# Small shared literal helper
-# --------------------------------------------------------------------------------------
+# --- Small shared literal helper ---------------------------------------------
 
+# The comparison operators a policy `conditions[]` entry may use.
 ConditionOperator = Literal["eq", "in", "lt", "lte", "gt", "gte", "ne", "exists"]

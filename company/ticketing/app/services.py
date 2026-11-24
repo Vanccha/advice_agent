@@ -1,3 +1,17 @@
+"""Ticket business logic: create, list, change status, patch and comment.
+
+Where this sits: called by `routers/api.py` and `routers/ui.py`; the only
+place that writes tickets.
+
+Key ideas:
+- Idempotent create on `external_ref`: a retry returns the existing ticket
+  with `created=False` rather than a duplicate.
+- Webhooks are scheduled as background tasks after the commit, so a slow or
+  broken subscriber cannot slow or fail the request.
+- Every status change is validated against `transitions.py` and recorded.
+
+Read next: `transitions.py`, `webhooks.py`.
+"""
 from __future__ import annotations
 
 from fastapi import BackgroundTasks
@@ -19,7 +33,7 @@ from app.webhooks import build_webhook_payload, deliver_event
 
 
 def department_summary(session: Session) -> list[dict]:
-    """Departments with their current open-ticket count, for the /agent sidebar."""
+    """Departments with their current open-ticket count, for the panel sidebar."""
     from sqlalchemy import func
 
     counts = dict(
@@ -52,6 +66,7 @@ def _schedule_webhook(
 
 
 def get_ticket_by_key(session: Session, ticket_key: str) -> Ticket:
+    """Load a ticket with comments and history, or raise `NotFound`."""
     ticket = session.execute(
         select(Ticket)
         .options(selectinload(Ticket.comments), selectinload(Ticket.status_history))
@@ -63,6 +78,7 @@ def get_ticket_by_key(session: Session, ticket_key: str) -> Ticket:
 
 
 def find_ticket_by_external_ref(session: Session, external_ref: str) -> Ticket | None:
+    """Look a ticket up by the caller's own reference (the idempotency key)."""
     return session.execute(
         select(Ticket)
         .options(selectinload(Ticket.comments), selectinload(Ticket.status_history))
@@ -82,6 +98,7 @@ def list_tickets(
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Ticket], int]:
+    """Filtered, paginated ticket listing; returns (items, total)."""
     stmt = select(Ticket)
     if department:
         stmt = stmt.where(Ticket.department == department)
@@ -193,6 +210,7 @@ def change_status(
     session_factory: sessionmaker[Session],
     background_tasks: BackgroundTasks | None = None,
 ) -> Ticket:
+    """Move a ticket to a new status if the table allows it, recording history and notifying."""
     old_status = ticket.status
     if new_status != old_status:
         check_transition(old_status, new_status)
@@ -249,6 +267,7 @@ def patch_ticket(
     session_factory: sessionmaker[Session],
     background_tasks: BackgroundTasks | None = None,
 ) -> Ticket:
+    """Update department, priority or assignee."""
     if department is not None:
         ticket.department = department
     if priority is not None:
@@ -287,6 +306,7 @@ def add_comment(
     session_factory: sessionmaker[Session],
     background_tasks: BackgroundTasks | None = None,
 ) -> Comment:
+    """Add a comment to a ticket and schedule the `ticket.commented` webhook."""
     comment = Comment(
         ticket_id=ticket.id,
         author=author,

@@ -1,19 +1,35 @@
-"""Tamper-evident, hash-chained audit trail (contracts §1.5, §4.8).
+"""Tamper-evident, hash-chained, append-only audit trail.
 
-Import as: ``from audit.log import AuditLog, AuditEntry, ChainVerification``.
-The pure hash-chain primitives (`canonical_json`, `compute_entry_hash`) are importable and
-testable without any database.
+Where this sits: ``audit`` package. ``policy.executor`` and ``modes`` call ``AuditLog.append``
+for every decision, tool call and action; the API reads ``timeline`` / ``verify_chain``.
+It writes ``AuditEntryRow`` (``core_common.models``) and guards input with ``privacy.masking``.
+
+Key ideas:
+- Hash chain: each row stores ``entry_hash = sha256(prev_hash + canonical_json(row))``, so
+  changing or removing any past row breaks every hash after it (``verify_chain`` finds it).
+- Append-only via DB trigger: on Postgres an UPDATE or DELETE raises (``core_common.db``);
+  the hash chain then proves nothing was altered by someone with raw access.
+- Advisory lock: appends are serialised (Postgres advisory lock, process lock on SQLite),
+  otherwise two writers would read the same predecessor and fork the chain.
+- Mask before writing: ``evidence`` is checked with ``assert_no_pii``; tool output is stored
+  only as a digest, never raw.
+
+Read next: ``core_common/db.py`` (the trigger), ``audit/tests/test_hash_chain.py``.
+See: docs/contracts.md §1.5, §4.8.
 """
 from __future__ import annotations
 
 import datetime as dt
 import hashlib
 import json
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import func, text
+from sqlalchemy.orm import Session, sessionmaker
 
 from core_common.db import session_scope
 from core_common.models import AuditEntryRow
@@ -23,10 +39,14 @@ from privacy.masking import assert_no_pii
 # The first entry in any conversation's chain has no predecessor.
 GENESIS_HASH = "0" * 64
 
+# Why serialise: each row chains from the previous one and `seq` is global, so two concurrent
+# appends would read the same predecessor and fork the chain. Postgres: a transaction-scoped
+# advisory lock (one global key, because `seq` is global). SQLite (unit tests): a process lock.
+_AUDIT_APPEND_LOCK_KEY = 7_315_001
+_PROCESS_APPEND_LOCK = threading.Lock()
 
-# --------------------------------------------------------------------------------------
-# Pure hash-chain primitives (no I/O) — see assistant/audit/tests/test_hash_chain.py
-# --------------------------------------------------------------------------------------
+
+# --- Pure hash-chain primitives (no I/O) — see assistant/audit/tests/test_hash_chain.py ---
 
 
 def canonical_json(payload: dict[str, Any]) -> bytes:
@@ -62,6 +82,7 @@ def _entry_payload(
     tool_output_digest: str | None,
     created_at: str,
 ) -> dict[str, Any]:
+    """The exact set of fields that gets hashed; verification must rebuild the same dict."""
     return {
         "seq": seq,
         "conversation_id": conversation_id,
@@ -79,12 +100,12 @@ def _entry_payload(
     }
 
 
-# --------------------------------------------------------------------------------------
-# Domain types returned by AuditLog
-# --------------------------------------------------------------------------------------
+# --- Domain types returned by AuditLog ---------------------------------------
 
 
 class AuditEntry(BaseModel):
+    """One stored audit row as returned to callers (read-only)."""
+
     model_config = ConfigDict(frozen=True)
 
     id: int
@@ -106,6 +127,8 @@ class AuditEntry(BaseModel):
 
 
 class ChainVerification(BaseModel):
+    """Result of `verify_chain`: `ok`, or the first row whose hash no longer matches."""
+
     model_config = ConfigDict(frozen=True)
 
     ok: bool
@@ -113,6 +136,7 @@ class ChainVerification(BaseModel):
 
 
 def _row_to_entry(row: AuditEntryRow) -> AuditEntry:
+    """ORM row -> immutable `AuditEntry`."""
     return AuditEntry(
         id=row.id,
         seq=row.seq,
@@ -134,6 +158,7 @@ def _row_to_entry(row: AuditEntryRow) -> AuditEntry:
 
 
 def _row_payload(row: AuditEntryRow) -> dict[str, Any]:
+    """Rebuild the hashed payload from a stored row (used when verifying)."""
     return _entry_payload(
         seq=row.seq,
         conversation_id=row.conversation_id,
@@ -151,13 +176,14 @@ def _row_payload(row: AuditEntryRow) -> dict[str, Any]:
     )
 
 
-# --------------------------------------------------------------------------------------
-# AuditLog
-# --------------------------------------------------------------------------------------
+# --- AuditLog ----------------------------------------------------------------
 
 
 class AuditLog:
-    """Append-only trail for one conversation's reasoning/actions.
+    """Append-only trail of a conversation's reasoning and actions.
+
+    Every conversation has its own chain (rows link through `prev_hash`), while `seq`
+    numbers rows globally.
 
     `session_factory` is a SQLAlchemy `sessionmaker` (e.g. `core_common.db.get_sessionmaker()`
     for Postgres in production, or a plain `sessionmaker(bind=sqlite_engine)` in tests).
@@ -165,6 +191,25 @@ class AuditLog:
 
     def __init__(self, session_factory: sessionmaker) -> None:
         self.session_factory = session_factory
+
+    @contextmanager
+    def _serialised_session(self) -> Iterator[Session]:
+        """A write session in which this caller is the only appender until commit.
+
+        PostgreSQL: the advisory lock is taken as the transaction's first statement and
+        released automatically on commit/rollback, so it is held across the
+        read-predecessor/insert/commit sequence. Other dialects: a process-level lock held
+        around the whole session (including its commit)."""
+        bind = self.session_factory.kw.get("bind")
+        is_postgres = bind is not None and bind.dialect.name == "postgresql"
+        if is_postgres:
+            with session_scope(self.session_factory) as session:
+                session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _AUDIT_APPEND_LOCK_KEY})
+                yield session
+        else:
+            with _PROCESS_APPEND_LOCK:
+                with session_scope(self.session_factory) as session:
+                    yield session
 
     def append(
         self,
@@ -189,7 +234,7 @@ class AuditLog:
         step_type_value = step_type.value if isinstance(step_type, StepType) else str(step_type)
         created_at = dt.datetime.now(dt.timezone.utc).isoformat()
 
-        with session_scope(self.session_factory) as session:
+        with self._serialised_session() as session:
             prev_row = (
                 session.query(AuditEntryRow)
                 .filter_by(conversation_id=conversation_id)
@@ -238,6 +283,7 @@ class AuditLog:
             return _row_to_entry(row)
 
     def verify_chain(self, conversation_id: str) -> ChainVerification:
+        """Recompute every hash in the conversation's chain and report the first mismatch."""
         with session_scope(self.session_factory) as session:
             rows = (
                 session.query(AuditEntryRow)
@@ -256,6 +302,7 @@ class AuditLog:
             return ChainVerification(ok=True, broken_at=None)
 
     def timeline(self, conversation_id: str) -> list[AuditEntry]:
+        """All entries of a conversation, oldest first."""
         with session_scope(self.session_factory) as session:
             rows = (
                 session.query(AuditEntryRow)

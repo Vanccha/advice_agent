@@ -1,8 +1,19 @@
-"""Incident ticket deduplication (contracts §4.6 `incident_handling` /
-§5 scenario c). During a known regional incident, never open a second ticket for the
-same ``incident_no``: find the existing one first and attach to it.
+"""Incident ticket deduplication: one ticket per regional incident, however many customers call.
+
+Where this sits: called by `modes.action` when the diagnosis is a regional outage. Uses the
+ticket service, the gateway (to comment on an existing ticket) and `modes.ticket_links`.
+
+Key ideas:
+- Idempotent by business key: look the incident up first, create only if absent
+  (``max_tickets_per_incident: 1``, contracts §4.6), so a spike of affected customers
+  does not flood the department with duplicates.
+- Attach, don't duplicate: a later customer becomes an internal comment on the existing
+  ticket.
+
+Read next: modes/action/, tickets/builder.py.
 
 Import as: ``from modes.incident_policy import ensure_incident_ticket``.
+See: docs/contracts.md §4.6, §5.
 """
 from __future__ import annotations
 

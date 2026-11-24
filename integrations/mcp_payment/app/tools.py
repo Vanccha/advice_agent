@@ -1,4 +1,17 @@
-"""`mcp-payment` tools (docs/contracts.md §3)."""
+"""`mcp-payment` tools (docs/contracts.md section 3).
+
+Where this sits: registered by `main.py`. `get_payment_status` reads the
+`diag.payment_status` view; the others call the PSP simulator's REST API.
+
+Key ideas:
+- A diagnostic never fails just because the thing it diagnoses is down:
+  `get_gateway_health` returns `ok=True` with `reachable=False` when the
+  gateway is unreachable.
+- Detection logic lives in `duplicates.py`; this file only fetches data and
+  shapes results.
+
+Read next: `duplicates.py`.
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -40,6 +53,7 @@ _PAYMENT_STATUS_SQL = """
 
 
 async def handle_get_payment_status(inp: GetPaymentStatusInput) -> ToolResult[Any]:
+    """Payment status from the diag view, by customer, subscription or payment id."""
     if not (inp.customer_no or inp.subscription_id or inp.payment_id):
         return fail("INVALID_INPUT", "provide customer_no, subscription_id, or payment_id", SOURCE_DIAG)
     try:
@@ -65,6 +79,7 @@ async def _list_charges(customer_no: str, status: str | None, limit: int, offset
 
 
 async def handle_list_customer_charges(inp: ListCustomerChargesInput) -> ToolResult[Any]:
+    """A customer's charges as the payment processor sees them."""
     result = await _list_charges(inp.customer_no, inp.status, inp.limit, inp.offset)
     if not result.ok:
         return result
@@ -124,6 +139,7 @@ async def handle_get_gateway_health(_inp: GetGatewayHealthInput) -> ToolResult[A
 
 
 async def handle_detect_duplicate_charges(inp: DetectDuplicateChargesInput) -> ToolResult[Any]:
+    """Find same-amount succeeded charges within a time window for one customer."""
     result = await _list_charges(inp.customer_no, "succeeded", 200, 0)
     if not result.ok:
         return result
@@ -140,6 +156,7 @@ async def handle_detect_duplicate_charges(inp: DetectDuplicateChargesInput) -> T
 
 
 def register_tools(mcp: Any) -> None:
+    """Register the four `mcp-payment` tools."""
     register_tool(
         mcp,
         name="get_payment_status",

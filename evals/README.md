@@ -28,7 +28,10 @@ Flags:
 - `--no-chaos` — skip chaos injection entirely. Every scenario case is then reported as
   `ERROR` ("chaos injection skipped") rather than silently passing — this flag exists for a
   quick advisory-only loop (`--no-chaos --only advisory`), not to make the scenario suite
-  green without chaos. The three `no_action_cases` never touch chaos and always run.
+  green without chaos. The three `no_action_cases` and the `investigation_cases` never touch chaos and always run.
+  Investigation cases script the model's read-only tool calls and final `submit_finding` in
+  the dataset (`scripted_investigation`); they assert it asks a question (`reply_must_ask_question`,
+  mode `DIAGNOSTIC`) or hands over with a ticket, never the old "cannot see an obvious problem" dead end.
 
 Exit code is `0` only when every case `PASS`ed; any `FAIL` or `ERROR` exits non-zero, so
 `make eval` is usable as a CI gate.
@@ -62,6 +65,9 @@ that case's `expect:` block is asserted. Injection strategy (see
 - `payment_down`: injected once (a global PSP outage flag, no customer to pick); all tone
   variants are sent as the same fixed seeded customer (`NS-100001`).
 
+The scenario suite reports 27 cases (20 tone-variant messages + the outage dedup check + 3
+no-action + 3 investigation cases); with the 10 advisory profiles a full run reports 37.
+
 The chaos CLI is reset once after all of a scenario id's variants have run (never between
 variants of the *same* id — each already has independent state), and once more at the end
 of the whole run.
@@ -87,7 +93,7 @@ As a secondary, best-effort check, the profile's `conversation_en` is also playe
 the real `Orchestrator`'s ADVISORY mode (padded with a neutral "farketmez" answer if the
 scripted conversation runs out of turns before the question budget does) and the verbalised
 reply is checked to never name a package outside the catalogue — this does **not** have to
-reproduce `expected_best` (the deterministic field parser in `modes/advisory.py` is not an
+reproduce `expected_best` (the deterministic field parser in `modes/advisory/` is not an
 NLU model and is not expected to recover the exact intended profile from free text), so a
 mismatch there does not fail the primary check; it is its own named check
 (`conversation_reply_only_catalogue_packages`).
@@ -156,7 +162,7 @@ never folded into a silent pass, and never presented as if the assistant had bee
 
 ## Why (almost) every scenario case is a single turn
 
-Tracing `assistant/modes/action.py::handle_action`: every root cause this harness's
+Tracing `assistant/modes/action/__init__.py::handle_action`: every root cause this harness's
 scenarios produce resolves — success or policy denial + ticket — inside the **same**
 `handle_message()` call that ran `DIAGNOSTIC` immediately followed by `ACTION`
 (`modes/orchestrator.py`'s dispatch loop `continue`s between modes within one turn). So
@@ -179,8 +185,8 @@ terminal mode needed a second turn to materialise.
 ## What is — and isn't — exercised
 
 `modes/router.py` calls `DecisionService.classify_intent` once per conversation (its first
-message). `modes/action.py` **also** calls `classify_issue_type` and `assess_urgency` for
-every root cause that reaches its `_ROOT_CAUSE_ACTION` mapping — every scenario in this
+message). `modes/action/` **also** calls `classify_issue_type` and `assess_urgency` for
+every root cause that reaches its `ROOT_CAUSE_ACTION` mapping — every scenario in this
 dataset except `regional_outage`, which resolves through a separate branch
 (`ensure_incident_ticket` + `apply_outage_credit`) before ever reaching that mapping.
 `choose_department` is only called when a denied action's policy entry has **no**
@@ -196,7 +202,7 @@ the current dataset/policy combination (confirmed by reading the code, not assum
   router sees).
 - `classify_issue_type` / `assess_urgency`: one regex rule per scripted root cause, matched
   on the literal `'root_cause': '<value>'` substring their prompt always contains (the
-  prompt here is **not** the user's message — `modes/action.py::_decision_context` builds
+  prompt here is **not** the user's message — `modes/action/triage.py::decision_context` builds
   it from `Diagnosis`/`evidence`, which contain chaos-run-specific ids, so matching on the
   user's text would not be stable run to run).
 - `choose_department`: one generic fixture, documented above as present-but-unreachable.
@@ -224,7 +230,7 @@ passed — it never affects PASS/FAIL) naming exactly which path (`"confident"` 
   fan-out or the channel UI.
 - **Audit hash-chain integrity** (`AuditLog.verify_chain`) is not checked here — that is a
   property of `assistant/audit/`, already covered by `assistant/audit/tests/`.
-- The conversation-driven advisory honesty check parses the known `modes/advisory.py`
+- The conversation-driven advisory honesty check parses the known `modes/advisory/`
   bullet format (`"• <name> — ..."`) rather than doing real NLG understanding; if that
   template's exact punctuation ever changes, the check degrades to "no bullets found", not a
   false failure (an empty `mentioned` list cannot contain an unknown name).

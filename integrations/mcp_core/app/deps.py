@@ -1,5 +1,17 @@
-"""Process-wide dependencies for the `mcp-core` server: settings and the one
-`CompanyApiClient` pointed at core-api with the `partner-integration` key.
+"""Process-wide dependencies for the `mcp-core` server: settings and the one `CompanyApiClient` pointed at core-api.
+
+Where this sits: imported by this adapter's tools; builds clients lazily so
+importing the module never touches the network.
+
+Key ideas:
+- Dependency access through small functions (`settings()`, a client getter)
+  keeps tools easy to test: tests monkeypatch the getter, not global state.
+- Writes use the `partner-integration` service-account key, so core-api's own scope checks decide what this adapter may do.
+- httpx's `AsyncClient` is bound to the event loop it was created on, so the
+  getter rebuilds the client when the running loop changes (matters for test
+  suites that create a loop per test; uvicorn has exactly one).
+
+Read next: `tools.py` in this package.
 """
 from __future__ import annotations
 
@@ -13,6 +25,7 @@ from common.settings import AdapterSettings, get_settings
 
 @lru_cache
 def settings() -> AdapterSettings:
+    """Cached adapter settings."""
     return get_settings()
 
 
@@ -37,4 +50,5 @@ def core_api_client() -> CompanyApiClient:
 
 
 def diag_database_url() -> str:
+    """DSN of the read-only diagnostic database."""
     return settings().DIAG_DATABASE_URL

@@ -1,3 +1,15 @@
+"""HTTP helpers: clients for core-api and the payment gateway control endpoint.
+
+Where this sits: used by scenarios that must act through the company's own
+APIs rather than direct SQL.
+
+Key ideas:
+- Prefer the real write path: a payment is made through the payments endpoint,
+  with a fresh idempotency key per attempt (as a real client would after a
+  failed charge), so the resulting state is genuine.
+
+Read next: `scenarios/stuck_provisioning.py`.
+"""
 from __future__ import annotations
 
 import uuid
@@ -10,6 +22,7 @@ from chaos.settings import ChaosSettings
 
 
 def payment_control_client(settings: ChaosSettings) -> ServiceClient:
+    """Client for the payment gateway's control endpoint."""
     return ServiceClient(
         base_url=settings.payment_api_base_url,
         api_key=settings.psp_api_key,
@@ -18,16 +31,19 @@ def payment_control_client(settings: ChaosSettings) -> ServiceClient:
 
 
 def get_control_flags(settings: ChaosSettings) -> dict:
+    """Read the gateway's current control flags."""
     client = payment_control_client(settings)
     return client.get("/psp/v1/control").json()
 
 
 def set_control_flags(settings: ChaosSettings, **flags: object) -> dict:
+    """Set some gateway control flags (outage, failure rate, latency, forced code)."""
     client = payment_control_client(settings)
     return client.post("/psp/v1/control", json_body=flags).json()
 
 
 def core_api_client(settings: ChaosSettings) -> ServiceClient:
+    """Client for core-api using the CRM key, the same door a human operator's tools use."""
     return ServiceClient(
         base_url=settings.core_api_base_url,
         api_key=settings.core_api_key_crm,
@@ -38,12 +54,11 @@ def core_api_client(settings: ChaosSettings) -> ServiceClient:
 def pay_subscription_until_succeeded(
     settings: ChaosSettings, subscription_id: int, *, attempts: int = 6
 ) -> dict:
-    """Drive a subscription through the real payments endpoint until it succeeds.
+    """Drive a subscription through the real payments endpoint until a charge succeeds.
 
-    The PSP mock randomly fails a small fraction of charges; this uses the
-    company's own write API (not a fake SQL row) to reach 'payment_received',
-    retrying with a fresh idempotency key the way a real client would after a
-    failed charge.
+    The gateway simulator randomly fails a small share of charges; this retries
+    with a fresh idempotency key each time, the way a real client would after a
+    failed charge, so the subscription reaches `payment_received` by a genuine path.
     """
     client = core_api_client(settings)
     last_result: dict | None = None

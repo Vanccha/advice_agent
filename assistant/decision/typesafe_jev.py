@@ -1,10 +1,17 @@
-"""Documented stub for an external "TypeSafe JEV" decision model (contracts §4.5:
-`DECISION_SERVICE=typesafe_jev`). Not a real implementation — selectable today so the
-interface boundary and config switch exist before a real adapter is built; every method
-raises `NotImplementedError` describing exactly what a real adapter must accept and
-return to be plugged in.
+"""Documented stub for an external "TypeSafe JEV" decision model (``DECISION_SERVICE=typesafe_jev``).
 
-Import as: ``from decision.typesafe_jev import TypeSafeJevDecisionService``.
+Where this sits: ``decision`` package; selectable through ``decision.factory`` so the
+interface boundary and config switch exist before a real adapter does. Every method raises
+``NotImplementedError`` carrying ``ADAPTER_CONTRACT``, which says exactly what a real adapter
+must accept and return.
+
+Key ideas:
+- Interface first: the Protocol in ``base.py`` is the contract; implementations are replaceable.
+- Calibrated confidence: an adapter that does not know must say so with low confidence, not
+  guess high.
+
+Read next: ``decision/base.py``.
+See: docs/contracts.md §4.5.
 """
 from __future__ import annotations
 
@@ -12,9 +19,10 @@ from typing import Any
 
 from core_common.types import Decision, Department, Intent, IssueType, Priority
 from decision.base import DecisionContext
+from core_common.types import Triage
 
 ADAPTER_CONTRACT = """\
-A real `typesafe_jev` adapter must implement the same four methods as
+A real `typesafe_jev` adapter must implement the same four methods plus `triage` as
 `decision.base.DecisionService`, with this exact surface:
 
 INPUTS (every method):
@@ -52,6 +60,11 @@ OUTPUTS (every method): core_common.types.Decision[T] where T is:
     Decision.raw:        the adapter's raw structured response, for debugging/audit,
         already free of PII.
 
+COMBINED CALL: `triage(ctx) -> core_common.types.Triage` returns the issue_type, priority
+and department decisions (each a Decision[...] obeying the rules above, validated and
+confidence-scored independently) from ONE round-trip. An adapter without a native combined
+model may return `decision.base.triage_via_individual_calls(self, ctx)`.
+
 FAILURE SEMANTICS: this adapter must never raise for an ordinary "I don't know" — return a
 Decision with low/zero confidence instead, so a turn never crashes on an uncertain answer.
 Raising is reserved for adapter-infrastructure failures the caller cannot otherwise handle
@@ -79,4 +92,7 @@ class TypeSafeJevDecisionService:
         raise NotImplementedError(ADAPTER_CONTRACT)
 
     def classify_issue_type(self, ctx: DecisionContext) -> Decision[IssueType]:
+        raise NotImplementedError(ADAPTER_CONTRACT)
+
+    def triage(self, ctx: DecisionContext) -> Triage:
         raise NotImplementedError(ADAPTER_CONTRACT)

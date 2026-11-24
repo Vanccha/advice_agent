@@ -1,3 +1,18 @@
+# Alertmanager routing: where firing and resolved alerts are delivered.
+#
+# Where this sits: receives alerts from Prometheus (rules.yml) and calls webhooks.
+#
+# Key ideas:
+# - Grouping (`group_by`, `group_wait`, `group_interval`) batches related alerts
+#   into one notification, and `repeat_interval` re-sends unresolved ones.
+# - Fan-out: a child route per receiver with `continue: true` makes every alert
+#   go to both the internal channels and the integration endpoint; without it the
+#   first matching route would win.
+# - `send_resolved: true` tells receivers when the problem ends, not only when it
+#   starts.
+#
+# Read next: ../notification-hub/app/routers/alertmanager.py.
+
 global:
   resolve_timeout: 5m
 

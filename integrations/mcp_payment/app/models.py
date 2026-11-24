@@ -1,14 +1,21 @@
-"""Pydantic input/output models for every `mcp-payment` tool
-(docs/contracts.md §3)."""
+"""Pydantic input/output models for every `mcp-payment` tool (docs/contracts.md section 3).
+
+Where this sits: imported by `tools.py`; the models are the source of each
+tool's JSON schema.
+
+Key ideas:
+- Models are the tool contract; change docs/contracts.md first.
+- Amounts are GBP floats named `amount_gbp` so the unit is never ambiguous.
+
+Read next: `tools.py`.
+"""
 from __future__ import annotations
 
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
-# --------------------------------------------------------------------------
-# get_payment_status (diag.payment_status)
-# --------------------------------------------------------------------------
+# --- get_payment_status (diag.payment_status) -----------------------------
 
 
 class GetPaymentStatusInput(BaseModel):
@@ -35,9 +42,7 @@ class GetPaymentStatusOutput(BaseModel):
     payments: list[PaymentStatus]
 
 
-# --------------------------------------------------------------------------
-# list_customer_charges (payment REST GET /psp/v1/charges)
-# --------------------------------------------------------------------------
+# --- list_customer_charges (payment REST GET /psp/v1/charges) -------------
 
 
 class ListCustomerChargesInput(BaseModel):
@@ -69,9 +74,7 @@ class ListCustomerChargesOutput(BaseModel):
     total: int
 
 
-# --------------------------------------------------------------------------
-# get_gateway_health (payment /psp/v1/control + /health)
-# --------------------------------------------------------------------------
+# --- get_gateway_health (payment /psp/v1/control + /health) ---------------
 
 
 class GetGatewayHealthInput(BaseModel):
@@ -90,9 +93,7 @@ class GetGatewayHealthOutput(BaseModel):
     )
 
 
-# --------------------------------------------------------------------------
-# detect_duplicate_charges (payment REST, pure detection logic in duplicates.py)
-# --------------------------------------------------------------------------
+# --- detect_duplicate_charges (payment REST, pure detection logic in duplicates.py) ----
 
 
 class DetectDuplicateChargesInput(BaseModel):

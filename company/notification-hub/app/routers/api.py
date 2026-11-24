@@ -1,3 +1,16 @@
+"""Notification hub JSON API: list channels, post and read messages.
+
+Where this sits: called by ticketing and by partner integrations with an
+`X-API-Key`.
+
+Key ideas:
+- Unknown channels return a clean `CHANNEL_NOT_FOUND` (404) in the shared
+  error envelope.
+- Messages carry a severity, an optional structured `fields` map and an
+  `external_ref`.
+
+Read next: `ui.py`.
+"""
 from __future__ import annotations
 
 from typing import Literal

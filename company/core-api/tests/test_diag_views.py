@@ -12,6 +12,7 @@ EXPECTED_VIEWS = {
     "active_incidents",
     "incident_affected",
     "notification_history",
+    "credit_history",
     "subscription_timeline",
     "region_health",
 }

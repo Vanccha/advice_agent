@@ -1,3 +1,17 @@
+"""`ServiceClient`: a thin HTTP client for service-to-service calls.
+
+Where this sits: used by services that call a sibling (core-api to the payment
+gateway, ticketing to notification-hub).
+
+Key ideas:
+- Failure translation: a network failure becomes `UpstreamUnavailable` (503)
+  and an upstream error response is re-raised in our own envelope, so callers
+  handle one error vocabulary.
+- Upstream 5xx are reported as 503 to our callers: they are about our
+  dependency, not about the caller's request.
+
+Read next: `core-api/app/payment_client.py`, a caller.
+"""
 from __future__ import annotations
 
 import logging
@@ -43,6 +57,11 @@ class ServiceClient:
         headers: dict[str, str] | None = None,
         raise_for_status: bool = True,
     ) -> httpx.Response:
+        """Send one request; with `raise_for_status` (default) any 4xx/5xx becomes an `ApiError`.
+
+        Pass `raise_for_status=False` when the caller wants to inspect an error
+        response itself.
+        """
         url = f"{self.base_url}{path}"
         try:
             response = httpx.request(
@@ -76,10 +95,13 @@ class ServiceClient:
         return response
 
     def get(self, path: str, **kwargs: Any) -> httpx.Response:
+        """GET helper."""
         return self.request("GET", path, **kwargs)
 
     def post(self, path: str, **kwargs: Any) -> httpx.Response:
+        """POST helper."""
         return self.request("POST", path, **kwargs)
 
     def patch(self, path: str, **kwargs: Any) -> httpx.Response:
+        """PATCH helper."""
         return self.request("PATCH", path, **kwargs)

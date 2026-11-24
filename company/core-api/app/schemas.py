@@ -1,3 +1,10 @@
+"""Pydantic request bodies for core-api's write endpoints.
+
+Where this sits: validated by FastAPI before a handler runs; invalid input
+becomes a 422 in the shared error envelope.
+
+Read next: `routers/`.
+"""
 from __future__ import annotations
 
 from datetime import date

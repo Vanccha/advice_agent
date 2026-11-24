@@ -101,6 +101,12 @@ def contains_none(text: str | None, phrases: list[str] | tuple[str, ...]) -> boo
     return not contains_any(text, phrases)
 
 
+def asks_question(text: str | None) -> bool:
+    """True when the reply puts a question to the customer (it contains a question mark).
+    Used for cases where the assistant must ask for more detail instead of closing."""
+    return "?" in (text or "")
+
+
 def error_case(suite: str, case_id: str, variant: str | None, message: str) -> CaseResult:
     """An honest ERROR case (adapter/chaos unavailable, unexpected shape, ...) — never a
     silent pass and never folded into the green total."""

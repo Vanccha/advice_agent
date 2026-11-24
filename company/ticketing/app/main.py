@@ -1,3 +1,14 @@
+"""Ticketing app factory and entrypoint.
+
+Where this sits: `uvicorn app.main:app` in the ticketing container.
+
+Key ideas:
+- `build_app(settings)` is a factory, so tests can build an app against their
+  own settings and database instead of sharing a global.
+- The API-key registry gives one client key the `tickets:*` scope.
+
+Read next: `routers/api.py`.
+"""
 from __future__ import annotations
 
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +24,7 @@ from app.settings import TicketingSettings, get_settings
 
 
 def build_app(settings: TicketingSettings | None = None):
+    """Build a ticketing app; pass `settings` to point it at a different database (tests do)."""
     settings = settings or get_settings()
 
     engine = make_engine(settings.database_url)

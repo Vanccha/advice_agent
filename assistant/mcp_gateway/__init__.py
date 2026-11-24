@@ -1,15 +1,13 @@
-"""The tool gateway: the only way the product touches the company (contracts §3).
+"""The tool gateway: the only way the assistant touches the company's systems.
 
-Public surface:
-    `ToolGateway` — live gateway over streamable-HTTP MCP adapters (`gateway.py`).
-    `FakeGateway` — same surface, canned responses, no network (`fake.py`).
-    `ToolSpec`, `ToolCallOutcome`, `ToolBudgetExceeded` — shared types (`types.py`).
-    `make_action_runner` — wires `policy.executor.ActionExecutor` to a gateway
-        (`action_runner.py`).
+Public entry points: ``ToolGateway`` (live, over streamable-HTTP MCP adapters), ``FakeGateway``
+(same surface, canned answers, for tests and evals), ``make_action_runner`` (connects
+``policy.executor.ActionExecutor`` to a gateway) and the shared types ``ToolSpec``,
+``ToolCallOutcome``, ``ToolBudgetExceeded``.
 
-Note for maintainers: this package is importable as top-level `mcp`, which collides with
-the pip-installed `mcp` client SDK: this package is named `mcp_gateway`, so `import mcp`
-inside it resolves to the real SDK.
+The package is named ``mcp_gateway``, not ``mcp``: a package called ``mcp`` would shadow the
+installed MCP client SDK, so ``import mcp`` inside it would no longer reach the real SDK.
+See: docs/contracts.md §3.
 """
 from __future__ import annotations
 

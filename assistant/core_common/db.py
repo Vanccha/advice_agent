@@ -1,6 +1,16 @@
-"""Engine/session plumbing for `ASSISTANT_DATABASE_URL` (schema `asst`).
+"""Database engine and session plumbing for the ``asst`` schema.
 
-Import as: ``from core_common.db import Base, session_scope, get_engine, bootstrap_schema``.
+Where this sits: ``core_common``. Called by ``audit.log``, ``tickets``, ``modes`` and the API
+start-up. It builds SQLAlchemy engines from ``ASSISTANT_DATABASE_URL`` and creates the tables
+declared in ``models.py``.
+
+Key ideas:
+- ``session_scope``: commit on success, roll back on error, always close (unit-of-work pattern).
+- Same ORM models run on Postgres (production) and SQLite (unit tests) via a schema translate map.
+- Append-only audit table is enforced by a Postgres trigger, not just by application code.
+
+Read next: ``core_common/models.py``, ``audit/log.py``.
+See: docs/contracts.md §1.5.
 """
 from __future__ import annotations
 
@@ -28,8 +38,8 @@ __all__ = [
 ]
 
 # The append-only guarantee for `asst.audit_entries` (contracts §1.5): any UPDATE or DELETE
-# raises instead of silently mutating/removing a row. Applied only on Postgres — SQLite
-# (used by unit tests) has no equivalent trigger mechanism we rely on here.
+# raises, so history cannot be rewritten even by someone with SQL access. Postgres only;
+# SQLite (unit tests) relies on the hash chain alone.
 AUDIT_APPEND_ONLY_TRIGGER_SQL = """
 CREATE OR REPLACE FUNCTION asst.audit_entries_append_only() RETURNS TRIGGER AS $$
 BEGIN
@@ -46,12 +56,12 @@ FOR EACH ROW EXECUTE FUNCTION asst.audit_entries_append_only();
 
 
 def _build_engine(database_url: str) -> Engine:
+    """Create an engine; for SQLite, translate the `asst` schema away (SQLite has none)."""
     from sqlalchemy import create_engine
 
     engine = create_engine(database_url, future=True)
     if database_url.startswith("sqlite"):
-        # SQLite has no schemas; map the `asst` schema onto the default (no-schema) namespace
-        # so the very same ORM models work for in-memory unit tests.
+        # Same ORM models, no Postgres needed: map `asst` onto SQLite's default namespace.
         engine = engine.execution_options(schema_translate_map={"asst": None})
     return engine
 
@@ -71,6 +81,7 @@ def create_sqlite_engine(url: str = "sqlite:///:memory:") -> Engine:
 
 
 def get_sessionmaker(database_url: str | None = None) -> sessionmaker[Session]:
+    """Session factory bound to the cached engine; objects stay usable after commit."""
     engine = get_engine(database_url)
     return sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
@@ -114,9 +125,7 @@ def bootstrap_schema(engine: Engine) -> None:
             conn.execute(text("CREATE SCHEMA IF NOT EXISTS asst"))
         Base.metadata.create_all(conn)
         if is_postgres:
-            # exec_driver_sql (not execute(text(...))) so the driver can run the
-            # semicolon-separated DDL statements as a single batch.
-            # psycopg parses `%` in a driver-level statement as a parameter placeholder, and
-            # the trigger body legitimately contains one (`RAISE EXCEPTION '... % ...', TG_OP`).
-            # Double it so the DDL reaches PostgreSQL verbatim.
+            # `exec_driver_sql` lets the driver run the semicolon-separated DDL as one batch.
+            # psycopg treats `%` as a parameter placeholder and the trigger body contains
+            # one (`RAISE EXCEPTION '... % ...'`), so double it to reach Postgres verbatim.
             conn.exec_driver_sql(AUDIT_APPEND_ONLY_TRIGGER_SQL.replace("%", "%%"))

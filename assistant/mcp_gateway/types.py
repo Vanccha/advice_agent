@@ -1,8 +1,16 @@
-"""Shared types for the tool gateway (contracts §3). Both `gateway.ToolGateway` and
-`fake.FakeGateway` speak this exact vocabulary, so the modes/API layer can treat them
-interchangeably.
+"""Shared types for the tool gateway: the vocabulary both gateways speak.
 
-Import as: ``from mcp_gateway.types import ToolSpec, ToolCallOutcome, ToolBudgetExceeded``.
+Where this sits: ``mcp_gateway`` package, bottom layer. ``gateway.ToolGateway`` (live) and
+``fake.FakeGateway`` (tests) both return these types, so ``modes`` and ``api`` can use either.
+
+Key ideas:
+- One result envelope (``ToolCallOutcome``) for success and failure: an unreachable adapter is
+  a normal ``ok=False`` outcome, not an exception.
+- Budget as an exception (``ToolBudgetExceeded``): exceeding the per-turn call limit is a bug
+  or a runaway loop, so it must be loud.
+
+Read next: ``mcp_gateway/gateway.py``.
+See: docs/contracts.md §3.
 """
 from __future__ import annotations
 
@@ -48,7 +56,7 @@ class ToolCallOutcome(BaseModel):
 
 
 class ToolBudgetExceeded(Exception):
-    """Raised by `ToolGateway.call()`/`call_sync()` when a turn's `MAX_TOOL_CALLS_PER_TURN`
+    """Raised by `ToolGateway.call()`/`call_sync()` when a turn's `policy.yaml: limits.max_tool_calls_per_turn`
     budget is already spent — call N+1 raises instead of silently placing another call."""
 
     def __init__(self, tool_name: str, limit: int) -> None:
