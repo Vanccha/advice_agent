@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from core_common.settings import get_settings
 
@@ -143,6 +143,10 @@ class LimitsConfig(BaseModel):
     max_tool_calls_per_turn: int = 8
     max_questions_advisory: int = 5
     max_actions_per_conversation: int = 3
+    # Agentic investigation (contracts §4.3): model steps per turn, and how many times the
+    # assistant may ask the customer a clarifying question before handing over to a human.
+    max_investigation_steps: int = Field(default=4, ge=1, le=10)
+    max_clarification_rounds: int = Field(default=2, ge=0, le=5)
 
 
 class PiiConfig(BaseModel):
@@ -213,11 +217,21 @@ class RoutingFile(BaseModel):
     issue_routing: dict[str, str]
     urgency_floor: dict[str, str]
     diagnostic_checklist: list[str]
+    # READ-ONLY tool names the investigation model may call (contracts §4.3). Never write
+    # tools: validated against `policy.yaml: actions` in `TenantConfig`.
+    investigation_tools: list[str] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------------------
 # Combined config
 # --------------------------------------------------------------------------------------
+
+
+# A tool whose name starts like this mutates something — never exposable to the model.
+_WRITE_TOOL_PREFIXES = (
+    "create_", "post_", "add_", "retry_", "enqueue_", "resend_", "apply_", "request_",
+    "reschedule_", "update_", "delete_", "send_", "issue_", "set_", "cancel_", "repair_",
+)
 
 
 class TenantConfig(BaseModel):
@@ -229,6 +243,20 @@ class TenantConfig(BaseModel):
     tenant: TenantFile
     policy: PolicyFile
     routing: RoutingFile
+
+    @model_validator(mode="after")
+    def _investigation_tools_are_read_only(self) -> "TenantConfig":
+        tools = self.routing.investigation_tools
+        if len(set(tools)) != len(tools):
+            raise ValueError("routing.yaml investigation_tools contains duplicates")
+        bad = sorted(
+            t for t in tools if t in self.policy.actions or t.startswith(_WRITE_TOOL_PREFIXES)
+        )
+        if bad:
+            raise ValueError(
+                f"routing.yaml investigation_tools must be read-only, but lists write tools: {bad}"
+            )
+        return self
 
     @property
     def adapters(self) -> dict[str, AdapterConfig]:
@@ -314,12 +342,15 @@ def load_tenant_config(tenant: str | None = None, config_dir: str | os.PathLike[
     policy_file = _load_yaml_model(tenant_dir / "policy.yaml", PolicyFile, tenant_name)
     routing_file = _load_yaml_model(tenant_dir / "routing.yaml", RoutingFile, tenant_name)
 
-    config = TenantConfig(
-        tenant_name=tenant_name,
-        tenant=tenant_file,
-        policy=policy_file,
-        routing=routing_file,
-    )
+    try:
+        config = TenantConfig(
+            tenant_name=tenant_name,
+            tenant=tenant_file,
+            policy=policy_file,
+            routing=routing_file,
+        )
+    except ValidationError as exc:
+        raise ConfigError(f"Invalid tenant configuration for '{tenant_name}': {exc}") from exc
     _CACHE[cache_key] = config
     return config
 

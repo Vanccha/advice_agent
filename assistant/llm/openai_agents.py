@@ -13,12 +13,22 @@ select a different provider.
 """
 from __future__ import annotations
 
-from typing import Sequence, TypeVar
+import json
+from typing import Any, Sequence, TypeVar
 
 from pydantic import BaseModel
 
 from core_common.settings import get_settings
-from llm.base import ChatMessage, ProviderConfigError, ProviderError, ProviderHealth
+from llm.base import (
+    AgentMessage,
+    ChatMessage,
+    ProviderConfigError,
+    ProviderError,
+    ProviderHealth,
+    ToolCall,
+    ToolDefinition,
+    ToolStep,
+)
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
@@ -95,6 +105,32 @@ class OpenAIAgentsProvider:
             )
         return parsed
 
+    def run_tool_step(
+        self,
+        *,
+        system: str,
+        messages: Sequence[AgentMessage],
+        tools: Sequence[ToolDefinition],
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> ToolStep:
+        """One Chat Completions call with function tools. Deliberately NOT routed through
+        the Agents SDK `Runner`: the assistant's own loop executes (and audits) every tool."""
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "temperature": temperature,
+            "messages": openai_chat_messages(system, messages),
+        }
+        if tools:
+            kwargs["tools"] = openai_tool_specs(tools)
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        try:
+            response = self._client.chat.completions.create(**kwargs)
+        except Exception as exc:  # pragma: no cover - depends on live infra
+            raise ProviderError(f"{self.name}: tool step failed: {exc}") from exc
+        return parse_openai_tool_step(response)
+
     def health(self) -> ProviderHealth:
         try:
             self._client.models.retrieve(self.model)
@@ -109,3 +145,61 @@ def _render_messages_as_input(messages: Sequence[ChatMessage]) -> str:
     are carried separately via `Agent.instructions`."""
     lines = [f"{m.role}: {m.content}" for m in messages]
     return "\n".join(lines) if lines else "(empty conversation)"
+
+
+def openai_tool_specs(tools: Sequence[ToolDefinition]) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.input_schema,
+            },
+        }
+        for t in tools
+    ]
+
+
+def openai_chat_messages(system: str, messages: Sequence[AgentMessage]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = [{"role": "system", "content": system}]
+    for m in messages:
+        if m.role == "tool":
+            out.append({"role": "tool", "tool_call_id": m.tool_call_id, "content": m.content})
+        elif m.role == "assistant" and m.tool_calls:
+            out.append(
+                {
+                    "role": "assistant",
+                    "content": m.content or None,
+                    "tool_calls": [
+                        {
+                            "id": c.id,
+                            "type": "function",
+                            "function": {"name": c.name, "arguments": json.dumps(c.arguments)},
+                        }
+                        for c in m.tool_calls
+                    ],
+                }
+            )
+        else:
+            out.append({"role": m.role, "content": m.content})
+    return out
+
+
+def parse_openai_tool_step(response: Any) -> ToolStep:
+    try:
+        message = response.choices[0].message
+    except (AttributeError, IndexError, TypeError) as exc:
+        raise ProviderError("openai_agents: tool step response had no choices") from exc
+    calls: list[ToolCall] = []
+    for raw in getattr(message, "tool_calls", None) or []:
+        try:
+            arguments = json.loads(raw.function.arguments or "{}")
+        except json.JSONDecodeError as exc:
+            raise ProviderError(
+                f"openai_agents: tool call {raw.function.name!r} had unparseable arguments"
+            ) from exc
+        if not isinstance(arguments, dict):
+            raise ProviderError("openai_agents: tool call arguments were not a JSON object")
+        calls.append(ToolCall(id=raw.id, name=raw.function.name, arguments=arguments))
+    return ToolStep(tool_calls=calls, text=getattr(message, "content", None) or None)

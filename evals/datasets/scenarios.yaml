@@ -149,3 +149,66 @@ no_action_cases:
       must_not_create_ticket: true
       must_not_execute_action: true
       reply_must_mention_any_en: ["request", "record", "status", "ticket", "subscription"]
+
+# Real-world complaints the deterministic checklist has no pattern for. No chaos is injected:
+# the checklist ends in `no_issue_found`, so the agentic investigation (modes/investigation.py)
+# reads the message. The scripted model is driven by `scripted_investigation` — a list of
+# steps, each a list of tool calls; the last step calls `submit_finding`. Tools are
+# read-only and `customer_no` is always the eval customer. The old dead end ("I cannot see an
+# obvious problem right now" + silently closing) must never come back.
+investigation_cases:
+  - id: investigation_slow_evenings
+    message: "My internet is really slow in the evenings."
+    scripted_investigation:
+      - - {name: get_subscription_status, arguments: {customer_no: NS-100001}}
+      - - name: submit_finding
+          arguments:
+            outcome: needs_more_info
+            summary_en: "Customer reports evening slowdowns; subscription lookup shows nothing abnormal."
+            customer_reply_en: "I am sorry to hear that, evening slowdowns are frustrating. I checked your subscription and nothing looks wrong on our side."
+            clarifying_question_en: "Is it slow on wifi, on a cable connection, or both, and which devices are affected?"
+            confidence: 0.8
+            evidence: {subscription_checked: true}
+    expect:
+      final_mode: [DIAGNOSTIC]
+      must_not_create_ticket: true
+      must_not_execute_action: true
+      reply_must_ask_question: true
+      reply_must_not_mention_any_en: ["cannot see an obvious problem"]
+  - id: investigation_router_orange_light
+    message: "The light on my router is orange."
+    scripted_investigation:
+      - - {name: get_modem_status, arguments: {customer_no: NS-100001}}
+        - {name: get_service_health, arguments: {}}
+      - - name: submit_finding
+          arguments:
+            outcome: escalate
+            summary_en: "Customer reports an orange router light; the standard checks found no known fault, so the line needs a technical look."
+            customer_reply_en: "An orange light usually means the router cannot get a proper connection, and I could not find a cause in your records."
+            suggested_department: TECHNICAL_INFRA
+            confidence: 0.85
+            evidence: {symptom: orange_router_light}
+    expect:
+      final_mode: [ESCALATED]
+      must_not_execute_action: true
+      ticket_must_create: true
+      ticket_department: TECHNICAL_INFRA
+      reply_must_not_mention_any_en: ["cannot see an obvious problem"]
+  - id: investigation_bill_higher
+    message: "Why is my bill higher this month than last month?"
+    scripted_investigation:
+      - - {name: list_customer_charges, arguments: {customer_no: NS-100001}}
+      - - name: submit_finding
+          arguments:
+            outcome: escalate
+            summary_en: "Customer asks why this month's bill is higher; charges were reviewed and no duplicate payment was found, so billing should explain the difference."
+            customer_reply_en: "I looked at your charges and did not find a duplicate payment, but I cannot explain the difference myself."
+            suggested_department: BILLING
+            confidence: 0.8
+            evidence: {duplicate_charge_found: false}
+    expect:
+      final_mode: [ESCALATED]
+      must_not_execute_action: true
+      ticket_must_create: true
+      ticket_department: BILLING
+      reply_must_not_mention_any_en: ["cannot see an obvious problem"]
