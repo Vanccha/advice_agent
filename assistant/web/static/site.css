@@ -24,7 +24,7 @@ html, body {
 }
 
 body {
-  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Nunito", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
   background: var(--nh-bg);
   color: var(--nh-text);
 }

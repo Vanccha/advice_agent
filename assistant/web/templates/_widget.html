@@ -48,10 +48,9 @@
     <div class="nh-widget__body">
       <ol id="chat-messages" class="nh-widget__messages" data-testid="chat-messages" aria-live="polite">
         <li class="nh-msg nh-msg--assistant" data-role="assistant">
-          <div class="nh-msg__bubble">
-            Hello! I am NetSwift's digital support assistant. You can ask me about billing,
-            faults, installation or changing your package.
-          </div>
+          {# No whitespace inside the bubble: it uses `white-space: pre-wrap`, so template
+             indentation would be rendered as visible spaces. #}
+          <div class="nh-msg__bubble">Hello! I am NetSwift's digital support assistant. You can ask me about billing, faults, installation or changing your package.</div>
           <time class="nh-msg__time"></time>
         </li>
       </ol>
