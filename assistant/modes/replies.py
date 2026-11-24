@@ -16,7 +16,7 @@ Key ideas:
 Not covered here: replies composed by the model (investigation findings, advisory
 narration) and ticket text read by departments (kept next to the ticket builders).
 
-Read next: modes/router.py, modes/dispatch.py, modes/action.py.
+Read next: modes/router.py, modes/dispatch.py, modes/action/.
 """
 from __future__ import annotations
 

@@ -10,7 +10,7 @@ Key ideas:
 - Attach, don't duplicate: a later customer becomes an internal comment on the existing
   ticket.
 
-Read next: modes/action.py, tickets/builder.py.
+Read next: modes/action/, tickets/builder.py.
 
 Import as: ``from modes.incident_policy import ensure_incident_ticket``.
 See: docs/contracts.md §4.6, §5.

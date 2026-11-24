@@ -72,8 +72,9 @@ assistant/decision/   DecisionService interface (llm_structured | typesafe_jev s
 assistant/llm/        LLMProvider interface (openai_agents | anthropic | scripted) + *_mapping.py wire helpers
 assistant/modes/      explicit state machine: orchestrator (facade) | dispatch (mode routing) |
                       state (typed ConversationState) | conversation_store | approvals | events |
-                      replies (customer-facing text catalogue) | router / advisory / diagnostic /
-                      investigation / action / status_query handlers
+                      replies (customer-facing text catalogue) | router / status_query handlers |
+                      action/ advisory/ diagnostic/ investigation/ (handler packages: read each
+                      package's __init__.py for its entry points and reading order)
 assistant/tickets/    structured ticket builder
 assistant/mcp_gateway/  MCP client gateway + fake + tool_audit + action runner (named mcp_gateway, NOT mcp:
                       a package called `mcp` would shadow the installed MCP client SDK)

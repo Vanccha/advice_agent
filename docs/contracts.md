@@ -558,7 +558,13 @@ Code layout (`assistant/modes/`): `orchestrator.py` is the public facade (`Orche
 `events.py` handles ticket-status webhooks and monitoring alerts; `state.py` holds the typed
 `ConversationState` (the JSON in `asst.conversations.state`: unknown keys are ignored and
 missing keys defaulted, so older rows still load); `replies.py` is the catalogue of fixed
-customer-facing sentences (the seam for translations).
+customer-facing sentences (the seam for translations). The four large mode handlers are
+packages whose `__init__.py` names the public entry points and a reading order:
+`action/` (`handle_action`: `known_causes`, `triage`, `escalation`, `outage`,
+`investigation_outcome`), `advisory/` (`handle_turn`: `parsing`, `extraction`, `narration`,
+`flow`), `investigation/` (`plan_turn`: `tools`, `prompts`, `loop`, `finding`) and
+`diagnostic/` (`run_diagnosis`: `checklist`, `payment_checks`). Department-facing ticket text
+lives in `action/escalation.py`; `Diagnosis.root_cause` values are `core_common.types.RootCause`.
 
 Tool calls are scoped per turn: the startup `ToolGateway` is a shared root (adapter config +
 discovered catalog); the orchestrator calls `gateway.for_turn(conversation_id)` for every turn
@@ -579,7 +585,7 @@ plus `AWAITING_APPROVAL` and `ESCALATED`. Transitions are table-driven; no free-
   provisioning status → installation status → regional incidents → service health.
   Produces a `Diagnosis` with `root_cause`, `scope ∈ {customer_specific, regional_incident,
   system_wide}`, `confidence`, `evidence`.
-  **Agentic investigation** (`assistant/modes/investigation.py`): only when the checklist ends in
+  **Agentic investigation** (`assistant/modes/investigation/`): only when the checklist ends in
   `no_issue_found` (never for a known root cause, never for `customer_not_found`), a bounded
   tool-using model reads the customer's actual message. It sees the masked conversation
   (the current message last), the customer number and a masked summary of the checklist

@@ -151,7 +151,7 @@ no_action_cases:
       reply_must_mention_any_en: ["request", "record", "status", "ticket", "subscription"]
 
 # Real-world complaints the deterministic checklist has no pattern for. No chaos is injected:
-# the checklist ends in `no_issue_found`, so the agentic investigation (modes/investigation.py)
+# the checklist ends in `no_issue_found`, so the agentic investigation (modes/investigation/)
 # reads the message. The scripted model is driven by `scripted_investigation` — a list of
 # steps, each a list of tool calls; the last step calls `submit_finding`. Tools are
 # read-only and `customer_no` is always the eval customer. The old dead end ("I cannot see an

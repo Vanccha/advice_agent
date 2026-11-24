@@ -80,6 +80,29 @@ class IssueType(StrEnum):
     OTHER = "other"
 
 
+class RootCause(StrEnum):
+    """What diagnostic mode concluded about a problem report (`Diagnosis.root_cause`).
+
+    The first six members are the same words as the `IssueType` members of the same name:
+    a root cause the checklist can name becomes a ticket of that issue type. The last two are
+    outcomes with no ticket type of their own: ``NO_ISSUE_FOUND`` (the checklist found no
+    fault, so the agentic investigation takes over) and ``CUSTOMER_NOT_FOUND``.
+
+    It is a `StrEnum`, so it compares equal to the plain strings stored in conversation
+    state, audit rows and API payloads; `Diagnosis.root_cause` itself stays a plain `str`
+    field and pydantic stores the value, so JSON and `repr` output are unchanged.
+    """
+
+    STUCK_PROVISIONING = "stuck_provisioning"
+    PAID_NOT_ACTIVE = "paid_not_active"
+    DOUBLE_CHARGE = "double_charge"
+    MISSED_INSTALLATION = "missed_installation"
+    REGIONAL_OUTAGE = "regional_outage"
+    PAYMENT_SYSTEM_DOWN = "payment_system_down"
+    NO_ISSUE_FOUND = "no_issue_found"
+    CUSTOMER_NOT_FOUND = "customer_not_found"
+
+
 class DiagnosisScope(StrEnum):
     """Scope of a `Diagnosis` (contracts §4.3)."""
 

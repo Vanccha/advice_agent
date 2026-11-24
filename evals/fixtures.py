@@ -2,22 +2,22 @@
 
 `assistant/modes/router.py` calls `DecisionService.classify_intent` once per conversation
 (its first message — every later turn either stays out of `ROUTER` or is answered by
-deterministic keyword parsing in `modes/advisory.py`). `build_intent_rules` covers that:
+deterministic keyword parsing in `modes/advisory/`). `build_intent_rules` covers that:
 one `exact=True` rule per *first* user message of every conversation in both datasets,
 matched on the *masked* text (`privacy.masking.mask_text`, computed here with the
 assistant's own masking function so a fixture always matches exactly what the router will
 see — never a hand-guessed regex that could silently stop matching if masking changes).
 
-`assistant/modes/action.py` (as of this harness's last sync with that module) *also* makes
+`assistant/modes/action/` (as of this harness's last sync with that module) *also* makes
 real `DecisionService` calls for `classify_issue_type` and `assess_urgency` for every root
-cause that reaches its `_ROOT_CAUSE_ACTION` mapping branch — i.e. every scenario in this
+cause that reaches its `ROOT_CAUSE_ACTION` mapping branch — i.e. every scenario in this
 dataset except `regional_outage`, which returns from a separate branch before ever reaching
 that mapping. `build_decision_rules` covers those with regex (non-exact) rules, because the
 prompt they see is **not** the user's message: `_decision_context` builds it from
 `diagnosis.evidence` and the `Diagnosis` itself (ids that differ every chaos run), so the
 only stable thing to match on is the literal `'root_cause': '<value>'` substring Python's
 dict repr always produces for a given root cause. `choose_department` is also covered, for
-completeness, by one generic fixture — but tracing `modes/action.py` shows it is **not
+completeness, by one generic fixture — but tracing `modes/action/` shows it is **not
 reachable** by this dataset: every denied action here (`issue_refund`,
 `reschedule_installation`, `repair_infrastructure`) has an `escalate_to` in
 `config/tenants/netswift/policy.yaml`, and `exc.decision.escalate_to or
@@ -30,7 +30,7 @@ One root cause (`payment_system_down`) is **deliberately left unscripted** for
 only the confident path — see `evals/README.md` and the per-case `decision_paths_exercised`
 check in `evals/scenario_suite.py`.
 
-Since the combined `triage` call, `modes/action.py` makes ONE `_TriageResult` call instead
+Since the combined `triage` call, `modes/action/` makes ONE `_TriageResult` call instead
 of the three above; the root-cause rules therefore script `_TriageResult` (same values) next
 to the individual schemas, and `payment_system_down` stays unscripted for it too (the generic
 `'scope':` rule has no `_TriageResult`, so the whole call fails -> all three fall back).
@@ -96,7 +96,7 @@ def build_intent_rules(scenarios_doc: dict[str, Any], advisory_doc: dict[str, An
     return rules
 
 
-# Root causes `modes/action.py::handle_action` resolves through `_ROOT_CAUSE_ACTION` (every
+# Root causes `modes/action/__init__.py::handle_action` resolves through `ROOT_CAUSE_ACTION` (every
 # scenario in this dataset except `regional_outage`, which never reaches that branch).
 # `payment_system_down` is intentionally excluded — see module docstring.
 _SCRIPTED_ROOT_CAUSES: tuple[str, ...] = (
@@ -125,7 +125,7 @@ def build_decision_rules(routing_config: RoutingFile) -> list[ScriptedRule]:
                 structured={
                     "_IssueTypeResult": {"value": root_cause, "confidence": 0.93, "rationale": "eval fixture"},
                     "_UrgencyResult": {"value": urgency, "confidence": 0.93, "rationale": "eval fixture"},
-                    # The combined call `modes/action.py` makes once per escalation: same
+                    # The combined call `modes/action/` makes once per escalation: same
                     # issue_type/priority values as above; the department value is the
                     # routing.yaml fallback (unreachable here, policy `escalate_to` wins).
                     "_TriageResult": {

@@ -1,4 +1,4 @@
-"""Agentic investigation (modes/investigation.py): the second stage of DIAGNOSTIC when the
+"""Agentic investigation (modes/investigation/): the second stage of DIAGNOSTIC when the
 deterministic checklist finds no known fault. No network: ScriptedProvider plays the model."""
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
 """Unit tests for the three `DecisionService` calls `modes.action` now makes for real
 (contracts §4.5) — `choose_department`, `assess_urgency`, `classify_issue_type` — and their
-confidence-floor fallback to the deterministic `_ROOT_CAUSE_ACTION` table.
+confidence-floor fallback to the deterministic `ROOT_CAUSE_ACTION` table.
 
-These exercise `modes.action._decide_issue_type` / `_decide_priority` / `_decide_department`
+These exercise `modes.action.triage.decide_issue_type` / `decide_priority` / `decide_department`
 directly against a minimal `TurnContext`, rather than through the full orchestrator: the
 helpers only touch `ctx.decision_service`, `ctx.tenant_config`, `ctx.audit_log`,
 `ctx.conversation_id`/`ctx.tenant`/`ctx.history`, so the other `TurnContext` fields (gateway,
@@ -13,7 +13,7 @@ from __future__ import annotations
 from core_common.types import Department, Diagnosis, DiagnosisScope, IssueType, Priority
 from decision.llm_structured import LLMStructuredDecisionService
 from llm.scripted import ScriptedProvider, ScriptedRule
-from modes.action import _compute_triage, _decide_department, _decide_issue_type, _decide_priority
+from modes.action.triage import compute_triage, decide_department, decide_issue_type, decide_priority
 from modes.context import TurnContext
 
 
@@ -75,10 +75,10 @@ def test_triage_feeds_all_three_helpers_with_one_call_and_one_audit_entry_each(
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("double_charge")
 
-    triage = _compute_triage(ctx, diagnosis)
-    issue_type = _decide_issue_type(ctx, diagnosis, IssueType.OTHER, triage)
-    priority = _decide_priority(ctx, diagnosis, issue_type, Priority.NORMAL, triage)
-    department = _decide_department(ctx, diagnosis, issue_type, triage)
+    triage = compute_triage(ctx, diagnosis)
+    issue_type = decide_issue_type(ctx, diagnosis, IssueType.OTHER, triage)
+    priority = decide_priority(ctx, diagnosis, issue_type, Priority.NORMAL, triage)
+    department = decide_department(ctx, diagnosis, issue_type, triage)
 
     assert calls == ["_TriageResult"]
     assert (issue_type, priority, department) == (IssueType.DOUBLE_CHARGE, Priority.HIGH, Department.BILLING)
@@ -89,11 +89,11 @@ def test_triage_feeds_all_three_helpers_with_one_call_and_one_audit_entry_each(
 def test_triage_provider_failure_uses_deterministic_fallbacks(tenant_config, audit_log) -> None:
     ctx = _ctx(tenant_config, audit_log, ScriptedProvider([]))
     diagnosis = _diagnosis("double_charge")
-    triage = _compute_triage(ctx, diagnosis)
-    issue_type = _decide_issue_type(ctx, diagnosis, IssueType.DOUBLE_CHARGE, triage)
+    triage = compute_triage(ctx, diagnosis)
+    issue_type = decide_issue_type(ctx, diagnosis, IssueType.DOUBLE_CHARGE, triage)
     assert issue_type is IssueType.DOUBLE_CHARGE
-    assert _decide_priority(ctx, diagnosis, issue_type, Priority.HIGH, triage) is Priority.HIGH
-    assert _decide_department(ctx, diagnosis, issue_type, triage) is Department.BILLING
+    assert decide_priority(ctx, diagnosis, issue_type, Priority.HIGH, triage) is Priority.HIGH
+    assert decide_department(ctx, diagnosis, issue_type, triage) is Department.BILLING
 
 
 # -- classify_issue_type --------------------------------------------------------------------
@@ -109,7 +109,7 @@ def test_classify_issue_type_confident_answer_is_used(tenant_config, audit_log) 
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("double_charge")
 
-    issue_type = _decide_issue_type(ctx, diagnosis, IssueType.OTHER)
+    issue_type = decide_issue_type(ctx, diagnosis, IssueType.OTHER)
 
     assert issue_type is IssueType.DOUBLE_CHARGE
     entries = _decision_log(audit_log, ctx.conversation_id)
@@ -126,7 +126,7 @@ def test_classify_issue_type_low_confidence_falls_back_to_deterministic(tenant_c
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("double_charge")
 
-    issue_type = _decide_issue_type(ctx, diagnosis, IssueType.DOUBLE_CHARGE)
+    issue_type = decide_issue_type(ctx, diagnosis, IssueType.DOUBLE_CHARGE)
 
     assert issue_type is IssueType.DOUBLE_CHARGE  # deterministic fallback, not the model's "other"
     entries = _decision_log(audit_log, ctx.conversation_id)
@@ -138,7 +138,7 @@ def test_classify_issue_type_provider_error_falls_back_without_raising(tenant_co
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("stuck_provisioning")
 
-    issue_type = _decide_issue_type(ctx, diagnosis, IssueType.STUCK_PROVISIONING)
+    issue_type = decide_issue_type(ctx, diagnosis, IssueType.STUCK_PROVISIONING)
 
     assert issue_type is IssueType.STUCK_PROVISIONING
 
@@ -156,7 +156,7 @@ def test_assess_urgency_confident_answer_is_used(tenant_config, audit_log) -> No
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("stuck_provisioning")
 
-    priority = _decide_priority(ctx, diagnosis, IssueType.STUCK_PROVISIONING, Priority.NORMAL)
+    priority = decide_priority(ctx, diagnosis, IssueType.STUCK_PROVISIONING, Priority.NORMAL)
 
     assert priority is Priority.HIGH
 
@@ -166,7 +166,7 @@ def test_assess_urgency_low_confidence_falls_back_to_deterministic(tenant_config
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("missed_installation")
 
-    priority = _decide_priority(ctx, diagnosis, IssueType.MISSED_INSTALLATION, Priority.NORMAL)
+    priority = decide_priority(ctx, diagnosis, IssueType.MISSED_INSTALLATION, Priority.NORMAL)
 
     assert priority is Priority.NORMAL
     entries = _decision_log(audit_log, ctx.conversation_id)
@@ -185,7 +185,7 @@ def test_assess_urgency_never_drops_below_routing_floor(tenant_config, audit_log
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("payment_system_down")
 
-    priority = _decide_priority(ctx, diagnosis, IssueType.PAYMENT_SYSTEM_DOWN, Priority.URGENT)
+    priority = decide_priority(ctx, diagnosis, IssueType.PAYMENT_SYSTEM_DOWN, Priority.URGENT)
 
     assert priority is Priority.URGENT
 
@@ -201,7 +201,7 @@ def test_assess_urgency_may_raise_above_the_floor(tenant_config, audit_log) -> N
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("stuck_provisioning")
 
-    priority = _decide_priority(ctx, diagnosis, IssueType.STUCK_PROVISIONING, Priority.NORMAL)
+    priority = decide_priority(ctx, diagnosis, IssueType.STUCK_PROVISIONING, Priority.NORMAL)
 
     assert priority is Priority.URGENT
 
@@ -219,7 +219,7 @@ def test_choose_department_confident_answer_is_used(tenant_config, audit_log) ->
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("double_charge")
 
-    department = _decide_department(ctx, diagnosis, IssueType.DOUBLE_CHARGE)
+    department = decide_department(ctx, diagnosis, IssueType.DOUBLE_CHARGE)
 
     assert department is Department.BILLING
 
@@ -234,7 +234,7 @@ def test_choose_department_low_confidence_routes_via_issue_routing_table(tenant_
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("double_charge")
 
-    department = _decide_department(ctx, diagnosis, IssueType.DOUBLE_CHARGE)
+    department = decide_department(ctx, diagnosis, IssueType.DOUBLE_CHARGE)
 
     assert department is Department.BILLING  # routing.yaml: issue_routing.double_charge
     entries = _decision_log(audit_log, ctx.conversation_id)
@@ -246,6 +246,6 @@ def test_choose_department_provider_error_falls_back_without_raising(tenant_conf
     ctx = _ctx(tenant_config, audit_log, provider)
     diagnosis = _diagnosis("double_charge")
 
-    department = _decide_department(ctx, diagnosis, IssueType.DOUBLE_CHARGE)
+    department = decide_department(ctx, diagnosis, IssueType.DOUBLE_CHARGE)
 
     assert department is Department.BILLING

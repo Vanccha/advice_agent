@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from core_common.types import Mode
 from llm.scripted import ScriptedProvider, ScriptedRule
-from modes.advisory import _extract_opening_with_regex
+from modes.advisory.parsing import extract_opening_with_regex
 from modes.tests.conftest import build_orchestrator
 
 OPENING = "Which package? There are four of us, we stream every evening, my budget is £50"
@@ -42,8 +42,8 @@ def test_partial_opening_asks_only_for_what_is_missing(tenant_config, session_fa
 
 
 def test_opening_regex_never_guesses_positionally() -> None:
-    assert _extract_opening_with_regex("recommend a package for 50") == {}
-    assert _extract_opening_with_regex("I need a package, 24") == {}
-    assert _extract_opening_with_regex("4 people, 8 devices, £35, no contract") == {
+    assert extract_opening_with_regex("recommend a package for 50") == {}
+    assert extract_opening_with_regex("I need a package, 24") == {}
+    assert extract_opening_with_regex("4 people, 8 devices, £35, no contract") == {
         "household_size": 4, "device_count": 8, "budget_gbp": 35.0, "commitment_preference": "none",
     }

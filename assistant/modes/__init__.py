@@ -1,4 +1,4 @@
-"""The conversation engine: an explicit state machine with one handler module per mode.
+"""The conversation engine: an explicit state machine with one handler per mode (the large ones are packages).
 
 Where this sits: the heart of the assistant. `api/` calls `modes.orchestrator.Orchestrator`;
 the orchestrator drives `modes.dispatch`, which runs the handlers

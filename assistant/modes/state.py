@@ -11,7 +11,7 @@ Key ideas:
   unknown keys are ignored and missing keys fall back to their defaults.
 - The state holds only masked, non-secret data (history is already PII-masked).
 
-Read next: modes/conversation_store.py, modes/dispatch.py, modes/investigation.py.
+Read next: modes/conversation_store.py, modes/dispatch.py, modes/investigation/.
 
 See: docs/contracts.md §4.3.
 """

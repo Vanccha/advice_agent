@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from core_common.types import AdvisoryProfile
 from llm.base import ChatMessage
-from modes import advisory
+from modes.advisory.extraction import apply_answer
 
 
 class _StubProvider:
@@ -43,7 +43,7 @@ class _Ctx:
 
 def test_one_sentence_can_answer_several_questions_at_once() -> None:
     provider = _StubProvider({"household_size": 4, "device_count": 8})
-    profile, _ = advisory._apply_answer(
+    profile, _ = apply_answer(
         AdvisoryProfile(), "household_size", "There are 4 of us, with about 8 devices", _Ctx(provider)
     )
     assert profile.household_size == 4
@@ -53,7 +53,7 @@ def test_one_sentence_can_answer_several_questions_at_once() -> None:
 def test_a_budget_sentence_is_not_read_as_a_device_count() -> None:
     """The regression that broke the live demo."""
     provider = _StubProvider({"budget_gbp": 50.0})
-    profile, _ = advisory._apply_answer(
+    profile, _ = apply_answer(
         AdvisoryProfile(), "device_count", "around 50 quid a month", _Ctx(provider)
     )
     assert profile.budget_gbp == 50.0
@@ -62,7 +62,7 @@ def test_a_budget_sentence_is_not_read_as_a_device_count() -> None:
 
 def test_a_commitment_sentence_is_not_read_as_a_budget() -> None:
     provider = _StubProvider({"commitment_preference": "24"})
-    profile, _ = advisory._apply_answer(
+    profile, _ = apply_answer(
         AdvisoryProfile(), "budget_gbp", "I can do a 24 month contract", _Ctx(provider)
     )
     assert profile.commitment_preference.value == "24"
@@ -79,13 +79,13 @@ def test_a_commitment_sentence_is_not_read_as_a_budget() -> None:
 )
 def test_implausible_values_are_ignored_rather_than_stored(field_name, fields) -> None:
     provider = _StubProvider(fields)
-    profile, _ = advisory._apply_answer(AdvisoryProfile(), field_name, "...", _Ctx(provider))
+    profile, _ = apply_answer(AdvisoryProfile(), field_name, "...", _Ctx(provider))
     assert getattr(profile, field_name) in (None, 1), "an absurd value must not enter the profile"
 
 
 def test_regex_fallback_still_parses_the_asked_field_when_the_provider_fails() -> None:
     provider = _StubProvider(fail=True)
-    profile, _ = advisory._apply_answer(
+    profile, _ = apply_answer(
         AdvisoryProfile(), "device_count", "8 devices", _Ctx(provider)
     )
     assert profile.device_count == 8
@@ -93,7 +93,7 @@ def test_regex_fallback_still_parses_the_asked_field_when_the_provider_fails() -
 
 
 def test_no_provider_means_pure_regex_parsing() -> None:
-    profile, _ = advisory._apply_answer(AdvisoryProfile(), "household_size", "there are 4 of us", None)
+    profile, _ = apply_answer(AdvisoryProfile(), "household_size", "there are 4 of us", None)
     assert profile.household_size == 4
 
 

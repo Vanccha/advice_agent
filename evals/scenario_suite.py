@@ -306,7 +306,7 @@ def _run_regional_outage(harness: Any, scenario: dict[str, Any], results: list[C
             continue
         case.reply_en = turn.reply_en
         # The incident-attach + (confirmation-required) goodwill-credit offer both happen
-        # in this same first turn (modes/action.py), so a first-time affected customer
+        # in this same first turn (modes/action/), so a first-time affected customer
         # legitimately pauses at AWAITING_APPROVAL — not a terminal mode the dataset's
         # `final_mode` list names. Resolve it (denied: no real monetary side effect against
         # the live payment system) so `final_mode` reflects the conversation's true end

@@ -13,13 +13,13 @@ Key ideas:
 - Handlers never move the conversation themselves; the state machine validates each move,
   so an illegal transition fails loudly instead of corrupting the flow.
 
-Read next: modes/machine.py, modes/router.py, modes/action.py.
+Read next: modes/machine.py, modes/router.py, modes/action/.
 
 See: docs/contracts.md §4.3.
 """
 from __future__ import annotations
 
-from core_common.types import AdvisoryProfile, Diagnosis, Mode
+from core_common.types import AdvisoryProfile, Diagnosis, Mode, RootCause
 from modes import action, advisory, diagnostic, investigation, replies, status_query
 from modes.context import TurnContext
 from modes.machine import StateMachine
@@ -102,14 +102,14 @@ def dispatch_turn(
             if not customer_no:
                 return Mode.CLOSING, StepOutcome(reply_en=replies.SIGN_IN_FOR_DIAGNOSIS)
             reused = state.diagnosis if state.has_open_investigation() else None
-            if reused is not None and reused.root_cause == diagnostic.ROOT_CAUSE_NO_ISSUE_FOUND:
+            if reused is not None and reused.root_cause == RootCause.NO_ISSUE_FOUND:
                 # An open investigation already ran the checklist and found nothing; reuse
                 # it instead of spending the turn's tool budget again.
                 diagnosis = reused
             else:
                 diagnosis = diagnostic.run_diagnosis(ctx, customer_no)
                 state.diagnosis = diagnosis
-            if diagnosis.root_cause == diagnostic.ROOT_CAUSE_NO_ISSUE_FOUND:
+            if diagnosis.root_cause == RootCause.NO_ISSUE_FOUND:
                 # No known pattern: read what the customer actually wrote (bounded,
                 # read-only, audited). It either asks one question and stays in DIAGNOSTIC,
                 # or hands a finding to ACTION.

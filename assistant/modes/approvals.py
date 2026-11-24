@@ -11,7 +11,7 @@ Key ideas:
 - Fail towards a human: if the approved action is denied, a ticket is opened rather than
   silently dropping the customer's request.
 
-Read next: modes/action.py (where the approval row is created), policy/executor.py.
+Read next: modes/action/ (where the approval row is created), policy/executor.py.
 
 See: docs/contracts.md §4.6.
 """
@@ -85,7 +85,7 @@ def resolve_approval(orch: Orchestrator, *, approval_id: str, granted: bool) -> 
                 requester_customer_no=customer_no or "unknown",
                 requester_name=name,
                 requester_contact=contact,
-                suggested_next_step_en=exc.decision.reason_en or "Manuel inceleme gerekiyor.",
+                suggested_next_step_en=exc.decision.reason_en or "Manual review required.",
                 urgency_reason_en="An approved action could not be completed.",
                 evidence_record_ids={"action_name": action_name},
                 evidence_queried_sources=[],

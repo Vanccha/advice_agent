@@ -11,7 +11,7 @@ Key ideas:
   so every helper degrades gracefully when there is no envelope to unwrap.
 - Failure collapses to "nothing" (None / empty list): callers decide how to react.
 
-Read next: modes/diagnostic.py (the main consumer).
+Read next: modes/diagnostic/ (the main consumer).
 
 Import as: ``from modes.tool_data import unwrap, first_record, as_list, raw_payload``.
 See: docs/contracts.md §3.

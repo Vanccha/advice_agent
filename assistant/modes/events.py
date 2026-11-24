@@ -132,7 +132,7 @@ def handle_alert(orch: Orchestrator, alert: dict[str, Any]) -> TurnResult | None
         department=department,
         issue_type=IssueType.PAYMENT_SYSTEM_DOWN,
         priority=Priority.URGENT,
-        subject_en=f"{alertname} — izleme sisteminden otomatik tespit",
+        subject_en=f"{alertname} — detected automatically by the monitoring system",
         body_en=(
             f"Alert from the monitoring system: {alert.get('summary') or alertname}. "
             f"Status: {status}, severity: {severity}."
