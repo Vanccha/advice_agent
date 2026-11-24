@@ -4,6 +4,7 @@ Import as: ``from recommendation.engine import recommend_packages``.
 """
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from core_common.config import RoutingFile
@@ -29,17 +30,33 @@ def _money(amount: float) -> str:
     return format_money(amount)
 
 
+def _devices_for_sizing(profile: AdvisoryProfile, devices_per_person: float) -> tuple[int, bool]:
+    """(device count to size the line for, whether it is an estimate). The customer's own
+    device count wins; otherwise estimate from household size; 1 only when neither is known."""
+    if profile.device_count:
+        return profile.device_count, False
+    if profile.household_size:
+        return max(1, math.ceil(profile.household_size * devices_per_person)), True
+    return 1, False
+
+
 def _speed_component(
-    profile: AdvisoryProfile, package: dict[str, Any], mbps_per_device: float, min_mbps_floor: float, templates: dict[str, str]
+    profile: AdvisoryProfile, package: dict[str, Any], rec_cfg: Any, templates: dict[str, str]
 ) -> tuple[float, str | None]:
-    device_count = profile.device_count or 1
-    required_mbps = max(min_mbps_floor, device_count * mbps_per_device)
+    device_count, estimated = _devices_for_sizing(profile, rec_cfg.devices_per_person)
+    required_mbps = max(rec_cfg.min_mbps_floor, device_count * rec_cfg.mbps_per_device)
     down_mbps = package["down_mbps"]
     score = min(1.0, down_mbps / required_mbps) if required_mbps else 1.0
-    if down_mbps >= required_mbps:
-        reason = templates["speed_ok"].format(device_count=device_count, down_mbps=down_mbps)
-    else:
-        reason = templates["speed_tight"].format(device_count=device_count, down_mbps=down_mbps)
+    key = "speed_ok" if down_mbps >= required_mbps else "speed_tight"
+    # An estimate must never be presented as a count the customer gave: say "household of N".
+    if estimated and f"{key}_household" in templates:
+        key = f"{key}_household"
+    reason = templates[key].format(
+        device_count=device_count,
+        devices_en=f"{device_count} device" + ("" if device_count == 1 else "s"),
+        household_size=profile.household_size,
+        down_mbps=down_mbps,
+    )
     return score, reason
 
 
@@ -134,7 +151,7 @@ def recommend_packages(
     weights = rec_cfg.weights
     templates = rec_cfg.reason_codes_en
 
-    device_count = profile.device_count or 1
+    device_count, _estimated = _devices_for_sizing(profile, rec_cfg.devices_per_person)
     required_mbps = max(rec_cfg.min_mbps_floor, device_count * rec_cfg.mbps_per_device)
     speed_cutoff = required_mbps * rec_cfg.speed_hard_filter_ratio
 
@@ -150,9 +167,7 @@ def recommend_packages(
         if excluded:
             continue
 
-        speed_score, speed_reason = _speed_component(
-            profile, package, rec_cfg.mbps_per_device, rec_cfg.min_mbps_floor, templates
-        )
+        speed_score, speed_reason = _speed_component(profile, package, rec_cfg, templates)
         profile_score, profile_reason = _profile_component(
             profile, package, rec_cfg.usage_profile_map, templates
         )

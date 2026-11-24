@@ -620,7 +620,7 @@ household_size: int ; device_count: int ; budget_gbp: float|None
 commitment_preference: none|12|24|any ; needs_static_ip: bool ; needs_tv: bool
 ```
 Score per package = weighted sum (weights in `config/tenants/netswift/routing.yaml`):
-speed adequacy (device_count × 25 Mbps target, 35 %), budget fit (25 %, hard filter when
+speed adequacy (device_count × 25 Mbps target, 35 %; when `device_count` is unknown it is estimated as `household_size × devices_per_person` (routing.yaml, default 3), 1 only if neither is known, and the reason then reads "household of N" instead of claiming a device count), budget fit (25 %, hard filter when
 `budget_gbp` exceeded by > 15 %), profile match (20 %), commitment match (10 %),
 extras match (10 %). Returns top-3 with `score`, `reasons[]` (customer-facing reason codes resolved
 from a table, not generated), `is_best`. Ties broken by lower price, then shorter commitment.

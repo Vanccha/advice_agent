@@ -200,6 +200,8 @@ class RecommendationConfig(BaseModel):
     mbps_per_device: float
     budget_hard_filter_tolerance: float
     min_mbps_floor: float
+    # Devices assumed per person when only `household_size` is known (deterministic estimate).
+    devices_per_person: float = 3.0
     # A package offering less than this fraction of the household's required speed is not
     # offered at all — unless nothing else survives the filters, in which case the customer
     # still sees the closest option and the reply says it is tight.
